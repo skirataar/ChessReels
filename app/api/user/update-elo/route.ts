@@ -7,12 +7,13 @@ interface UpdateEloBody {
   result?: "win" | "loss";
   userId?: string;
   guestId?: string;
+  puzzleId?: string;
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as UpdateEloBody;
-    const { puzzleRating, currentUserElo, result, userId, guestId } = body;
+    const { puzzleRating, currentUserElo, result, userId, guestId, puzzleId } = body;
 
     if (
       typeof puzzleRating !== "number" ||
@@ -37,6 +38,32 @@ export async function POST(request: NextRequest) {
     const newElo = Math.max(100, currentUserElo + eloChange);
 
     const targetUserId = guestId ?? userId ?? "guest-user";
+
+    // Record in PuzzleHistory for anti-repetition tracking
+    if (puzzleId && targetUserId) {
+      await prisma.puzzleHistory
+        .upsert({
+          where: {
+            userId_puzzleId: {
+              userId: targetUserId,
+              puzzleId,
+            },
+          },
+          update: {
+            result,
+            solvedAt: new Date(),
+          },
+          create: {
+            userId: targetUserId,
+            puzzleId,
+            result,
+            solvedAt: new Date(),
+          },
+        })
+        .catch((histErr) => {
+          console.warn("Could not record puzzle history:", histErr);
+        });
+    }
 
     // Attempt to persist for user/guest in DB
     try {

@@ -61,7 +61,8 @@ export function popNextPuzzle(): PuzzleData | null {
  */
 export async function prefetchPuzzles(
   elo: number,
-  targetSize: number = TARGET_BUFFER_SIZE
+  targetSize: number = TARGET_BUFFER_SIZE,
+  userId?: string
 ): Promise<void> {
   if (typeof window !== "undefined" && !window.navigator.onLine) {
     return; // Don't attempt to prefetch when offline
@@ -74,7 +75,10 @@ export async function prefetchPuzzles(
 
   const existingIds = new Set(currentQueue.map((p) => p.id));
   try {
-    const res = await fetch(`/api/puzzle/random?elo=${elo}&count=${needed}`);
+    const userQuery = userId ? `&userId=${encodeURIComponent(userId)}` : "";
+    const res = await fetch(
+      `/api/puzzle/random?elo=${elo}&count=${needed}${userQuery}`
+    );
     if (res.ok) {
       const data = await res.json();
       const fetched: PuzzleData[] = Array.isArray(data) ? data : [data];

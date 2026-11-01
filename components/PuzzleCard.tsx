@@ -26,6 +26,7 @@ import {
   FastForward,
   ChevronDown,
 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 // Dynamically import react-chessboard with ssr: false to prevent hydration errors
 const Chessboard = dynamic(
@@ -147,6 +148,19 @@ export function PuzzleCard({
     async (result: "win" | "loss") => {
       if (!puzzle) return;
 
+      // Always record puzzle history even during calibration mode
+      fetch("/api/user/update-elo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          puzzleRating: puzzle.rating,
+          currentUserElo: currentElo,
+          result,
+          guestId,
+          puzzleId: puzzle.id,
+        }),
+      }).catch(() => {});
+
       if (isCalibration) {
         onEloUpdate(currentElo, result === "win" ? 1 : -1);
         return;
@@ -161,6 +175,7 @@ export function PuzzleCard({
             currentUserElo: currentElo,
             result,
             guestId,
+            puzzleId: puzzle.id,
           }),
         });
 
@@ -231,6 +246,71 @@ export function PuzzleCard({
         solutionStartIndex = 1;
       } catch (e) {
         console.error("Error playing opponent setup move:", e);
+      }
+    } else {
+      const playerColor: "white" | "black" =
+        initialTurn === "w" ? "white" : "black";
+      setBoardOrientation(playerColor);
+      setPlayerTurnMessage(
+        `${playerColor === "white" ? "White" : "Black"} to move`
+      );
+      solutionStartIndex = 0;
+    }
+
+    setFen(newGame.fen());
+    setCurrentMoveIndex(solutionStartIndex);
+    onStatusChange("playing");
+  }, [puzzle, onStatusChange]);
+
+  // Retry handler: resets board to original FEN, clears all error states, allows trying again without API refetch
+  const handleRetry = useCallback(() => {
+    if (!puzzle) return;
+    haptics.tap();
+
+    if (autoNextTimerRef.current) {
+      clearTimeout(autoNextTimerRef.current);
+      autoNextTimerRef.current = null;
+    }
+    if (mistakeTimerRef.current) {
+      clearTimeout(mistakeTimerRef.current);
+      mistakeTimerRef.current = null;
+    }
+
+    setAutoNextCountdown(null);
+    setIsReviewing(false);
+    setMistakeFeedback(null);
+    setIsShaking(false);
+    setSelectedSquare(null);
+    setHighlightStyles({});
+    setHintActive(false);
+
+    const movesArray = puzzle.moves.trim().split(/\s+/);
+    setAllMoves(movesArray);
+
+    const newGame = new Chess(puzzle.fen);
+    gameRef.current = newGame;
+
+    const initialTurn = newGame.turn();
+    let solutionStartIndex = 0;
+
+    if (movesArray.length % 2 === 0 && movesArray.length > 0) {
+      const playerColor: "white" | "black" =
+        initialTurn === "w" ? "black" : "white";
+      setBoardOrientation(playerColor);
+      setPlayerTurnMessage(
+        `${playerColor === "white" ? "White" : "Black"} to move`
+      );
+
+      const opponentUci = movesArray[0];
+      try {
+        newGame.move({
+          from: opponentUci.slice(0, 2),
+          to: opponentUci.slice(2, 4),
+          promotion: opponentUci.length === 5 ? opponentUci[4] : undefined,
+        });
+        solutionStartIndex = 1;
+      } catch (e) {
+        console.error("Error playing opponent setup move on retry:", e);
       }
     } else {
       const playerColor: "white" | "black" =
@@ -346,10 +426,10 @@ export function PuzzleCard({
         return false;
       }
 
-      const expectedFrom = expectedMove.slice(0, 2);
-      const expectedTo = expectedMove.slice(2, 4);
+      const expectedFrom = expectedMove.slice(0, 2).toLowerCase();
+      const expectedTo = expectedMove.slice(2, 4).toLowerCase();
       const expectedPromo =
-        expectedMove.length === 5 ? expectedMove[4] : undefined;
+        expectedMove.length === 5 ? expectedMove[4].toLowerCase() : undefined;
 
       // 1. Check chess legality with chess.js
       let moveMade = null;
@@ -367,39 +447,47 @@ export function PuzzleCard({
         return false;
       }
 
-      const moveUci =
-        sourceSquare + targetSquare + (moveMade.promotion ?? "");
-      const expectedUciNormalized =
-        expectedFrom + expectedTo + (expectedPromo ?? "");
+      const moveUci = (
+        sourceSquare +
+        targetSquare +
+        (moveMade.promotion ? moveMade.promotion.toLowerCase() : "")
+      ).toLowerCase();
+      const expectedUciNormalized = (
+        expectedFrom +
+        expectedTo +
+        (expectedPromo ?? "")
+      ).toLowerCase();
 
-      // 2. Verify if dropped move matches expected puzzle move
+      // 2. Strict UCI string comparison against next move in solution array
       if (moveUci !== expectedUciNormalized) {
         // Legal chess move, but INCORRECT puzzle solution
         game.undo();
         sounds.playError();
         haptics.error();
 
-        // Penalize Elo once per puzzle
+        // Lock board by transitioning to 'failed'
+        onStatusChange("failed");
+
+        // Penalize Elo once per puzzle and record in PuzzleHistory
         if (!hasPenalizedRef.current) {
           hasPenalizedRef.current = true;
           sendEloResult("loss");
         }
 
-        // Visual feedback & shake without locking user out of solving
-        setMistakeFeedback("Incorrect move. Try another!");
+        // Visual feedback & shake
+        setMistakeFeedback("Incorrect move. Click Retry to try again!");
         setIsShaking(true);
 
         if (mistakeTimerRef.current) clearTimeout(mistakeTimerRef.current);
         mistakeTimerRef.current = setTimeout(() => {
           setIsShaking(false);
-          setMistakeFeedback(null);
         }, 1500);
 
         // Clear square selection
         setSelectedSquare(null);
         setHighlightStyles({});
 
-        return false; // Piece snaps back, but puzzle remains playable!
+        return false; // Piece snaps back and board is locked
       }
 
       // 3. CORRECT MOVE!
@@ -418,7 +506,7 @@ export function PuzzleCard({
         sounds.playSuccess();
         haptics.success();
         onStatusChange("solved");
-        if (!hasWonRef.current && !hasPenalizedRef.current) {
+        if (!hasWonRef.current) {
           hasWonRef.current = true;
           sendEloResult("win");
         }
@@ -435,7 +523,7 @@ export function PuzzleCard({
           gameRef.current.move({
             from: oppReply.slice(0, 2),
             to: oppReply.slice(2, 4),
-            promotion: oppReply.length === 5 ? oppReply[4] : undefined,
+            promotion: oppReply.length === 5 ? oppReply[4].toLowerCase() : undefined,
           });
           setFen(gameRef.current.fen());
           sounds.playMove();
@@ -447,7 +535,7 @@ export function PuzzleCard({
             sounds.playSuccess();
             haptics.success();
             onStatusChange("solved");
-            if (!hasWonRef.current && !hasPenalizedRef.current) {
+            if (!hasWonRef.current) {
               hasWonRef.current = true;
               sendEloResult("win");
             }
@@ -462,7 +550,7 @@ export function PuzzleCard({
     [status, allMoves, currentMoveIndex, onStatusChange, sendEloResult]
   );
 
-  // Drag and drop drop handler
+  // Drag and drop drop handler - strictly locked when status !== 'playing'
   const handlePieceDrop = ({
     sourceSquare,
     targetSquare,
@@ -470,6 +558,7 @@ export function PuzzleCard({
     sourceSquare: string;
     targetSquare: string | null;
   }): boolean => {
+    if (status !== "playing") return false;
     return executeUserMove(sourceSquare, targetSquare);
   };
 
@@ -785,6 +874,8 @@ export function PuzzleCard({
                 id: `board-${puzzle?.id ?? "active"}`,
                 position: fen,
                 boardOrientation: boardOrientation,
+                allowDragging: status === "playing",
+                canDragPiece: () => status === "playing",
                 onPieceDrop: handlePieceDrop,
                 onSquareClick: handleSquareClick,
                 squareStyles: highlightStyles,
@@ -804,78 +895,110 @@ export function PuzzleCard({
           )}
 
           {/* Solved Celebration Hero Overlay */}
-          {status === "solved" && !isReviewing && (
-            <div className="absolute inset-0 bg-[#0A0A0A]/85 backdrop-blur-md flex flex-col items-center justify-center p-4 animate-in fade-in zoom-in-95 duration-250 z-20">
-              <div className="relative mb-3">
-                <div className="absolute -inset-3 bg-[#4edea3]/30 rounded-full blur-xl animate-pulse" />
-                <div className="relative p-3.5 bg-gradient-to-tr from-[#10b981] to-[#4edea3] text-[#002113] rounded-full shadow-2xl">
-                  <Trophy className="w-9 h-9 stroke-[2.5]" />
+          <AnimatePresence>
+            {status === "solved" && !isReviewing && (
+              <motion.div
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.8, opacity: 0 }}
+                transition={{ type: "spring", stiffness: 350, damping: 25 }}
+                className="absolute inset-0 bg-[#0A0A0A]/85 backdrop-blur-md flex flex-col items-center justify-center p-4 z-20"
+              >
+                <div className="relative mb-3">
+                  <div className="absolute -inset-3 bg-[#4edea3]/30 rounded-full blur-xl animate-pulse" />
+                  <div className="relative p-3.5 bg-gradient-to-tr from-[#10b981] to-[#4edea3] text-[#002113] rounded-full shadow-2xl">
+                    <Trophy className="w-9 h-9 stroke-[2.5]" />
+                  </div>
                 </div>
-              </div>
 
-              <div className="text-xl sm:text-2xl font-black text-white tracking-tight uppercase mb-1 drop-shadow-md flex items-center gap-1.5">
-                <span>Puzzle Solved!</span>
-                <Sparkles className="w-5 h-5 text-[#ffb95f] fill-[#ffb95f]" />
-              </div>
+                <div className="text-xl sm:text-2xl font-black text-white tracking-tight uppercase mb-1 drop-shadow-md flex items-center gap-1.5">
+                  <span>Puzzle Solved!</span>
+                  <Sparkles className="w-5 h-5 text-[#ffb95f] fill-[#ffb95f]" />
+                </div>
 
-              <div className="flex items-center gap-2 mb-4">
-                {lastEloChange !== null && (
-                  <span className="px-2.5 py-1 rounded-full bg-[#10b981]/20 border border-[#10b981]/40 text-[#4edea3] text-xs font-black tracking-wide">
-                    {lastEloChange >= 0 ? `+${lastEloChange}` : lastEloChange} Elo
-                  </span>
-                )}
-                {streak > 0 && (
-                  <span className="px-2.5 py-1 rounded-full bg-[#ffb95f]/20 border border-[#ffb95f]/40 text-[#ffb95f] text-xs font-black flex items-center gap-1">
-                    <Flame className="w-3.5 h-3.5 fill-[#ffb95f]" />
-                    <span>{streak} Streak!</span>
-                  </span>
-                )}
-              </div>
-
-              {/* Action buttons inside the celebration overlay */}
-              <div className="w-full max-w-[240px] flex flex-col gap-2 pointer-events-auto">
-                <button
-                  onClick={() => {
-                    haptics.tap();
-                    onNextPuzzle();
-                  }}
-                  className="w-full h-11 bg-[#10b981] hover:bg-[#4edea3] text-[#002113] font-black rounded-xl shadow-lg shadow-[#10b981]/30 flex items-center justify-center gap-2 transition-transform active:scale-95 cursor-pointer"
-                >
-                  <span>Next Reel</span>
-                  {autoNextCountdown !== null && (
-                    <span className="text-xs bg-[#002113]/20 px-2 py-0.5 rounded-full font-mono">
-                      {autoNextCountdown}s
+                <div className="flex items-center gap-2 mb-4">
+                  {lastEloChange !== null && (
+                    <span className="px-2.5 py-1 rounded-full bg-[#10b981]/20 border border-[#10b981]/40 text-[#4edea3] text-xs font-black tracking-wide">
+                      {lastEloChange >= 0 ? `+${lastEloChange}` : lastEloChange} Elo
                     </span>
                   )}
-                  <ArrowRight className="w-4 h-4 stroke-[3]" />
-                </button>
+                  {streak > 0 && (
+                    <span className="px-2.5 py-1 rounded-full bg-[#ffb95f]/20 border border-[#ffb95f]/40 text-[#ffb95f] text-xs font-black flex items-center gap-1">
+                      <Flame className="w-3.5 h-3.5 fill-[#ffb95f]" />
+                      <span>{streak} Streak!</span>
+                    </span>
+                  )}
+                </div>
 
-                <button
-                  onClick={() => {
-                    haptics.tap();
-                    setIsReviewing(true);
-                    if (autoNextTimerRef.current) {
-                      clearTimeout(autoNextTimerRef.current);
-                      autoNextTimerRef.current = null;
-                    }
-                    setAutoNextCountdown(null);
-                  }}
-                  className="w-full h-9 text-xs text-[#bbcabf] hover:text-white hover:bg-white/10 flex items-center justify-center gap-1.5 rounded-lg cursor-pointer"
-                >
-                  <Eye className="w-3.5 h-3.5" />
-                  <span>Review Board</span>
-                </button>
-              </div>
-            </div>
-          )}
+                {/* Action buttons inside the celebration overlay */}
+                <div className="w-full max-w-[240px] flex flex-col gap-2 pointer-events-auto">
+                  <button
+                    onClick={() => {
+                      haptics.tap();
+                      onNextPuzzle();
+                    }}
+                    className="w-full h-11 bg-[#10b981] hover:bg-[#4edea3] text-[#002113] font-black rounded-xl shadow-lg shadow-[#10b981]/30 flex items-center justify-center gap-2 transition-transform active:scale-95 cursor-pointer"
+                  >
+                    <span>Next Reel</span>
+                    {autoNextCountdown !== null && (
+                      <span className="text-xs bg-[#002113]/20 px-2 py-0.5 rounded-full font-mono">
+                        {autoNextCountdown}s
+                      </span>
+                    )}
+                    <ArrowRight className="w-4 h-4 stroke-[3]" />
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      haptics.tap();
+                      setIsReviewing(true);
+                      if (autoNextTimerRef.current) {
+                        clearTimeout(autoNextTimerRef.current);
+                        autoNextTimerRef.current = null;
+                      }
+                      setAutoNextCountdown(null);
+                    }}
+                    className="w-full h-9 text-xs text-[#bbcabf] hover:text-white hover:bg-white/10 flex items-center justify-center gap-1.5 rounded-lg cursor-pointer"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    <span>Review Board</span>
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Solved Mini Badge if reviewing */}
-          {status === "solved" && isReviewing && (
-            <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#10b981]/30 border border-[#10b981]/50 backdrop-blur-md text-[#4edea3] text-xs font-bold shadow-lg animate-in fade-in">
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>Solved</span>
-            </div>
-          )}
+          <AnimatePresence>
+            {status === "solved" && isReviewing && (
+              <motion.div
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.8, opacity: 0 }}
+                transition={{ type: "spring", stiffness: 350, damping: 25 }}
+                className="absolute top-3 right-3 z-10 flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#10b981]/30 border border-[#10b981]/50 backdrop-blur-md text-[#4edea3] text-xs font-bold shadow-lg"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>Solved</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Failed Board Badge */}
+          <AnimatePresence>
+            {status === "failed" && (
+              <motion.div
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.8, opacity: 0 }}
+                transition={{ type: "spring", stiffness: 350, damping: 25 }}
+                className="absolute top-3 right-3 z-10 flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#EF4444]/30 border border-[#EF4444]/50 backdrop-blur-md text-[#EF4444] text-xs font-bold shadow-lg"
+              >
+                <AlertCircle className="w-3.5 h-3.5" />
+                <span>Incorrect</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Right Reel Action Stack (TikTok/Reel Paradigm) */}
@@ -933,31 +1056,38 @@ export function PuzzleCard({
       </div>
 
       {/* Blunder State Banner (If mistake was made) */}
-      {mistakeFeedback && (
-        <div className="w-full bg-[#EF4444]/15 border border-[#EF4444]/40 rounded-xl p-3 my-1.5 shadow-lg flex items-center justify-between gap-2 animate-in fade-in duration-150">
-          <div className="flex items-center gap-2">
-            <AlertCircle className="w-5 h-5 text-[#EF4444] shrink-0" />
-            <div>
-              <div className="text-xs font-bold text-[#EF4444]">
-                Inaccurate Move
-              </div>
-              <div className="text-[11px] text-[#e5e1e4]/80">
-                Look for forcing checks, captures, or pins!
+      <AnimatePresence>
+        {(status === "failed" || mistakeFeedback) && (
+          <motion.div
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.8, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 350, damping: 25 }}
+            data-testid="puzzle-failed-banner"
+            className="w-full bg-[#EF4444]/15 border border-[#EF4444]/40 rounded-xl p-3 my-1.5 shadow-lg flex items-center justify-between gap-2"
+          >
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-[#EF4444] shrink-0" />
+              <div>
+                <div className="text-xs font-bold text-[#EF4444]">
+                  Inaccurate Move
+                </div>
+                <div className="text-[11px] text-[#e5e1e4]/80">
+                  Look for forcing checks, captures, or pins!
+                </div>
               </div>
             </div>
-          </div>
-          <button
-            onClick={() => {
-              haptics.tap();
-              initializePuzzle();
-            }}
-            className="px-2.5 py-1 rounded-lg bg-[#EF4444]/20 hover:bg-[#EF4444]/30 text-white text-xs font-bold flex items-center gap-1 shrink-0 cursor-pointer"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>Retry</span>
-          </button>
-        </div>
-      )}
+            <button
+              onClick={handleRetry}
+              data-testid="retry-puzzle-btn"
+              className="px-2.5 py-1 rounded-lg bg-[#EF4444]/20 hover:bg-[#EF4444]/30 text-white text-xs font-bold flex items-center gap-1 shrink-0 cursor-pointer"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Retry</span>
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Below Board HUD: Glassmorphic Tactical Info Card */}
       <div className="w-full bg-[#201f21]/80 backdrop-blur-lg border border-white/5 rounded-xl p-3 shadow-xl flex flex-col gap-2 mt-2">
@@ -1017,22 +1147,33 @@ export function PuzzleCard({
 
       {/* Bottom Action Bar: Tactical Solver Controls */}
       <div className="w-full flex items-center gap-2 mt-2">
-        {/* Secondary Hint Button with Outline Styling */}
-        <button
-          onClick={handleTriggerHint}
-          disabled={status !== "playing"}
-          className={`flex-1 h-12 rounded-xl border border-white/5 flex items-center justify-center gap-2 text-[#e5e1e4] shadow-md active:scale-95 transition-all cursor-pointer ${
-            hintUsed
-              ? "bg-[#2a2a2c]/50 text-[#bbcabf]"
-              : "bg-[#2a2a2c]/90 hover:bg-[#39393b]"
-          }`}
-        >
-          <Lightbulb className="w-4 h-4 text-[#ffb95f]" />
-          <span className="text-sm font-semibold">Hint</span>
-          <span className="bg-[#ffb95f]/20 text-[#ffb95f] text-[9px] px-1.5 py-0.5 rounded uppercase font-bold">
-            {hintUsed ? "Used" : "1 Left"}
-          </span>
-        </button>
+        {/* Tactical Action: Retry if failed, Hint otherwise */}
+        {status === "failed" ? (
+          <button
+            onClick={handleRetry}
+            data-testid="bottom-retry-btn"
+            className="flex-1 h-12 rounded-xl bg-[#EF4444]/20 hover:bg-[#EF4444]/30 text-white border border-[#EF4444]/40 font-bold text-sm flex items-center justify-center gap-2 shadow-md active:scale-95 transition-all cursor-pointer"
+          >
+            <RotateCcw className="w-4 h-4" />
+            <span>Retry Puzzle</span>
+          </button>
+        ) : (
+          <button
+            onClick={handleTriggerHint}
+            disabled={status !== "playing"}
+            className={`flex-1 h-12 rounded-xl border border-white/5 flex items-center justify-center gap-2 text-[#e5e1e4] shadow-md active:scale-95 transition-all cursor-pointer ${
+              hintUsed
+                ? "bg-[#2a2a2c]/50 text-[#bbcabf]"
+                : "bg-[#2a2a2c]/90 hover:bg-[#39393b]"
+            }`}
+          >
+            <Lightbulb className="w-4 h-4 text-[#ffb95f]" />
+            <span className="text-sm font-semibold">Hint</span>
+            <span className="bg-[#ffb95f]/20 text-[#ffb95f] text-[9px] px-1.5 py-0.5 rounded uppercase font-bold">
+              {hintUsed ? "Used" : "1 Left"}
+            </span>
+          </button>
+        )}
 
         {/* Next Reel Button */}
         <button

@@ -57,3 +57,15 @@ model Puzzle {
   @@index([rating])
   @@index([themes])
 }
+
+model PuzzleHistory {
+  id       String   @id @default(uuid())
+  userId   String
+  puzzleId String
+  result   String   // 'win' or 'loss'
+  solvedAt DateTime @default(now())
+
+  @@unique([userId, puzzleId])
+  @@index([userId])
+}
+

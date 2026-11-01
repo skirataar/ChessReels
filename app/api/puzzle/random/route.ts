@@ -24,14 +24,35 @@ export async function GET(request: NextRequest) {
 
     const minElo = Math.max(0, elo - 150);
     const maxElo = elo + 150;
+    const userId = searchParams.get("userId") || searchParams.get("guestId");
 
-    const puzzles = await prisma.$queryRaw<Puzzle[]>`
-      SELECT *
-      FROM "Puzzle"
-      WHERE "rating" >= ${minElo} AND "rating" <= ${maxElo}
-      ORDER BY RANDOM()
-      LIMIT ${count};
-    `;
+    let puzzles: Puzzle[] = [];
+
+    if (userId) {
+      // Anti-repetition: Exclude puzzles this user has already seen
+      puzzles = await prisma.$queryRaw<Puzzle[]>`
+        SELECT p.*
+        FROM "Puzzle" p
+        WHERE p."rating" >= ${minElo} AND p."rating" <= ${maxElo}
+          AND NOT EXISTS (
+            SELECT 1 FROM "PuzzleHistory" ph
+            WHERE ph."userId" = ${userId} AND ph."puzzleId" = p."id"
+          )
+        ORDER BY RANDOM()
+        LIMIT ${count};
+      `;
+    }
+
+    // Fallback if no unseen puzzles found in range or no userId provided
+    if (!puzzles || puzzles.length === 0) {
+      puzzles = await prisma.$queryRaw<Puzzle[]>`
+        SELECT *
+        FROM "Puzzle"
+        WHERE "rating" >= ${minElo} AND "rating" <= ${maxElo}
+        ORDER BY RANDOM()
+        LIMIT ${count};
+      `;
+    }
 
     if (!puzzles || puzzles.length === 0) {
       return NextResponse.json(

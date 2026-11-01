@@ -17,8 +17,11 @@ import { ProfileModal } from "@/components/ProfileModal";
 import { AuthModal } from "@/components/AuthModal";
 import { LandingPage } from "@/components/LandingPage";
 import { CalibrationCompleteModal } from "@/components/CalibrationCompleteModal";
+import { StatsModal } from "@/components/StatsModal";
 import { popNextPuzzle, prefetchPuzzles } from "@/lib/puzzleCache";
-import { RefreshCw, WifiOff, UserPlus } from "lucide-react";
+import { useStreak } from "@/lib/useStreak";
+import { RefreshCw, WifiOff, UserPlus, BarChart2 } from "lucide-react";
+import { motion } from "framer-motion";
 
 const GUEST_ID_KEY = "chess_reel_guest_id";
 const ELO_STORAGE_KEY = "chess_reel_elo";
@@ -97,6 +100,10 @@ export default function Home() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [isCalibratedModalOpen, setIsCalibratedModalOpen] = useState<boolean>(false);
   const [calibratedFinalElo, setCalibratedFinalElo] = useState<number>(800);
+  const [isStatsModalOpen, setIsStatsModalOpen] = useState<boolean>(false);
+
+  // Daily streak & puzzle totals tracking
+  const { dailyStreak, totalSolved, totalFailed, recordPuzzlePlay } = useStreak();
 
   const fallbackIndexRef = useRef<number>(0);
   const currentEloRef = useRef<number>(currentElo);
@@ -188,23 +195,25 @@ export default function Home() {
   const fetchNextPuzzle = useCallback(async () => {
     setPuzzleStatus("loading");
     const elo = currentEloRef.current;
+    const targetUserId = userAccount?.id || guestId;
 
     // 1. Check local prefetch queue (Offline buffer)
     const cachedPuzzle = popNextPuzzle();
     if (cachedPuzzle) {
       setCurrentPuzzle(cachedPuzzle);
-      // Trigger background buffer replenishment
-      prefetchPuzzles(elo).catch(() => {});
+      // Trigger background buffer replenishment with anti-repetition tracking
+      prefetchPuzzles(elo, 5, targetUserId).catch(() => {});
       return;
     }
 
     // 2. If queue is empty, fetch directly from API
     try {
-      const res = await fetch(`/api/puzzle/random?elo=${elo}`);
+      const userParam = targetUserId ? `&userId=${encodeURIComponent(targetUserId)}` : "";
+      const res = await fetch(`/api/puzzle/random?elo=${elo}${userParam}`);
       if (res.ok) {
         const data = (await res.json()) as PuzzleData;
         setCurrentPuzzle(data);
-        prefetchPuzzles(elo).catch(() => {});
+        prefetchPuzzles(elo, 5, targetUserId).catch(() => {});
       } else {
         console.warn("No puzzle returned from API, using curated fallback.");
         const fallback =
@@ -219,7 +228,7 @@ export default function Home() {
       fallbackIndexRef.current += 1;
       setCurrentPuzzle(fallback);
     }
-  }, []);
+  }, [userAccount?.id, guestId]);
 
   // Initial puzzle fetch on mount only
   const initialFetchDoneRef = useRef(false);
@@ -227,12 +236,15 @@ export default function Home() {
     if (!initialFetchDoneRef.current) {
       initialFetchDoneRef.current = true;
       fetchNextPuzzle();
-      prefetchPuzzles(currentEloRef.current).catch(() => {});
+      prefetchPuzzles(currentEloRef.current, 5, userAccount?.id || guestId).catch(() => {});
     }
-  }, [fetchNextPuzzle]);
+  }, [fetchNextPuzzle, userAccount?.id, guestId]);
 
   // Handle Elo update and placement test logic
   const handleEloUpdate = (newElo: number, change: number) => {
+    // Record puzzle result for daily streak tracking and total statistics
+    recordPuzzlePlay(change > 0 ? "win" : "loss");
+
     // -------------------------------------------------------------
     // Calibration Placement Mode: 6 Puzzles to calibrate baseline Elo
     // -------------------------------------------------------------
@@ -333,8 +345,8 @@ export default function Home() {
       console.warn("Could not save Elo to localStorage:", e);
     }
 
-    // Prefetch next puzzles for the new rating tier
-    prefetchPuzzles(newElo).catch(() => {});
+    // Prefetch next puzzles for the new rating tier with anti-repetition tracking
+    prefetchPuzzles(newElo, 5, userAccount?.id || guestId).catch(() => {});
   };
 
   // Reset rating back to 800
@@ -463,8 +475,9 @@ export default function Home() {
             </span>
           </button>
 
-          {/* Quick HUD: Elo + Streak + Live Pulse + Profile / Auth */}
-          <div className="flex items-center gap-2">
+          {/* Quick HUD: [Elo Pill] ... [Streak Indicator (🔥 X)] [Stats Button] + Profile / Auth */}
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* [Elo Pill] */}
             <div
               className="flex items-center gap-1 bg-[#18181B]/95 px-2.5 py-1 rounded-full shadow-[0_1px_8px_rgba(0,0,0,0.4)] border border-white/5"
               title={`Your Rating: ${currentElo}`}
@@ -481,17 +494,32 @@ export default function Home() {
               </span>
             </div>
 
-            <div className="flex items-center gap-1 bg-[#18181B]/95 px-2 py-1 rounded-full border border-white/5">
-              <span className="material-symbols-outlined text-[#ffb95f] text-base leading-none">
-                local_fire_department
-              </span>
+            {/* [Streak Indicator (🔥 X)] */}
+            <div
+              data-testid="header-streak-indicator"
+              className="flex items-center gap-1 bg-[#18181B]/95 px-2.5 py-1 rounded-full border border-white/5"
+              title={`Daily Streak: ${dailyStreak} days`}
+            >
+              <span className="text-xs leading-none">🔥</span>
+              <span className="sr-only">local_fire_department</span>
               <span className="text-xs font-bold text-[#ffb95f]">
-                {streak}
+                {dailyStreak || streak}
               </span>
             </div>
 
-            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/20 flex items-center justify-center">
-              <div className="w-1.5 h-1.5 rounded-full bg-[#4edea3] animate-pulse" />
+            {/* [Stats Button] */}
+            <button
+              onClick={() => setIsStatsModalOpen(true)}
+              aria-label="Open stats"
+              data-testid="header-stats-btn"
+              className="w-8 h-8 rounded-full bg-[#18181B]/95 hover:bg-[#27272a] border border-white/10 flex items-center justify-center text-[#bbcabf] hover:text-[#4edea3] transition-colors cursor-pointer"
+              title="Tactical Stats"
+            >
+              <BarChart2 className="w-4 h-4" />
+            </button>
+
+            <div className="w-2 h-2 rounded-full bg-emerald-500/20 flex items-center justify-center">
+              <div className="w-1 h-1 rounded-full bg-[#4edea3] animate-pulse" />
             </div>
 
             {userAccount ? (
@@ -582,20 +610,27 @@ export default function Home() {
             <div className="w-full h-16 bg-[#18181B]/80 rounded-xl border border-white/5 animate-pulse" />
           </div>
         ) : (
-          <PuzzleCard
-            puzzle={currentPuzzle}
-            status={puzzleStatus}
-            currentElo={currentElo}
-            guestId={userAccount?.id || guestId}
-            streak={streak}
-            lastEloChange={lastEloChange}
-            isCalibration={isCalibrating}
-            calibrationStep={currentCalibrationStep}
-            onStatusChange={setPuzzleStatus}
-            onEloUpdate={handleEloUpdate}
-            onNextPuzzle={fetchNextPuzzle}
-            onOpenStats={() => setActiveTab("rank")}
-          />
+          <motion.div
+            initial={{ opacity: 0, y: 30, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ duration: 0.4, ease: "easeOut" }}
+            className="w-full flex-1 flex flex-col items-center justify-between"
+          >
+            <PuzzleCard
+              puzzle={currentPuzzle}
+              status={puzzleStatus}
+              currentElo={currentElo}
+              guestId={userAccount?.id || guestId}
+              streak={dailyStreak || streak}
+              lastEloChange={lastEloChange}
+              isCalibration={isCalibrating}
+              calibrationStep={currentCalibrationStep}
+              onStatusChange={setPuzzleStatus}
+              onEloUpdate={handleEloUpdate}
+              onNextPuzzle={fetchNextPuzzle}
+              onOpenStats={() => setIsStatsModalOpen(true)}
+            />
+          </motion.div>
         )}
       </main>
 
@@ -705,6 +740,15 @@ export default function Home() {
         }}
         calibratedElo={calibratedFinalElo}
         username={userAccount?.displayName || userAccount?.username || "Challenger"}
+      />
+
+      <StatsModal
+        isOpen={isStatsModalOpen}
+        onClose={() => setIsStatsModalOpen(false)}
+        currentElo={currentElo}
+        dailyStreak={dailyStreak}
+        totalSolved={totalSolved}
+        totalFailed={totalFailed}
       />
     </div>
   );
