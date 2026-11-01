@@ -1,0 +1,59 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id              String       @id @default(uuid())
+  email           String?      @unique
+  googleId        String?      @unique
+  username        String?      @unique
+  displayName     String?
+  avatar          String?      @default("♟")
+  skillTier       String?      @default("intermediate")
+  elo             Int          @default(800)
+  peakElo         Int          @default(800)
+  streak          Int          @default(0)
+  bestStreak      Int          @default(0)
+  isCalibrated    Boolean      @default(false)
+  calibrationStep Int          @default(0)
+  createdAt       DateTime     @default(now())
+
+  // Friendships
+  friendships     Friendship[] @relation("UserFriendships")
+  friendOf        Friendship[] @relation("FriendUsers")
+}
+
+model Friendship {
+  id        String   @id @default(uuid())
+  userId    String
+  friendId  String
+  createdAt DateTime @default(now())
+
+  user      User     @relation("UserFriendships", fields: [userId], references: [id], onDelete: Cascade)
+  friend    User     @relation("FriendUsers", fields: [friendId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, friendId])
+  @@index([userId])
+  @@index([friendId])
+}
+
+model Puzzle {
+  id              String   @id
+  fen             String
+  moves           String
+  rating          Int
+  ratingDeviation Int
+  popularity      Int
+  nbPlays         Int
+  themes          String
+  gameUrl         String
+  openingTags     String?
+
+  @@index([rating])
+  @@index([themes])
+}

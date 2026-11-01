@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#18181b"/>
+      <stop offset="100%" stop-color="#09090b"/>
+    </linearGradient>
+    <linearGradient id="primary" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#818cf8"/>
+      <stop offset="100%" stop-color="#4f46e5"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="128" fill="url(#bg)"/>
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="4"/>
+  
+  <!-- Chess Knight Icon -->
+  <path d="M192 384h128v-32c0-16-12-28-28-28h-8c8-16 12-32 12-52 0-32-16-64-36-84 8-16 12-36 12-56 0-8-4-16-12-16s-16 8-20 16c-16-8-36-8-52 0-8-8-16-16-24-16s-12 8-12 16c0 20 4 40 12 56-20 20-36 52-36 84 0 20 4 36 12 52h-8c-16 0-28 12-28 28v32h72z" fill="url(#primary)"/>
+  <circle cx="216" cy="208" r="12" fill="#ffffff"/>
+  <path d="M160 416h192v24H160z" fill="url(#primary)" rx="8"/>
+</svg>
