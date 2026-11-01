@@ -18,6 +18,7 @@ import { AuthModal } from "@/components/AuthModal";
 import { LandingPage } from "@/components/LandingPage";
 import { CalibrationCompleteModal } from "@/components/CalibrationCompleteModal";
 import { StatsModal } from "@/components/StatsModal";
+import { UserAvatar } from "@/components/UserAvatar";
 import { popNextPuzzle, prefetchPuzzles } from "@/lib/puzzleCache";
 import { useStreak } from "@/lib/useStreak";
 import { RefreshCw, WifiOff, UserPlus, BarChart2 } from "lucide-react";
@@ -101,9 +102,17 @@ export default function Home() {
   const [isCalibratedModalOpen, setIsCalibratedModalOpen] = useState<boolean>(false);
   const [calibratedFinalElo, setCalibratedFinalElo] = useState<number>(800);
   const [isStatsModalOpen, setIsStatsModalOpen] = useState<boolean>(false);
+  const [oauthAlert, setOauthAlert] = useState<string | null>(null);
 
-  // Daily streak & puzzle totals tracking
-  const { dailyStreak, totalSolved, totalFailed, recordPuzzlePlay } = useStreak();
+  // Daily streak, solve combo & puzzle totals tracking
+  const {
+    dailyStreak,
+    combo,
+    bestCombo,
+    totalSolved,
+    totalFailed,
+    recordPuzzlePlay,
+  } = useStreak();
 
   const fallbackIndexRef = useRef<number>(0);
   const currentEloRef = useRef<number>(currentElo);
@@ -142,7 +151,48 @@ export default function Home() {
         }
         setGuestId(savedGuestId);
 
-        // 2. Saved Account
+        // 2. Check for Google OAuth callback user cookie & URL params
+        if (typeof document !== "undefined") {
+          const cookieMatch = document.cookie.match(/chess_reel_oauth_user=([^;]+)/);
+          if (cookieMatch && cookieMatch[1]) {
+            try {
+              let raw = cookieMatch[1];
+              try {
+                raw = decodeURIComponent(raw);
+              } catch {}
+              const oauthUser = JSON.parse(raw);
+              document.cookie = "chess_reel_oauth_user=; path=/; max-age=0";
+              if (oauthUser && oauthUser.id) {
+                window.localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(oauthUser));
+                if (oauthUser.elo) {
+                  window.localStorage.setItem(ELO_STORAGE_KEY, String(oauthUser.elo));
+                }
+                setUserAccount(oauthUser);
+                if (oauthUser.elo) setCurrentElo(oauthUser.elo);
+                setShowLanding(false);
+                if (window.location.search.includes("google_auth=success")) {
+                  window.history.replaceState({}, document.title, window.location.pathname);
+                }
+              }
+            } catch (err) {
+              console.warn("Could not parse OAuth user cookie:", err);
+            }
+          }
+
+          // Check for OAuth messages / errors
+          const searchParams = new URLSearchParams(window.location.search);
+          const oauthInfo = searchParams.get("oauth_info");
+          const oauthError = searchParams.get("oauth_error");
+          if (oauthInfo === "google_credentials_required") {
+            setOauthAlert("Google OAuth: Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env to connect live accounts. Quick Test Sign-In is ready.");
+            window.history.replaceState({}, document.title, window.location.pathname);
+          } else if (oauthError) {
+            setOauthAlert(`Google OAuth notification: ${oauthError.replace(/_/g, " ")}`);
+            window.history.replaceState({}, document.title, window.location.pathname);
+          }
+        }
+
+        // 3. Saved Account
         const savedAccountRaw = window.localStorage.getItem(ACCOUNT_STORAGE_KEY);
         if (savedAccountRaw) {
           try {
@@ -415,6 +465,23 @@ export default function Home() {
   if (showLanding) {
     return (
       <>
+        {oauthAlert && (
+          <div className="fixed top-16 inset-x-0 z-50 p-3 max-w-md mx-auto animate-in slide-in-from-top-2 duration-200">
+            <div className="p-3 rounded-xl bg-[#1e1b18] border border-amber-500/40 text-amber-200 text-xs flex items-start justify-between gap-2 shadow-2xl">
+              <div className="flex items-start gap-2">
+                <span className="material-symbols-outlined text-amber-400 text-base shrink-0 mt-0.5">info</span>
+                <span>{oauthAlert}</span>
+              </div>
+              <button
+                onClick={() => setOauthAlert(null)}
+                className="text-amber-400/80 hover:text-amber-200 shrink-0 font-bold text-sm px-1 cursor-pointer"
+                aria-label="Dismiss notification"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
         <LandingPage
           onContinueWithGoogle={() => {
             setAuthModalTab("register");
@@ -455,28 +522,47 @@ export default function Home() {
 
   return (
     <div className="bg-[#0A0A0A] font-sans text-[#e5e1e4] flex flex-col min-h-screen selection:bg-[#10b981] selection:text-[#002113] overflow-x-hidden w-full">
+      {oauthAlert && (
+        <div className="fixed top-16 inset-x-0 z-50 p-3 max-w-md mx-auto animate-in slide-in-from-top-2 duration-200">
+          <div className="p-3 rounded-xl bg-[#1e1b18] border border-amber-500/40 text-amber-200 text-xs flex items-start justify-between gap-2 shadow-2xl">
+            <div className="flex items-start gap-2">
+              <span className="material-symbols-outlined text-amber-400 text-base shrink-0 mt-0.5">info</span>
+              <span>{oauthAlert}</span>
+            </div>
+            <button
+              onClick={() => setOauthAlert(null)}
+              className="text-amber-400/80 hover:text-amber-200 shrink-0 font-bold text-sm px-1 cursor-pointer"
+              aria-label="Dismiss notification"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
       {/* 1. Fixed Top Header (from new-ui.md) */}
       <header className="fixed top-0 inset-x-0 z-40 bg-[#0A0A0A]/85 backdrop-blur-xl pt-safe border-b border-white/[0.04]">
         <div className="h-16 px-4 max-w-sm sm:max-w-md mx-auto flex items-center justify-between gap-2">
-          {/* Brand Logo & Feed Tag */}
+          {/* Brand Logo & Title */}
           <button
             onClick={() => setShowLanding(true)}
-            className="flex items-center gap-2 hover:opacity-85 transition-opacity cursor-pointer text-left"
+            className="flex items-center gap-2 hover:opacity-85 transition-opacity cursor-pointer text-left shrink-0"
             aria-label="View about & landing page"
           >
-            <div className="w-8 h-8 rounded-lg bg-[#4edea3]/10 border border-[#4edea3]/25 flex items-center justify-center text-[#4edea3] font-black text-sm shadow-sm">
-              {userAccount?.avatar || "♟"}
+            <div className="w-8 h-8 rounded-lg bg-[#4edea3]/10 border border-[#4edea3]/25 flex items-center justify-center text-[#4edea3] font-black text-sm shadow-sm shrink-0">
+              ♟
             </div>
             <span className="font-bold text-base tracking-tight text-[#e5e1e4] hidden xs:inline">
               Chess Reel
             </span>
-            <span className="text-[10px] tracking-wider uppercase text-[#bbcabf] font-bold px-1.5 py-0.5 rounded bg-[#2a2a2c]">
-              {isCalibrating ? "Placement" : "Feed Reels"}
-            </span>
+            {isCalibrating && (
+              <span className="text-[10px] tracking-wider uppercase text-[#38bdf8] font-bold px-1.5 py-0.5 rounded bg-[#38bdf8]/10 border border-[#38bdf8]/20">
+                Placement {currentCalibrationStep}/6
+              </span>
+            )}
           </button>
 
-          {/* Quick HUD: [Elo Pill] ... [Streak Indicator (🔥 X)] [Stats Button] + Profile / Auth */}
-          <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* Quick HUD: [Elo Pill] ... [Combo Pill] ... [Daily Streak Indicator (🔥 X)] [Stats Button] + Profile / Auth */}
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {/* [Elo Pill] */}
             <div
               className="flex items-center gap-1 bg-[#18181B]/95 px-2.5 py-1 rounded-full shadow-[0_1px_8px_rgba(0,0,0,0.4)] border border-white/5"
@@ -489,21 +575,52 @@ export default function Home() {
               <span className="text-xs font-bold text-[#4edea3] tracking-tight">
                 {currentElo}
               </span>
+              {lastEloChange !== null && (
+                <span
+                  className={`text-[10px] font-black ${
+                    lastEloChange >= 0 ? "text-[#4edea3]" : "text-[#EF4444]"
+                  }`}
+                >
+                  {lastEloChange >= 0 ? `+${lastEloChange}` : lastEloChange}
+                </span>
+              )}
               <span className="text-[9px] uppercase font-bold text-[#bbcabf]">
                 Elo
               </span>
             </div>
 
-            {/* [Streak Indicator (🔥 X)] */}
+            {/* [Combo Pill] - Right Answers Streak */}
+            <div
+              data-testid="header-combo-indicator"
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-full border transition-all ${
+                combo > 0
+                  ? "bg-[#4edea3]/10 border-[#4edea3]/30 text-[#4edea3] shadow-[0_0_10px_rgba(78,222,163,0.15)]"
+                  : "bg-[#18181B]/95 border-white/5 text-[#bbcabf]"
+              }`}
+              title={`Solve Combo: ${combo} in a row`}
+            >
+              <span className="text-xs leading-none">⚡</span>
+              <span className="text-xs font-bold tracking-tight">
+                {combo}
+              </span>
+              <span className="text-[9px] uppercase font-bold tracking-wider opacity-80 hidden xs:inline">
+                Combo
+              </span>
+            </div>
+
+            {/* [Streak Indicator (🔥 X)] - Daily Login Streak */}
             <div
               data-testid="header-streak-indicator"
               className="flex items-center gap-1 bg-[#18181B]/95 px-2.5 py-1 rounded-full border border-white/5"
-              title={`Daily Streak: ${dailyStreak} days`}
+              title={`Daily Streak: ${dailyStreak} ${dailyStreak === 1 ? "day" : "days"}`}
             >
               <span className="text-xs leading-none">🔥</span>
               <span className="sr-only">local_fire_department</span>
               <span className="text-xs font-bold text-[#ffb95f]">
-                {dailyStreak || streak}
+                {dailyStreak}
+              </span>
+              <span className="text-[9px] uppercase font-bold text-[#bbcabf] hidden xs:inline">
+                {dailyStreak === 1 ? "day" : "days"}
               </span>
             </div>
 
@@ -525,10 +642,10 @@ export default function Home() {
             {userAccount ? (
               <button
                 onClick={() => setActiveTab("profile")}
-                className="relative flex items-center justify-center rounded-full w-8 h-8 bg-[#2a2a2c] border border-white/10 hover:border-[#4edea3]/40 transition-colors cursor-pointer text-sm"
+                className="relative flex items-center justify-center rounded-full w-8 h-8 bg-[#2a2a2c] border border-white/10 hover:border-[#4edea3]/40 transition-colors cursor-pointer text-sm overflow-hidden shrink-0"
                 aria-label="Open Profile"
               >
-                <span>{userAccount.avatar || "♟"}</span>
+                <UserAvatar avatar={userAccount.avatar} fallback="♟" />
               </button>
             ) : (
               <button
@@ -593,7 +710,7 @@ export default function Home() {
           </div>
         )}
 
-        {puzzleStatus === "loading" && !currentPuzzle ? (
+        {!currentPuzzle ? (
           <div className="w-full flex-1 flex flex-col justify-between items-center px-4 py-3 max-w-sm mx-auto">
             {/* Top skeleton */}
             <div className="w-full h-12 bg-[#18181B]/80 rounded-xl border border-white/5 animate-pulse" />
@@ -610,18 +727,13 @@ export default function Home() {
             <div className="w-full h-16 bg-[#18181B]/80 rounded-xl border border-white/5 animate-pulse" />
           </div>
         ) : (
-          <motion.div
-            initial={{ opacity: 0, y: 30, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ duration: 0.4, ease: "easeOut" }}
-            className="w-full flex-1 flex flex-col items-center justify-between"
-          >
+          <div className="w-full flex-1 flex flex-col items-center justify-between">
             <PuzzleCard
               puzzle={currentPuzzle}
               status={puzzleStatus}
               currentElo={currentElo}
               guestId={userAccount?.id || guestId}
-              streak={dailyStreak || streak}
+              streak={dailyStreak}
               lastEloChange={lastEloChange}
               isCalibration={isCalibrating}
               calibrationStep={currentCalibrationStep}
@@ -630,7 +742,7 @@ export default function Home() {
               onNextPuzzle={fetchNextPuzzle}
               onOpenStats={() => setIsStatsModalOpen(true)}
             />
-          </motion.div>
+          </div>
         )}
       </main>
 
@@ -747,6 +859,8 @@ export default function Home() {
         onClose={() => setIsStatsModalOpen(false)}
         currentElo={currentElo}
         dailyStreak={dailyStreak}
+        combo={combo}
+        bestCombo={bestCombo}
         totalSolved={totalSolved}
         totalFailed={totalFailed}
       />

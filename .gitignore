@@ -40,4 +40,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# MCP & Playwright artifacts
+.playwright-mcp/
+test-results/
+playwright-report/
+
 /lib/generated/prisma

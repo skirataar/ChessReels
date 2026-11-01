@@ -783,51 +783,6 @@ export function PuzzleCard({
         </div>
       )}
 
-      {/* Top Floating Reel HUD / Challenge Context */}
-      <div className="w-full flex items-center justify-between gap-2 mt-1 mb-2 z-20">
-        {/* Player Live Delta Pill */}
-        <div className="flex items-center gap-1.5 bg-[#2a2a2c]/90 px-3 py-1.5 rounded-full shadow-md backdrop-blur-md border border-white/5" title={`Your Rating: ${currentElo}`}>
-          <span className="sr-only">Your Rating:</span>
-          <Zap className="w-3.5 h-3.5 text-[#4edea3] fill-[#4edea3]" />
-          <span className="text-sm font-bold text-[#e5e1e4] tracking-tight">
-            {currentElo}
-          </span>
-          {isCalibration ? (
-            <span className="text-[10px] font-black text-[#38bdf8] uppercase tracking-wider">
-              Test {calibrationStep}/6
-            </span>
-          ) : lastEloChange !== null && (
-            <span
-              className={`text-[11px] font-black ${
-                lastEloChange >= 0 ? "text-[#4edea3]" : "text-[#EF4444]"
-              }`}
-            >
-              {lastEloChange >= 0 ? `+${lastEloChange}` : lastEloChange}
-            </span>
-          )}
-        </div>
-
-        {/* Streak & Session Stats */}
-        <div className="flex items-center gap-1.5">
-          <div className="flex items-center gap-1 bg-[#2a2a2c]/90 px-3 py-1.5 rounded-full shadow-md backdrop-blur-md border border-white/5">
-            <Flame className="w-3.5 h-3.5 text-[#ffb95f] fill-[#ffb95f]" />
-            <span className="text-sm font-bold text-[#ffb95f]">{streak}</span>
-          </div>
-          {onOpenStats && (
-            <button
-              onClick={() => {
-                haptics.tap();
-                onOpenStats();
-              }}
-              aria-label="Tactical stats summary"
-              className="flex items-center justify-center w-8 h-8 rounded-full bg-[#2a2a2c]/90 text-[#bbcabf] hover:text-[#e5e1e4] active:scale-95 transition-transform shadow-md border border-white/5 cursor-pointer"
-            >
-              <Trophy className="w-4 h-4 text-[#bbcabf]" />
-            </button>
-          )}
-        </div>
-      </div>
-
       {/* Active Puzzle Mission Brief */}
       <div className="w-full flex items-center justify-between mb-2 px-1">
         <div className="flex items-center gap-2">
@@ -851,7 +806,7 @@ export function PuzzleCard({
       </div>
 
       {/* Central Playing Theater + Floating Reel Side Controls */}
-      <div className="relative w-full max-w-[min(88vw,350px)] aspect-square flex items-center justify-center my-1">
+      <div className="relative w-full max-w-[min(76vw,330px)] sm:max-w-[340px] aspect-square flex items-center justify-center my-1.5">
         {/* Chessboard Container (1:1 Ratio Tournament Dimensions) */}
         <div
           data-testid="chessboard-container"
@@ -871,7 +826,7 @@ export function PuzzleCard({
           {fen ? (
             <Chessboard
               options={{
-                id: `board-${puzzle?.id ?? "active"}`,
+                id: "chess-reel-active-board",
                 position: fen,
                 boardOrientation: boardOrientation,
                 allowDragging: status === "playing",
@@ -879,7 +834,7 @@ export function PuzzleCard({
                 onPieceDrop: handlePieceDrop,
                 onSquareClick: handleSquareClick,
                 squareStyles: highlightStyles,
-                animationDurationInMs: 220,
+                animationDurationInMs: 250,
                 showNotation: true,
                 darkSquareStyle: { backgroundColor: "#262421" },
                 lightSquareStyle: { backgroundColor: "#3D3B38" },
@@ -1002,7 +957,7 @@ export function PuzzleCard({
         </div>
 
         {/* Right Reel Action Stack (TikTok/Reel Paradigm) */}
-        <aside className="absolute -right-3 sm:-right-4 flex flex-col items-center gap-2.5 z-30">
+        <aside className="absolute left-[calc(100%+10px)] sm:left-[calc(100%+14px)] top-1/2 -translate-y-1/2 flex flex-col items-center gap-2.5 z-30">
           {/* Bookmark / Save Pattern */}
           <button
             onClick={handleToggleBookmark}

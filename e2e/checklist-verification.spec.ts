@@ -124,6 +124,7 @@ test.describe("Checklist Verification - Sections 3, 5, 6 & Bug Fixes", () => {
 
       // Click Next Puzzle while offline - should load seamlessly from cache
       const nextButton = page.getByRole("button", { name: /next puzzle/i });
+      await expect(nextButton).toBeVisible({ timeout: 5000 });
       await nextButton.click();
 
       // Board remains visible and interactive from cache

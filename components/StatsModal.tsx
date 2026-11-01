@@ -15,6 +15,7 @@ import {
   XCircle,
   BarChart2,
   Trophy,
+  Sparkles,
 } from "lucide-react";
 
 interface StatsModalProps {
@@ -22,6 +23,8 @@ interface StatsModalProps {
   onClose: () => void;
   currentElo: number;
   dailyStreak: number;
+  combo?: number;
+  bestCombo?: number;
   totalSolved: number;
   totalFailed: number;
 }
@@ -31,6 +34,8 @@ export function StatsModal({
   onClose,
   currentElo,
   dailyStreak,
+  combo = 0,
+  bestCombo = 0,
   totalSolved,
   totalFailed,
 }: StatsModalProps) {
@@ -60,7 +65,7 @@ export function StatsModal({
           </div>
         </DialogHeader>
 
-        {/* 2x2 Tactical Metric Grid */}
+        {/* Tactical Metric Grid */}
         <div className="grid grid-cols-2 gap-2.5 mt-2">
           {/* Current Elo */}
           <div
@@ -78,7 +83,7 @@ export function StatsModal({
             </div>
           </div>
 
-          {/* Daily Streak */}
+          {/* Daily Streak (Days logged in and played) */}
           <div
             data-testid="stat-daily-streak"
             className="p-3 rounded-xl bg-[#201f21] border border-white/5 flex flex-col gap-1.5 shadow-inner"
@@ -94,6 +99,30 @@ export function StatsModal({
             </div>
           </div>
 
+          {/* Solve Combo (Consecutive right answers) */}
+          <div
+            data-testid="stat-solve-combo"
+            className="p-3 rounded-xl bg-[#201f21] border border-[#4edea3]/20 flex flex-col gap-1.5 shadow-inner col-span-2"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold text-[#4edea3] uppercase tracking-wider flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5" />
+                Solve Combo (Consecutive Right)
+              </span>
+              <span className="text-[10px] font-mono text-[#bbcabf]">
+                Best: {Math.max(combo, bestCombo)}
+              </span>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-black text-white tracking-tight">
+                {combo}
+              </span>
+              <span className="text-xs text-[#bbcabf] font-medium">
+                {combo === 1 ? "in a row" : "in a row without mistake"}
+              </span>
+            </div>
+          </div>
+
           {/* Total Solved */}
           <div
             data-testid="stat-total-solved"
@@ -101,7 +130,7 @@ export function StatsModal({
           >
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-semibold text-[#bbcabf] uppercase tracking-wider">
-                Solved
+                Total Solved
               </span>
               <CheckCircle2 className="w-4 h-4 text-[#10b981]" />
             </div>

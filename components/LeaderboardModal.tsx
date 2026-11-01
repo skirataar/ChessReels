@@ -11,6 +11,7 @@ import {
   UserPlus,
   Trash2,
 } from "lucide-react";
+import { UserAvatar } from "@/components/UserAvatar";
 
 export interface FriendEntry {
   id: string;
@@ -310,8 +311,8 @@ export function LeaderboardModal({
 
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
-                    <div className="w-9 h-9 rounded-full bg-[#4edea3]/10 border border-[#4edea3]/30 flex items-center justify-center text-[#4edea3] font-black text-sm">
-                      {userAccount?.avatar || "⚡"}
+                    <div className="w-9 h-9 rounded-full bg-[#4edea3]/10 border border-[#4edea3]/30 flex items-center justify-center text-[#4edea3] font-black text-sm overflow-hidden shrink-0">
+                      <UserAvatar avatar={userAccount?.avatar} fallback="⚡" />
                     </div>
                     <div>
                       <div className="flex items-center gap-1.5">
@@ -414,8 +415,8 @@ export function LeaderboardModal({
                       <span className="w-6 text-center text-xs font-black text-[#4edea3]">
                         #{userRank}
                       </span>
-                      <div className="w-7 h-7 rounded-full bg-[#10b981] text-[#002113] flex items-center justify-center font-black text-xs">
-                        {userAccount?.avatar || "You"}
+                      <div className="w-7 h-7 rounded-full bg-[#10b981] text-[#002113] flex items-center justify-center font-black text-xs overflow-hidden shrink-0">
+                        <UserAvatar avatar={userAccount?.avatar} fallback="♟" />
                       </div>
                       <div>
                         <span className="text-xs font-black text-white block leading-tight">
@@ -557,8 +558,8 @@ export function LeaderboardModal({
                             {rankNum === 1 ? "🥇" : rankNum === 2 ? "🥈" : rankNum === 3 ? "🥉" : `#${rankNum}`}
                           </span>
 
-                          <div className="w-8 h-8 rounded-full bg-[#201f21] border border-white/10 flex items-center justify-center text-sm">
-                            {entry.avatar || "♟"}
+                          <div className="w-8 h-8 rounded-full bg-[#201f21] border border-white/10 flex items-center justify-center text-sm overflow-hidden shrink-0">
+                            <UserAvatar avatar={entry.avatar} fallback="♟" />
                           </div>
 
                           <div>

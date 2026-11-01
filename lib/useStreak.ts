@@ -6,6 +6,8 @@ export const DAILY_STREAK_KEY = "chess_reel_daily_streak";
 export const LAST_PLAYED_DATE_KEY = "chess_reel_last_played_date";
 export const TOTAL_SOLVED_KEY = "chess_reel_total_solved";
 export const TOTAL_FAILED_KEY = "chess_reel_total_failed";
+export const SOLVE_COMBO_KEY = "chess_reel_solve_combo";
+export const BEST_COMBO_KEY = "chess_reel_best_combo";
 
 export function getTodayDateString(): string {
   const now = new Date();
@@ -28,6 +30,8 @@ export function getDaysDifference(pastDateStr: string, currentDateStr: string): 
 
 export interface StreakStats {
   dailyStreak: number;
+  combo: number;
+  bestCombo: number;
   lastPlayedDate: string | null;
   totalSolved: number;
   totalFailed: number;
@@ -35,6 +39,8 @@ export interface StreakStats {
 
 const SERVER_SNAPSHOT: StreakStats = {
   dailyStreak: 0,
+  combo: 0,
+  bestCombo: 0,
   lastPlayedDate: null,
   totalSolved: 0,
   totalFailed: 0,
@@ -49,6 +55,14 @@ function getSnapshot(): StreakStats {
     const lastDate = window.localStorage.getItem(LAST_PLAYED_DATE_KEY);
     const rawStreak = parseInt(
       window.localStorage.getItem(DAILY_STREAK_KEY) || "0",
+      10
+    );
+    const rawCombo = parseInt(
+      window.localStorage.getItem(SOLVE_COMBO_KEY) || "0",
+      10
+    );
+    const rawBestCombo = parseInt(
+      window.localStorage.getItem(BEST_COMBO_KEY) || "0",
       10
     );
     const totalSolved = parseInt(
@@ -71,12 +85,16 @@ function getSnapshot(): StreakStats {
 
     if (
       cachedSnapshot.dailyStreak !== effectiveStreak ||
+      cachedSnapshot.combo !== rawCombo ||
+      cachedSnapshot.bestCombo !== rawBestCombo ||
       cachedSnapshot.lastPlayedDate !== lastDate ||
       cachedSnapshot.totalSolved !== totalSolved ||
       cachedSnapshot.totalFailed !== totalFailed
     ) {
       cachedSnapshot = {
         dailyStreak: effectiveStreak,
+        combo: rawCombo,
+        bestCombo: rawBestCombo,
         lastPlayedDate: lastDate,
         totalSolved,
         totalFailed,
@@ -116,7 +134,7 @@ function subscribe(callback: Listener) {
 export function useStreak() {
   const stats = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
-  // Record a puzzle result: updates daily streak and totals according to specs
+  // Record a puzzle result: updates daily streak, combo streak, and totals
   const recordPuzzlePlay = useCallback((result?: "win" | "loss") => {
     if (typeof window === "undefined") return;
 
@@ -151,6 +169,29 @@ export function useStreak() {
       window.localStorage.setItem(LAST_PLAYED_DATE_KEY, today);
       window.localStorage.setItem(DAILY_STREAK_KEY, String(nextStreak));
 
+      // Update solve combo (consecutive correct answers in a row)
+      const storedCombo = parseInt(
+        window.localStorage.getItem(SOLVE_COMBO_KEY) || "0",
+        10
+      );
+      const storedBestCombo = parseInt(
+        window.localStorage.getItem(BEST_COMBO_KEY) || "0",
+        10
+      );
+
+      let nextCombo = storedCombo;
+      let nextBestCombo = storedBestCombo;
+
+      if (result === "win") {
+        nextCombo = storedCombo + 1;
+        nextBestCombo = Math.max(storedBestCombo, nextCombo);
+      } else if (result === "loss") {
+        nextCombo = 0;
+      }
+
+      window.localStorage.setItem(SOLVE_COMBO_KEY, String(nextCombo));
+      window.localStorage.setItem(BEST_COMBO_KEY, String(nextBestCombo));
+
       // Update totals
       if (result === "win") {
         const solved =
@@ -176,6 +217,8 @@ export function useStreak() {
 
   return {
     dailyStreak: stats.dailyStreak,
+    combo: stats.combo,
+    bestCombo: stats.bestCombo,
     totalSolved: stats.totalSolved,
     totalFailed: stats.totalFailed,
     lastPlayedDate: stats.lastPlayedDate,

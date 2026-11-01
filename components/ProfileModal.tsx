@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { sounds } from "@/lib/audio";
 import { getTier } from "./LeaderboardModal";
+import { UserAvatar } from "@/components/UserAvatar";
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -162,8 +163,12 @@ export function ProfileModal({
             <div className="flex items-center justify-between p-3.5 rounded-xl bg-[#18181B] border border-white/5">
               <div className="flex items-center gap-3.5">
                 <div className="relative">
-                  <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-[#10b981] to-[#4edea3] flex items-center justify-center text-[#002113] font-black text-xl shadow-md">
-                    {userAccount.avatar || "♟"}
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-[#10b981] to-[#4edea3] flex items-center justify-center text-[#002113] font-black text-xl shadow-md overflow-hidden shrink-0">
+                    <UserAvatar
+                      avatar={userAccount.avatar}
+                      fallback="♟"
+                      className="w-full h-full flex items-center justify-center text-xl font-black text-[#002113]"
+                    />
                   </div>
                   <div className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-[#10b981] ring-2 ring-[#121214]" />
                 </div>
