@@ -1,19 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { Prisma } from "@/lib/generated/prisma/client";
 import type { Puzzle } from "@/lib/generated/prisma/client";
 
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const eloParam = searchParams.get("elo");
+    const minRatingParam = searchParams.get("minRating");
+    const maxRatingParam = searchParams.get("maxRating");
+    const themesParam = searchParams.get("themes");
 
     const elo = eloParam !== null ? Number.parseInt(eloParam, 10) : 800;
 
-    if (Number.isNaN(elo)) {
-      return NextResponse.json(
-        { error: "Invalid 'elo' parameter. Must be an integer." },
-        { status: 400 }
-      );
+    let minElo: number;
+    let maxElo: number;
+
+    if (minRatingParam !== null && maxRatingParam !== null) {
+      minElo = Math.max(0, Number.parseInt(minRatingParam, 10) || 400);
+      maxElo = Math.max(minElo, Number.parseInt(maxRatingParam, 10) || 2800);
+    } else if (minRatingParam !== null) {
+      minElo = Math.max(0, Number.parseInt(minRatingParam, 10) || 400);
+      maxElo = 2800;
+    } else if (maxRatingParam !== null) {
+      minElo = 0;
+      maxElo = Math.max(0, Number.parseInt(maxRatingParam, 10) || 2800);
+    } else {
+      if (Number.isNaN(elo)) {
+        return NextResponse.json(
+          { error: "Invalid 'elo' parameter. Must be an integer." },
+          { status: 400 }
+        );
+      }
+      minElo = Math.max(0, elo - 150);
+      maxElo = elo + 150;
     }
 
     const countParam = searchParams.get("count");
@@ -22,9 +42,31 @@ export async function GET(request: NextRequest) {
         ? Math.min(10, Math.max(1, Number.parseInt(countParam, 10) || 1))
         : 1;
 
-    const minElo = Math.max(0, elo - 150);
-    const maxElo = elo + 150;
     const userId = searchParams.get("userId") || searchParams.get("guestId");
+
+    // Parse themes if provided (comma-separated or space-separated)
+    const rawThemes = themesParam
+      ? themesParam
+          .split(/[,\s]+/)
+          .map((t) => t.trim().toLowerCase())
+          .filter(Boolean)
+      : [];
+
+    const themeConditions = rawThemes.map(
+      (t) => Prisma.sql`p."themes" ILIKE ${"%" + t + "%"}`
+    );
+    const themeClause =
+      themeConditions.length > 0
+        ? Prisma.sql`AND (${Prisma.join(themeConditions, " OR ")})`
+        : Prisma.empty;
+
+    const themeConditionsFallback = rawThemes.map(
+      (t) => Prisma.sql`"themes" ILIKE ${"%" + t + "%"}`
+    );
+    const themeClauseFallback =
+      themeConditionsFallback.length > 0
+        ? Prisma.sql`AND (${Prisma.join(themeConditionsFallback, " OR ")})`
+        : Prisma.empty;
 
     let puzzles: Puzzle[] = [];
 
@@ -34,6 +76,7 @@ export async function GET(request: NextRequest) {
         SELECT p.*
         FROM "Puzzle" p
         WHERE p."rating" >= ${minElo} AND p."rating" <= ${maxElo}
+          ${themeClause}
           AND NOT EXISTS (
             SELECT 1 FROM "PuzzleHistory" ph
             WHERE ph."userId" = ${userId} AND ph."puzzleId" = p."id"
@@ -45,6 +88,18 @@ export async function GET(request: NextRequest) {
 
     // Fallback if no unseen puzzles found in range or no userId provided
     if (!puzzles || puzzles.length === 0) {
+      puzzles = await prisma.$queryRaw<Puzzle[]>`
+        SELECT *
+        FROM "Puzzle"
+        WHERE "rating" >= ${minElo} AND "rating" <= ${maxElo}
+          ${themeClauseFallback}
+        ORDER BY RANDOM()
+        LIMIT ${count};
+      `;
+    }
+
+    // If still empty and theme filter was active, try relaxing theme filter
+    if ((!puzzles || puzzles.length === 0) && rawThemes.length > 0) {
       puzzles = await prisma.$queryRaw<Puzzle[]>`
         SELECT *
         FROM "Puzzle"

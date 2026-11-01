@@ -25,6 +25,7 @@ import {
   Brain,
   FastForward,
   ChevronDown,
+  Clock,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -65,6 +66,8 @@ export interface PuzzleCardProps {
   lastEloChange: number | null;
   isCalibration?: boolean;
   calibrationStep?: number;
+  mode?: "ranked" | "practice";
+  onModeChange?: (mode: "ranked" | "practice") => void;
   onStatusChange: (status: PuzzleStatus) => void;
   onEloUpdate: (newElo: number, change: number) => void;
   onNextPuzzle: () => void;
@@ -80,6 +83,8 @@ export function PuzzleCard({
   lastEloChange,
   isCalibration = false,
   calibrationStep = 1,
+  mode = "ranked",
+  onModeChange,
   onStatusChange,
   onEloUpdate,
   onNextPuzzle,
@@ -99,7 +104,33 @@ export function PuzzleCard({
   );
   const [isReviewing, setIsReviewing] = useState<boolean>(false);
 
-  // New UI features: Bookmarking, SFX mute state, hints, toast feedback
+  // Mode and Timer state
+  const [activeMode, setActiveMode] = useState<"ranked" | "practice">(mode);
+  const [timerSeconds, setTimerSeconds] = useState<number>(0);
+
+  useEffect(() => {
+    setActiveMode(mode);
+  }, [mode]);
+
+  // Count-up timer for the current puzzle
+  useEffect(() => {
+    setTimerSeconds(0);
+    if (!puzzle || status !== "playing") return;
+
+    const interval = setInterval(() => {
+      setTimerSeconds((prev) => prev + 1);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [puzzle?.id, status]);
+
+  const formatTimer = (totalSecs: number) => {
+    const mins = Math.floor(totalSecs / 60);
+    const secs = totalSecs % 60;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  // UI features: Bookmarking, SFX mute state, hints, toast feedback
   const [isBookmarked, setIsBookmarked] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [hintActive, setHintActive] = useState<boolean>(false);
@@ -111,6 +142,7 @@ export function PuzzleCard({
   const [highlightStyles, setHighlightStyles] = useState<
     Record<string, React.CSSProperties>
   >({});
+
 
   const gameRef = useRef<Chess | null>(null);
   const autoNextTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -775,53 +807,74 @@ export function PuzzleCard({
     : ["Tactics", "Middlegame"];
 
   return (
-    <div className="w-full flex flex-col items-center justify-between px-3 pb-24 max-w-sm mx-auto relative select-none">
+    <div className="w-full flex flex-col items-center justify-between px-3 pb-8 max-w-sm mx-auto relative select-none">
       {/* Toast Notification Pill */}
       {toastMessage && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 px-3.5 py-1.5 rounded-full bg-[#18181B]/95 border border-[#3f3f46]/40 text-[#4edea3] text-xs font-bold shadow-2xl backdrop-blur-md animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 px-3.5 py-1.5 rounded-full bg-[#22201e]/95 border border-[#c29b78]/40 text-[#c29b78] text-xs font-bold shadow-2xl backdrop-blur-md animate-in fade-in zoom-in-95 duration-150">
           {toastMessage}
         </div>
       )}
 
-      {/* Active Puzzle Mission Brief */}
-      <div className="w-full flex items-center justify-between mb-2 px-1">
-        <div className="flex items-center gap-2">
-          <span
-            className={`w-3.5 h-3.5 rounded-full ring-2 shadow-sm shrink-0 transition-transform ${
-              boardOrientation === "white"
-                ? "bg-white ring-neutral-400 shadow-white/30"
-                : "bg-neutral-950 ring-neutral-500 shadow-black/80"
+      {/* 1. Top Bar: Ranked / Practice Tabs + Timer Pill */}
+      <div className="w-full flex items-center justify-between mb-2.5 px-1">
+        {/* Mode Toggle Tabs */}
+        <div className="flex items-center p-1 rounded-xl bg-[#22201e] border border-white/10 shadow-inner">
+          <button
+            onClick={() => {
+              setActiveMode("ranked");
+              onModeChange?.("ranked");
+            }}
+            className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+              activeMode === "ranked"
+                ? "bg-[#c29b78] text-[#151413] shadow-md shadow-[#c29b78]/25"
+                : "text-[#a3a3a3] hover:text-[#f5f5f5]"
             }`}
-          />
-          <span className="text-base font-bold tracking-tight text-[#e5e1e4]">
-            {playerTurnMessage}
-          </span>
+          >
+            Ranked
+          </button>
+          <button
+            onClick={() => {
+              setActiveMode("practice");
+              onModeChange?.("practice");
+            }}
+            className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+              activeMode === "practice"
+                ? "bg-[#c29b78] text-[#151413] shadow-md shadow-[#c29b78]/25"
+                : "text-[#a3a3a3] hover:text-[#f5f5f5]"
+            }`}
+          >
+            Practice
+          </button>
         </div>
-        <div className="flex items-center gap-1.5 bg-[#201f21]/70 px-2.5 py-1 rounded-full border border-white/5">
-          <Brain className="w-3.5 h-3.5 text-[#4edea3]" />
-          <span className="text-[11px] font-bold text-[#bbcabf] uppercase tracking-wider">
-            {themeList[0] ?? "Mate in 2"}
-          </span>
+
+        {/* Count-up Timer Pill */}
+        <div
+          data-testid="puzzle-timer-pill"
+          className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#22201e] border border-white/10 text-[#f5f5f5] text-xs font-mono font-bold shadow-sm"
+          title="Current puzzle time"
+        >
+          <Clock className="w-3.5 h-3.5 text-[#c29b78]" />
+          <span>{formatTimer(timerSeconds)}</span>
         </div>
       </div>
 
-      {/* Central Playing Theater + Floating Reel Side Controls */}
-      <div className="relative w-full max-w-[min(76vw,330px)] sm:max-w-[340px] aspect-square flex items-center justify-center my-1.5">
+      {/* 2. Central Playing Theater + Floating Action Side Stack */}
+      <div className="relative w-full max-w-[min(76vw,330px)] sm:max-w-[340px] aspect-square flex items-center justify-center my-1">
         {/* Chessboard Container (1:1 Ratio Tournament Dimensions) */}
         <div
           data-testid="chessboard-container"
-          className={`relative w-full h-full rounded-2xl bg-[#262421] p-2 shadow-2xl overflow-hidden flex flex-col justify-between transition-all duration-300 ring-1 touch-none ${
+          className={`relative w-full h-full rounded-2xl bg-[#22201e] p-2 shadow-2xl overflow-hidden flex flex-col justify-between transition-all duration-300 ring-1 touch-none ${
             isShaking ? "animate-board-shake" : ""
           } ${
             status === "solved"
-              ? "ring-[#4edea3]/70 shadow-[0_0_35px_rgba(78,222,163,0.35)]"
+              ? "ring-[#10b981]/70 shadow-[0_0_35px_rgba(16,185,129,0.35)]"
               : mistakeFeedback
-              ? "ring-[#EF4444]/70 shadow-[0_0_30px_rgba(239,68,68,0.35)]"
-              : "ring-white/10 shadow-black/80"
+              ? "ring-[#ef4444]/70 shadow-[0_0_30px_rgba(239,68,68,0.35)]"
+              : "ring-[#c29b78]/20 shadow-black/80"
           }`}
         >
-          {/* Subtle Board Rim Glow on Action */}
-          <div className="absolute inset-0 pointer-events-none rounded-2xl shadow-[inset_0_0_20px_rgba(78,222,163,0.12)]" />
+          {/* Subtle Warm Board Rim Glow on Action */}
+          <div className="absolute inset-0 pointer-events-none rounded-2xl shadow-[inset_0_0_20px_rgba(194,155,120,0.12)]" />
 
           {fen ? (
             <Chessboard
@@ -836,16 +889,16 @@ export function PuzzleCard({
                 squareStyles: highlightStyles,
                 animationDurationInMs: 250,
                 showNotation: true,
-                darkSquareStyle: { backgroundColor: "#262421" },
-                lightSquareStyle: { backgroundColor: "#3D3B38" },
+                darkSquareStyle: { backgroundColor: "#b58863" },
+                lightSquareStyle: { backgroundColor: "#f0d9b5" },
                 dropSquareStyle: {
-                  boxShadow: "inset 0 0 1px 3px rgba(78, 222, 163, 0.9)",
+                  boxShadow: "inset 0 0 1px 3px rgba(194, 155, 120, 0.9)",
                 },
               }}
             />
           ) : (
-            <div className="w-full h-full bg-[#121214] flex items-center justify-center">
-              <div className="w-8 h-8 border-2 border-[#4edea3] border-t-transparent rounded-full animate-spin" />
+            <div className="w-full h-full bg-[#151413] flex items-center justify-center">
+              <div className="w-8 h-8 border-2 border-[#c29b78] border-t-transparent rounded-full animate-spin" />
             </div>
           )}
 
@@ -857,29 +910,29 @@ export function PuzzleCard({
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.8, opacity: 0 }}
                 transition={{ type: "spring", stiffness: 350, damping: 25 }}
-                className="absolute inset-0 bg-[#0A0A0A]/85 backdrop-blur-md flex flex-col items-center justify-center p-4 z-20"
+                className="absolute inset-0 bg-[#151413]/90 backdrop-blur-md flex flex-col items-center justify-center p-4 z-20"
               >
                 <div className="relative mb-3">
-                  <div className="absolute -inset-3 bg-[#4edea3]/30 rounded-full blur-xl animate-pulse" />
-                  <div className="relative p-3.5 bg-gradient-to-tr from-[#10b981] to-[#4edea3] text-[#002113] rounded-full shadow-2xl">
+                  <div className="absolute -inset-3 bg-[#c29b78]/30 rounded-full blur-xl animate-pulse" />
+                  <div className="relative p-3.5 bg-gradient-to-tr from-[#c29b78] to-[#e8d3b9] text-[#151413] rounded-full shadow-2xl">
                     <Trophy className="w-9 h-9 stroke-[2.5]" />
                   </div>
                 </div>
 
                 <div className="text-xl sm:text-2xl font-black text-white tracking-tight uppercase mb-1 drop-shadow-md flex items-center gap-1.5">
                   <span>Puzzle Solved!</span>
-                  <Sparkles className="w-5 h-5 text-[#ffb95f] fill-[#ffb95f]" />
+                  <Sparkles className="w-5 h-5 text-[#c29b78] fill-[#c29b78]" />
                 </div>
 
                 <div className="flex items-center gap-2 mb-4">
                   {lastEloChange !== null && (
-                    <span className="px-2.5 py-1 rounded-full bg-[#10b981]/20 border border-[#10b981]/40 text-[#4edea3] text-xs font-black tracking-wide">
+                    <span className="px-2.5 py-1 rounded-full bg-[#10b981]/20 border border-[#10b981]/40 text-[#10b981] text-xs font-black tracking-wide">
                       {lastEloChange >= 0 ? `+${lastEloChange}` : lastEloChange} Elo
                     </span>
                   )}
                   {streak > 0 && (
-                    <span className="px-2.5 py-1 rounded-full bg-[#ffb95f]/20 border border-[#ffb95f]/40 text-[#ffb95f] text-xs font-black flex items-center gap-1">
-                      <Flame className="w-3.5 h-3.5 fill-[#ffb95f]" />
+                    <span className="px-2.5 py-1 rounded-full bg-[#c29b78]/20 border border-[#c29b78]/40 text-[#c29b78] text-xs font-black flex items-center gap-1">
+                      <Flame className="w-3.5 h-3.5 fill-[#c29b78]" />
                       <span>{streak} Streak!</span>
                     </span>
                   )}
@@ -892,11 +945,11 @@ export function PuzzleCard({
                       haptics.tap();
                       onNextPuzzle();
                     }}
-                    className="w-full h-11 bg-[#10b981] hover:bg-[#4edea3] text-[#002113] font-black rounded-xl shadow-lg shadow-[#10b981]/30 flex items-center justify-center gap-2 transition-transform active:scale-95 cursor-pointer"
+                    className="w-full h-11 bg-[#c29b78] hover:bg-[#d4b08f] text-[#151413] font-black rounded-xl shadow-lg shadow-[#c29b78]/30 flex items-center justify-center gap-2 transition-transform active:scale-95 cursor-pointer"
                   >
                     <span>Next Reel</span>
                     {autoNextCountdown !== null && (
-                      <span className="text-xs bg-[#002113]/20 px-2 py-0.5 rounded-full font-mono">
+                      <span className="text-xs bg-[#151413]/20 px-2 py-0.5 rounded-full font-mono">
                         {autoNextCountdown}s
                       </span>
                     )}
@@ -913,7 +966,7 @@ export function PuzzleCard({
                       }
                       setAutoNextCountdown(null);
                     }}
-                    className="w-full h-9 text-xs text-[#bbcabf] hover:text-white hover:bg-white/10 flex items-center justify-center gap-1.5 rounded-lg cursor-pointer"
+                    className="w-full h-9 text-xs text-[#a3a3a3] hover:text-[#f5f5f5] hover:bg-white/10 flex items-center justify-center gap-1.5 rounded-lg cursor-pointer"
                   >
                     <Eye className="w-3.5 h-3.5" />
                     <span>Review Board</span>
@@ -931,7 +984,7 @@ export function PuzzleCard({
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.8, opacity: 0 }}
                 transition={{ type: "spring", stiffness: 350, damping: 25 }}
-                className="absolute top-3 right-3 z-10 flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#10b981]/30 border border-[#10b981]/50 backdrop-blur-md text-[#4edea3] text-xs font-bold shadow-lg"
+                className="absolute top-3 right-3 z-10 flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#10b981]/30 border border-[#10b981]/50 backdrop-blur-md text-[#10b981] text-xs font-bold shadow-lg"
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 <span>Solved</span>
@@ -947,7 +1000,7 @@ export function PuzzleCard({
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.8, opacity: 0 }}
                 transition={{ type: "spring", stiffness: 350, damping: 25 }}
-                className="absolute top-3 right-3 z-10 flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#EF4444]/30 border border-[#EF4444]/50 backdrop-blur-md text-[#EF4444] text-xs font-bold shadow-lg"
+                className="absolute top-3 right-3 z-10 flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#ef4444]/30 border border-[#ef4444]/50 backdrop-blur-md text-[#ef4444] text-xs font-bold shadow-lg"
               >
                 <AlertCircle className="w-3.5 h-3.5" />
                 <span>Incorrect</span>
@@ -956,28 +1009,28 @@ export function PuzzleCard({
           </AnimatePresence>
         </div>
 
-        {/* Right Reel Action Stack (TikTok/Reel Paradigm) */}
+        {/* Right Reel Action Stack */}
         <aside className="absolute left-[calc(100%+10px)] sm:left-[calc(100%+14px)] top-1/2 -translate-y-1/2 flex flex-col items-center gap-2.5 z-30">
           {/* Bookmark / Save Pattern */}
           <button
             onClick={handleToggleBookmark}
             aria-label="Save puzzle pattern"
-            className={`w-10 h-10 rounded-full bg-[#27272a]/70 backdrop-blur-xl border border-white/10 flex flex-col items-center justify-center shadow-lg active:scale-90 transition-transform cursor-pointer ${
-              isBookmarked ? "text-[#ffb95f]" : "text-[#e5e1e4]"
+            className={`w-10 h-10 rounded-full bg-[#22201e]/85 backdrop-blur-xl border border-white/10 flex flex-col items-center justify-center shadow-lg active:scale-90 transition-transform cursor-pointer ${
+              isBookmarked ? "text-[#c29b78]" : "text-[#f5f5f5]"
             }`}
           >
             <Bookmark
-              className={`w-4 h-4 ${isBookmarked ? "fill-[#ffb95f]" : ""}`}
+              className={`w-4 h-4 ${isBookmarked ? "fill-[#c29b78]" : ""}`}
             />
-            <span className="text-[8px] font-bold text-[#bbcabf]">Save</span>
+            <span className="text-[8px] font-bold text-[#a3a3a3]">Save</span>
           </button>
 
           {/* Sound Haptic Toggle */}
           <button
             onClick={handleToggleSFX}
             aria-label="Toggle piece sound"
-            className={`w-10 h-10 rounded-full bg-[#27272a]/70 backdrop-blur-xl border border-white/10 flex flex-col items-center justify-center shadow-lg active:scale-90 transition-transform cursor-pointer ${
-              isMuted ? "text-[#bbcabf]" : "text-[#4edea3]"
+            className={`w-10 h-10 rounded-full bg-[#22201e]/85 backdrop-blur-xl border border-white/10 flex flex-col items-center justify-center shadow-lg active:scale-90 transition-transform cursor-pointer ${
+              isMuted ? "text-[#a3a3a3]" : "text-[#c29b78]"
             }`}
           >
             {isMuted ? (
@@ -985,27 +1038,27 @@ export function PuzzleCard({
             ) : (
               <Volume2 className="w-4 h-4" />
             )}
-            <span className="text-[8px] font-bold text-[#bbcabf]">SFX</span>
+            <span className="text-[8px] font-bold text-[#a3a3a3]">SFX</span>
           </button>
 
           {/* Share Tactical Reel Card */}
           <button
             onClick={handleShare}
             aria-label="Share puzzle card"
-            className="w-10 h-10 rounded-full bg-[#27272a]/70 backdrop-blur-xl border border-white/10 flex flex-col items-center justify-center text-[#e5e1e4] hover:text-[#4edea3] shadow-lg active:scale-90 transition-transform cursor-pointer"
+            className="w-10 h-10 rounded-full bg-[#22201e]/85 backdrop-blur-xl border border-white/10 flex flex-col items-center justify-center text-[#f5f5f5] hover:text-[#c29b78] shadow-lg active:scale-90 transition-transform cursor-pointer"
           >
             <Share2 className="w-4 h-4" />
-            <span className="text-[8px] font-bold text-[#bbcabf]">Share</span>
+            <span className="text-[8px] font-bold text-[#a3a3a3]">Share</span>
           </button>
 
           {/* Flip Board Orientation */}
           <button
             onClick={handleFlipBoard}
             aria-label="Flip board"
-            className="w-10 h-10 rounded-full bg-[#27272a]/70 backdrop-blur-xl border border-white/10 flex flex-col items-center justify-center text-[#e5e1e4] hover:text-[#4edea3] shadow-lg active:scale-90 transition-transform cursor-pointer"
+            className="w-10 h-10 rounded-full bg-[#22201e]/85 backdrop-blur-xl border border-white/10 flex flex-col items-center justify-center text-[#f5f5f5] hover:text-[#c29b78] shadow-lg active:scale-90 transition-transform cursor-pointer"
           >
             <ArrowUpDown className="w-4 h-4" />
-            <span className="text-[8px] font-bold text-[#bbcabf]">Flip</span>
+            <span className="text-[8px] font-bold text-[#a3a3a3]">Flip</span>
           </button>
         </aside>
       </div>
@@ -1019,15 +1072,15 @@ export function PuzzleCard({
             exit={{ scale: 0.8, opacity: 0 }}
             transition={{ type: "spring", stiffness: 350, damping: 25 }}
             data-testid="puzzle-failed-banner"
-            className="w-full bg-[#EF4444]/15 border border-[#EF4444]/40 rounded-xl p-3 my-1.5 shadow-lg flex items-center justify-between gap-2"
+            className="w-full bg-[#ef4444]/15 border border-[#ef4444]/40 rounded-xl p-3 my-1.5 shadow-lg flex items-center justify-between gap-2"
           >
             <div className="flex items-center gap-2">
-              <AlertCircle className="w-5 h-5 text-[#EF4444] shrink-0" />
+              <AlertCircle className="w-5 h-5 text-[#ef4444] shrink-0" />
               <div>
-                <div className="text-xs font-bold text-[#EF4444]">
+                <div className="text-xs font-bold text-[#ef4444]">
                   Inaccurate Move
                 </div>
-                <div className="text-[11px] text-[#e5e1e4]/80">
+                <div className="text-[11px] text-[#f5f5f5]/80">
                   Look for forcing checks, captures, or pins!
                 </div>
               </div>
@@ -1035,7 +1088,7 @@ export function PuzzleCard({
             <button
               onClick={handleRetry}
               data-testid="retry-puzzle-btn"
-              className="px-2.5 py-1 rounded-lg bg-[#EF4444]/20 hover:bg-[#EF4444]/30 text-white text-xs font-bold flex items-center gap-1 shrink-0 cursor-pointer"
+              className="px-2.5 py-1 rounded-lg bg-[#ef4444]/20 hover:bg-[#ef4444]/30 text-white text-xs font-bold flex items-center gap-1 shrink-0 cursor-pointer"
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span>Retry</span>
@@ -1044,126 +1097,96 @@ export function PuzzleCard({
         )}
       </AnimatePresence>
 
-      {/* Below Board HUD: Glassmorphic Tactical Info Card */}
-      <div className="w-full bg-[#201f21]/80 backdrop-blur-lg border border-white/5 rounded-xl p-3 shadow-xl flex flex-col gap-2 mt-2">
-        {/* Meta & Category Row */}
+      {/* 3. Puzzle Info: ID, Rating, Played X times, Your turn text block */}
+      <div className="w-full bg-[#22201e] border border-white/10 rounded-2xl p-3 shadow-xl flex flex-col gap-2 mt-2">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-[#bbcabf]">Puzzle Elo</span>
-            <span className="text-sm font-bold text-[#e5e1e4]">
-              {puzzle ? puzzle.rating : "---"}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-mono font-bold text-[#c29b78] bg-[#c29b78]/10 px-2 py-0.5 rounded-md border border-[#c29b78]/25">
+              #{puzzle ? puzzle.id : "---"}
+            </span>
+            <span className="text-sm font-bold text-[#f5f5f5]">
+              {puzzle ? `${puzzle.rating} Elo` : "---"}
             </span>
           </div>
-
-          {/* Tactical Pattern Badges */}
-          <div className="flex items-center gap-1.5">
-            {themeList.map((tag) => (
-              <span
-                key={tag}
-                className="bg-[#4edea3]/15 text-[#4edea3] text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider font-bold"
-              >
-                {tag}
-              </span>
-            ))}
-          </div>
+          <span className="text-xs text-[#a3a3a3]">
+            Played {puzzle?.nbPlays ?? 120} times
+          </span>
         </div>
 
-        {/* Multi-step Puzzle Progress Track */}
-        <div className="flex flex-col gap-1.5">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-[#e5e1e4] font-semibold flex items-center gap-1">
-              <CheckCircle2 className="w-3.5 h-3.5 text-[#4edea3]" />
-              Step {currentStep} of {totalPlayerMoves}
-            </span>
-            <span className="text-[#bbcabf] text-[10px] font-bold uppercase tracking-wider">
-              {status === "solved"
-                ? "Tactics Mastered"
-                : hintActive
-                ? "Hint Activated"
-                : "Find the continuation"}
-            </span>
+        {/* "Your turn - Find the best move for [White/Black]" + Step Progress */}
+        <div className="flex items-center justify-between gap-2 pt-2 border-t border-white/5">
+          <div className="flex items-center gap-2">
+            <span
+              className={`w-3.5 h-3.5 rounded-full ring-2 shadow-sm shrink-0 transition-transform ${
+                boardOrientation === "white"
+                  ? "bg-white ring-neutral-400 shadow-white/30"
+                  : "bg-neutral-950 ring-neutral-500 shadow-black/80"
+              }`}
+            />
+            <p className="text-xs font-semibold text-[#f5f5f5]">
+              <span className="font-bold text-[#f5f5f5]">{playerTurnMessage}</span> — Find the best move for{" "}
+              <span className="font-bold text-[#c29b78] capitalize">
+                {boardOrientation}
+              </span>
+            </p>
           </div>
-
-          {/* Visual Multi-segment Progress Bar */}
-          <div className="w-full h-1.5 bg-[#39393b] rounded-full overflow-hidden flex gap-1">
-            {Array.from({ length: totalPlayerMoves }).map((_, i) => (
-              <div
-                key={i}
-                className={`h-full rounded-full flex-1 transition-all duration-300 ${
-                  i < currentStep || status === "solved"
-                    ? "bg-[#4edea3] shadow-[0_0_8px_rgba(78,222,163,0.6)]"
-                    : "bg-[#353437]"
-                }`}
-              />
-            ))}
-          </div>
+          <span className="text-[10px] font-bold text-[#c29b78] bg-[#c29b78]/15 px-2 py-0.5 rounded-full border border-[#c29b78]/30 shrink-0">
+            Step {currentStep} of {totalPlayerMoves}
+          </span>
         </div>
       </div>
 
-      {/* Bottom Action Bar: Tactical Solver Controls */}
-      <div className="w-full flex items-center gap-2 mt-2">
-        {/* Tactical Action: Retry if failed, Hint otherwise */}
-        {status === "failed" ? (
-          <button
-            onClick={handleRetry}
-            data-testid="bottom-retry-btn"
-            className="flex-1 h-12 rounded-xl bg-[#EF4444]/20 hover:bg-[#EF4444]/30 text-white border border-[#EF4444]/40 font-bold text-sm flex items-center justify-center gap-2 shadow-md active:scale-95 transition-all cursor-pointer"
-          >
-            <RotateCcw className="w-4 h-4" />
-            <span>Retry Puzzle</span>
-          </button>
-        ) : (
-          <button
-            onClick={handleTriggerHint}
-            disabled={status !== "playing"}
-            className={`flex-1 h-12 rounded-xl border border-white/5 flex items-center justify-center gap-2 text-[#e5e1e4] shadow-md active:scale-95 transition-all cursor-pointer ${
-              hintUsed
-                ? "bg-[#2a2a2c]/50 text-[#bbcabf]"
-                : "bg-[#2a2a2c]/90 hover:bg-[#39393b]"
-            }`}
-          >
-            <Lightbulb className="w-4 h-4 text-[#ffb95f]" />
-            <span className="text-sm font-semibold">Hint</span>
-            <span className="bg-[#ffb95f]/20 text-[#ffb95f] text-[9px] px-1.5 py-0.5 rounded uppercase font-bold">
-              {hintUsed ? "Used" : "1 Left"}
-            </span>
-          </button>
-        )}
+      {/* 4. Action Row: Circular buttons (Undo/Reset, Hint, Skip/Next) */}
+      <div className="w-full flex items-center justify-center gap-6 mt-3">
+        {/* Undo / Reset Button */}
+        <button
+          onClick={handleRetry}
+          data-testid={status === "failed" ? "bottom-retry-btn" : "reset-puzzle-btn"}
+          aria-label="Reset puzzle"
+          title="Reset puzzle to initial position"
+          className="w-13 h-13 rounded-full bg-[#22201e] hover:bg-[#2d2a28] border border-white/10 flex flex-col items-center justify-center text-[#f5f5f5] hover:text-[#c29b78] shadow-lg active:scale-90 transition-all cursor-pointer group"
+        >
+          <RotateCcw className="w-4 h-4 transition-transform group-hover:-rotate-45" />
+          <span className="text-[8px] font-bold text-[#a3a3a3] mt-0.5">Reset</span>
+        </button>
 
-        {/* Next Reel Button */}
+        {/* Hint Button */}
+        <button
+          onClick={handleTriggerHint}
+          disabled={status !== "playing"}
+          aria-label="Hint"
+          title="Highlight tactical move"
+          className={`w-13 h-13 rounded-full border border-white/10 flex flex-col items-center justify-center shadow-lg active:scale-90 transition-all cursor-pointer group ${
+            hintUsed
+              ? "bg-[#22201e]/60 text-[#a3a3a3]"
+              : "bg-[#22201e] hover:bg-[#2d2a28] text-[#c29b78]"
+          }`}
+        >
+          <Lightbulb
+            className={`w-4 h-4 ${
+              hintUsed ? "text-[#a3a3a3]" : "text-[#c29b78] fill-[#c29b78]/20"
+            }`}
+          />
+          <span className="text-[8px] font-bold text-[#a3a3a3] mt-0.5">
+            {hintUsed ? "Used" : "Hint"}
+          </span>
+        </button>
+
+        {/* Skip / Next Button */}
         <button
           onClick={() => {
             haptics.tap();
             onNextPuzzle();
           }}
           aria-label="Next puzzle"
-          className={`flex-1 h-12 rounded-xl flex items-center justify-center gap-2 font-bold text-sm shadow-md active:scale-95 transition-all cursor-pointer ${
-            status === "solved"
-              ? "bg-[#10b981] hover:bg-[#4edea3] text-[#002113] shadow-[0_0_20px_rgba(16,185,129,0.35)]"
-              : "bg-[#2a2a2c] hover:bg-[#39393b] text-[#e5e1e4] border border-white/5"
-          }`}
+          title="Next puzzle / Skip (No rating penalty)"
+          className="w-13 h-13 rounded-full bg-[#22201e] hover:bg-[#2d2a28] border border-white/10 flex flex-col items-center justify-center text-[#f5f5f5] hover:text-[#c29b78] shadow-lg active:scale-90 transition-all cursor-pointer group"
         >
-          {status === "solved" ? (
-            <>
-              <ArrowRight className="w-4 h-4" />
-              <span>Solved! Next</span>
-            </>
-          ) : (
-            <>
-              <FastForward className="w-4 h-4 text-[#bbcabf]" />
-              <span>Skip Reel</span>
-            </>
-          )}
+          <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
+          <span className="text-[8px] font-bold text-[#a3a3a3] mt-0.5">Skip</span>
         </button>
-      </div>
-
-      {/* Snap Scroll Invitation Hint */}
-      <div className="flex flex-col items-center justify-center gap-0.5 mt-3 text-[#bbcabf]/60 animate-bounce">
-        <span className="text-[10px] font-bold uppercase tracking-widest">
-          Swipe up for next reel
-        </span>
-        <ChevronDown className="w-4 h-4" />
       </div>
     </div>
   );
 }
+

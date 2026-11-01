@@ -27,8 +27,11 @@ export const metadata: Metadata = {
   },
 };
 
+import { BottomNav } from "@/components/BottomNav";
+import { PageTransition } from "@/components/PageTransition";
+
 export const viewport: Viewport = {
-  themeColor: "#0a0a0a",
+  themeColor: "#151413",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -57,9 +60,11 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200"
         />
       </head>
-      <body className="min-h-full flex flex-col bg-[#0A0A0A] text-[#e5e1e4] select-none overscroll-none">
-        {children}
+      <body className="min-h-full flex flex-col bg-[#151413] text-[#f5f5f5] select-none overscroll-none pb-20">
+        <PageTransition>{children}</PageTransition>
+        <BottomNav />
       </body>
     </html>
   );
 }
+
