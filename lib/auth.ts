@@ -1,4 +1,5 @@
 import crypto from "crypto";
+export { auth } from "@/auth";
 
 /**
  * Hashes a plaintext password using salted scrypt (NIST/OWASP recommended).
