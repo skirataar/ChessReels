@@ -284,7 +284,8 @@ export function PuzzleCard({
   useEffect(() => {
     if (!puzzle) return;
     try {
-      const savedBookmarks = localStorage.getItem("chess_reel_bookmarks");
+      const userKey = guestId ? `chess_reel_bookmarks_${guestId}` : "chess_reel_bookmarks";
+      const savedBookmarks = localStorage.getItem(userKey) || localStorage.getItem("chess_reel_bookmarks");
       if (savedBookmarks) {
         const ids: string[] = JSON.parse(savedBookmarks);
         setIsBookmarked(ids.includes(puzzle.id));
@@ -332,6 +333,7 @@ export function PuzzleCard({
           result,
           guestId,
           puzzleId: puzzle.id,
+          dailyStreak: streak,
         }),
       }).catch(() => {});
 
@@ -350,6 +352,7 @@ export function PuzzleCard({
             result,
             guestId,
             puzzleId: puzzle.id,
+            dailyStreak: streak,
           }),
         });
 
@@ -963,7 +966,8 @@ export function PuzzleCard({
     if (!puzzle) return;
     haptics.tap();
     try {
-      const saved = localStorage.getItem("chess_reel_bookmarks");
+      const userKey = guestId ? `chess_reel_bookmarks_${guestId}` : "chess_reel_bookmarks";
+      const saved = localStorage.getItem(userKey) || localStorage.getItem("chess_reel_bookmarks");
       let ids: string[] = saved ? JSON.parse(saved) : [];
       if (ids.includes(puzzle.id)) {
         ids = ids.filter((id) => id !== puzzle.id);
@@ -971,10 +975,13 @@ export function PuzzleCard({
         showToast("Bookmark removed");
       } else {
         ids.push(puzzle.id);
+        ids = Array.from(new Set(ids));
         setIsBookmarked(true);
         showToast("Puzzle saved to bookmarks!");
       }
+      localStorage.setItem(userKey, JSON.stringify(ids));
       localStorage.setItem("chess_reel_bookmarks", JSON.stringify(ids));
+      window.dispatchEvent(new Event("bookmarks-updated"));
     } catch {}
   };
 
@@ -1742,45 +1749,68 @@ export function PuzzleCard({
         </div>
       </div>
 
-      {/* 3. Streamlined Mission Brief & Rating Badge */}
-      <div className="w-full px-3 sm:px-4 mt-2">
-        <div className="w-full bg-[#22201e]/85 backdrop-blur-md border border-white/10 rounded-xl p-2.5 shadow-lg flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span
-              className={`w-3 h-3 rounded-full ring-2 shadow-sm shrink-0 transition-transform ${
-                boardOrientation === "white"
-                  ? "bg-white ring-neutral-400 shadow-white/30"
-                  : "bg-neutral-950 ring-neutral-500 shadow-black/80"
-              }`}
-            />
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="font-bold text-xs text-[#f5f5f5]">{playerTurnMessage}</span>
-              <span className="text-[10px] font-bold text-[#c29b78] bg-[#c29b78]/15 px-2 py-0.5 rounded-full border border-[#c29b78]/30">
-                Step {currentStep} of {totalPlayerMoves}
+      {/* 3. Flush Instagram-style Action Row & Compact Mission Subtitle */}
+      <div className="w-full px-3.5 sm:px-4 mt-2.5 space-y-1.5">
+        {/* Flush Action Bar (Instagram-like buttons: Like, Bookmark, Share | Reset, Hint, Next) */}
+        <div className="w-full flex items-center justify-between">
+          {/* Left: Reels Engagement (Like, Bookmark, Share) */}
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            {/* Animated Like Button */}
+            <button
+              onClick={handleToggleLike}
+              aria-label="Like puzzle"
+              title={isLiked ? "Unlike puzzle" : "Like puzzle"}
+              className="flex items-center gap-1.5 text-[#a3a3a3] hover:text-[#f5f5f5] cursor-pointer transition-colors active:scale-90"
+            >
+              <motion.div
+                animate={isLiked ? { scale: [1, 1.4, 1] } : { scale: 1 }}
+                transition={{ duration: 0.3, ease: "easeOut" }}
+              >
+                <Heart
+                  className={`w-5 h-5 transition-colors ${
+                    isLiked ? "fill-rose-500 text-rose-500 drop-shadow-[0_0_8px_rgba(244,63,94,0.5)]" : ""
+                  }`}
+                />
+              </motion.div>
+              <span className="text-xs font-bold font-mono tracking-tight text-[#f5f5f5]">
+                {formatLikes(likesCount)}
               </span>
-            </div>
+            </button>
+
+            {/* Save / Bookmark Button */}
+            <button
+              onClick={handleToggleBookmark}
+              aria-label="Save puzzle pattern"
+              title={isBookmarked ? "Remove bookmark" : "Save puzzle"}
+              className="p-1 text-[#a3a3a3] hover:text-[#c29b78] cursor-pointer transition-colors active:scale-90"
+            >
+              <Bookmark
+                className={`w-5 h-5 transition-colors ${
+                  isBookmarked ? "fill-[#c29b78] text-[#c29b78]" : ""
+                }`}
+              />
+            </button>
+
+            {/* Share Button */}
+            <button
+              onClick={handleShare}
+              aria-label="Share puzzle card"
+              title="Share puzzle"
+              className="p-1 text-[#a3a3a3] hover:text-[#f5f5f5] cursor-pointer transition-colors active:scale-90"
+            >
+              <Share2 className="w-5 h-5" />
+            </button>
           </div>
 
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs font-bold text-[#f5f5f5] bg-[#22201e] px-2 py-0.5 rounded-md border border-white/10">
-              {puzzle ? `${puzzle.rating} Elo` : "---"}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* 4. Action Bar: Solver Controls + Swipe Reel Pill + Reels Engagement Row */}
-      <div className="w-full px-3 sm:px-4 mt-2">
-        <div className="w-full flex items-center justify-between gap-1.5">
-          {/* Left: Solver Actions (Reset, Hint, Skip) */}
-          <div className="flex items-center gap-1.5">
+          {/* Right: Tactical Solver Controls (Reset, Glowing Hint, Skip/Next) */}
+          <div className="flex items-center gap-2 sm:gap-2.5">
             {/* Reset Button */}
             <button
               onClick={() => handleRetry(true)}
               data-testid="reset-puzzle-btn"
               aria-label="Reset puzzle"
               title="Reset puzzle"
-              className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#22201e] hover:bg-[#2d2a28] border border-white/10 flex items-center justify-center text-[#f5f5f5] hover:text-[#c29b78] shadow-md active:scale-90 transition-all cursor-pointer"
+              className="p-1.5 text-[#a3a3a3] hover:text-[#c29b78] cursor-pointer active:scale-90 transition-all"
             >
               <RotateCcw className="w-4 h-4" />
             </button>
@@ -1792,24 +1822,24 @@ export function PuzzleCard({
               aria-label="Hint"
               data-testid="hint-btn"
               title={isHintGlowing ? "Need help? Click for a hint!" : "Highlight tactical move"}
-              className={`relative w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all cursor-pointer active:scale-90 ${
+              className={`p-1.5 cursor-pointer active:scale-90 transition-all relative ${
                 isHintGlowing
-                  ? "bg-[#c29b78]/25 border-2 border-[#c29b78] text-[#c29b78] shadow-[0_0_20px_rgba(194,155,120,0.85)] animate-pulse"
+                  ? "text-[#c29b78] drop-shadow-[0_0_10px_rgba(194,155,120,0.95)] animate-pulse"
                   : hintUsed
-                  ? "bg-[#22201e]/60 border border-white/10 text-[#a3a3a3]"
-                  : "bg-[#22201e] hover:bg-[#2d2a28] border border-white/10 text-[#c29b78] shadow-md"
+                  ? "text-stone-600"
+                  : "text-[#a3a3a3] hover:text-[#c29b78]"
               }`}
             >
               {isHintGlowing && (
-                <span className="absolute -inset-1 rounded-full bg-[#c29b78]/35 animate-ping pointer-events-none" />
+                <span className="absolute -inset-1 rounded-full bg-[#c29b78]/30 animate-ping pointer-events-none" />
               )}
               <Lightbulb
                 className={`w-4 h-4 transition-colors ${
                   isHintGlowing
-                    ? "text-[#c29b78] fill-[#c29b78] drop-shadow-[0_0_8px_rgba(194,155,120,0.9)]"
+                    ? "fill-[#c29b78] text-[#c29b78]"
                     : hintUsed
-                    ? "text-[#a3a3a3]"
-                    : "text-[#c29b78] fill-[#c29b78]/20"
+                    ? "text-stone-600"
+                    : "fill-[#c29b78]/20"
                 }`}
               />
             </button>
@@ -1819,75 +1849,33 @@ export function PuzzleCard({
               onClick={triggerSwipeNext}
               aria-label="Next puzzle"
               title="Next puzzle / Skip"
-              className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#22201e] hover:bg-[#2d2a28] border border-white/10 flex items-center justify-center text-[#f5f5f5] hover:text-[#c29b78] shadow-md active:scale-90 transition-all cursor-pointer"
+              className="p-1.5 text-[#a3a3a3] hover:text-[#f5f5f5] cursor-pointer active:scale-90 transition-all"
             >
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
+        </div>
 
-          {/* Center: Floating Swipe-Up Cue Pill */}
-          <button
-            onClick={triggerSwipeNext}
-            data-testid="swipe-cue"
-            title="Swipe up for next puzzle"
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-[#22201e] border border-white/10 hover:border-[#c29b78]/50 text-[#a3a3a3] hover:text-[#f5f5f5] text-[10px] uppercase font-bold tracking-wider shadow-sm select-none cursor-grab active:cursor-grabbing transition-all active:scale-95"
-          >
-            <ChevronUp className="w-3.5 h-3.5 text-[#c29b78] animate-bounce" />
-            <span>Swipe</span>
-          </button>
-
-          {/* Right: Reels Engagement (Like Button ❤️, Bookmark 🔖, Share ↗️) */}
+        {/* Flush Subtitle: Turn status + Step counter + Rating */}
+        <div className="w-full flex items-center justify-between pt-0.5 text-xs text-[#a3a3a3] font-medium tracking-tight">
           <div className="flex items-center gap-1.5">
-            {/* Animated Like Button */}
-            <motion.button
-              onClick={handleToggleLike}
-              aria-label="Like puzzle"
-              title={isLiked ? "Unlike puzzle" : "Like puzzle"}
-              whileTap={{ scale: 0.9 }}
-              className={`h-9 sm:h-10 px-2.5 sm:px-3 rounded-full border flex items-center gap-1.5 transition-all cursor-pointer shadow-md ${
-                isLiked
-                  ? "bg-rose-500/20 border-rose-500/50 text-rose-400 shadow-[0_0_12px_rgba(244,63,94,0.3)]"
-                  : "bg-[#22201e] hover:bg-[#2d2a28] border-white/10 text-[#a3a3a3] hover:text-[#f5f5f5]"
+            <span
+              className={`w-2.5 h-2.5 rounded-full ring-1 shadow-sm shrink-0 transition-transform ${
+                boardOrientation === "white"
+                  ? "bg-white ring-neutral-400 shadow-white/30"
+                  : "bg-neutral-900 ring-neutral-600 shadow-black/80"
               }`}
-            >
-              <motion.div
-                animate={isLiked ? { scale: [1, 1.35, 1] } : { scale: 1 }}
-                transition={{ duration: 0.35, ease: "easeOut" }}
-              >
-                <Heart
-                  className={`w-3.5 h-3.5 sm:w-4 sm:h-4 transition-colors ${
-                    isLiked ? "fill-rose-500 text-rose-500" : ""
-                  }`}
-                />
-              </motion.div>
-              <span className="text-xs font-bold font-mono tracking-tight text-[#f5f5f5]">
-                {formatLikes(likesCount)}
-              </span>
-            </motion.button>
+            />
+            <span className="font-bold text-[#f5f5f5]">{playerTurnMessage}</span>
+            <span className="text-[#a3a3a3] text-[11px] font-mono">
+              • Step {currentStep} of {totalPlayerMoves}
+            </span>
+          </div>
 
-            {/* Save / Bookmark Button */}
-            <button
-              onClick={handleToggleBookmark}
-              aria-label="Save puzzle pattern"
-              title="Bookmark pattern"
-              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full border flex items-center justify-center shadow-md active:scale-90 transition-all cursor-pointer ${
-                isBookmarked
-                  ? "bg-[#c29b78]/20 border-[#c29b78]/50 text-[#c29b78]"
-                  : "bg-[#22201e] hover:bg-[#2d2a28] border-white/10 text-[#a3a3a3] hover:text-[#f5f5f5]"
-              }`}
-            >
-              <Bookmark className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isBookmarked ? "fill-[#c29b78]" : ""}`} />
-            </button>
-
-            {/* Share Button */}
-            <button
-              onClick={handleShare}
-              aria-label="Share puzzle card"
-              title="Share puzzle"
-              className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#22201e] hover:bg-[#2d2a28] border border-white/10 flex items-center justify-center text-[#f5f5f5] hover:text-[#c29b78] shadow-md active:scale-90 transition-all cursor-pointer"
-            >
-              <Share2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            </button>
+          <div className="flex items-center gap-1">
+            <span className="font-mono font-bold text-xs text-[#c29b78]">
+              {puzzle ? `${puzzle.rating} Elo` : "---"}
+            </span>
           </div>
         </div>
       </div>

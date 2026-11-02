@@ -131,6 +131,20 @@ function subscribe(callback: Listener) {
   };
 }
 
+export function resetStreakStats() {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(DAILY_STREAK_KEY);
+    window.localStorage.removeItem(LAST_PLAYED_DATE_KEY);
+    window.localStorage.removeItem(TOTAL_SOLVED_KEY);
+    window.localStorage.removeItem(TOTAL_FAILED_KEY);
+    window.localStorage.removeItem(SOLVE_COMBO_KEY);
+    window.localStorage.removeItem(BEST_COMBO_KEY);
+    cachedSnapshot = SERVER_SNAPSHOT;
+    notifyListeners();
+  } catch {}
+}
+
 export function useStreak() {
   const stats = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 

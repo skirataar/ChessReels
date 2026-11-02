@@ -23,9 +23,9 @@ import { UserAvatar } from "@/components/UserAvatar";
 import { AdModal } from "@/components/AdModal";
 import { QuotaPaywallModal } from "@/components/QuotaPaywallModal";
 import { popNextPuzzle, prefetchPuzzles } from "@/lib/puzzleCache";
-import { useStreak } from "@/lib/useStreak";
+import { useStreak, resetStreakStats } from "@/lib/useStreak";
 import { useTierQuota } from "@/lib/useTierQuota";
-import { RefreshCw, WifiOff, UserPlus, BarChart2, Trophy, Zap, Flame, Crown, Sparkles } from "lucide-react";
+import { RefreshCw, WifiOff, UserPlus, BarChart2, Trophy, Zap, Flame, Crown, Sparkles, User } from "lucide-react";
 
 const GUEST_ID_KEY = "chess_reel_guest_id";
 const ELO_STORAGE_KEY = "chess_reel_elo";
@@ -40,6 +40,9 @@ export interface UserAccount {
   isCalibrated: boolean;
   calibrationStep: number;
   plan?: string;
+  peakElo?: number;
+  streak?: number;
+  bestStreak?: number;
 }
 
 // Curated fallbacks in case the database is empty or offline with empty cache
@@ -624,6 +627,10 @@ export function PlayView({
           window.localStorage.removeItem("chess_reel_plan");
         }
         // Clean any stale guest session or old solved puzzle to prevent cross-account bleeding
+        resetStreakStats();
+        window.localStorage.removeItem("chess_reel_peak_elo");
+        window.localStorage.removeItem("chess_reel_best_streak");
+        window.localStorage.removeItem("chess_reel_custom_dp");
         window.localStorage.removeItem("chess_reel_tier_session");
         window.localStorage.removeItem("chess_reel_tier_session_guest");
         window.localStorage.removeItem("chess_reel_last_solved_puzzle");
@@ -643,12 +650,17 @@ export function PlayView({
     setUserAccount(null);
     setShowLanding(true);
     setIsStatsModalOpen(false);
+    resetStreakStats();
     try {
       if (typeof window !== "undefined") {
         window.localStorage.removeItem(ACCOUNT_STORAGE_KEY);
         window.localStorage.removeItem("chess_reel_preview_guest");
         window.localStorage.removeItem("chess_reel_plan");
         window.localStorage.removeItem("chess_reel_custom_dp");
+        window.localStorage.removeItem("chess_reel_peak_elo");
+        window.localStorage.removeItem("chess_reel_best_streak");
+        window.localStorage.removeItem("chess_reel_user_elo");
+        window.localStorage.removeItem("chess_reel_elo");
         window.localStorage.removeItem("chess_reel_tier_session");
         window.localStorage.removeItem("chess_reel_tier_session_guest");
         if (oldUserId) {
@@ -881,6 +893,21 @@ export function PlayView({
               title="Global Standings & Friends"
             >
               <Trophy className="w-3.5 h-3.5" />
+            </button>
+
+            {/* Profile & Settings Button */}
+            <button
+              onClick={() => setActiveTab("profile")}
+              aria-label="User profile and settings"
+              data-testid="header-profile-btn"
+              className="w-7 h-7 rounded-full hover:ring-1 hover:ring-[#c29b78]/50 flex items-center justify-center text-[#a3a3a3] hover:text-[#c29b78] transition-all cursor-pointer overflow-hidden border border-white/10"
+              title="Profile & Settings"
+            >
+              <UserAvatar
+                avatar={userAccount?.avatar}
+                fallback="♟"
+                className="w-full h-full flex items-center justify-center text-xs font-bold bg-[#22201e]"
+              />
             </button>
           </div>
         </div>

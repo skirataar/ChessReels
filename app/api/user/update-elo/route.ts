@@ -8,12 +8,13 @@ interface UpdateEloBody {
   userId?: string;
   guestId?: string;
   puzzleId?: string;
+  dailyStreak?: number;
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as UpdateEloBody;
-    const { puzzleRating, currentUserElo, result, userId, guestId, puzzleId } = body;
+    const { puzzleRating, currentUserElo, result, userId, guestId, puzzleId, dailyStreak } = body;
 
     if (
       typeof puzzleRating !== "number" ||
@@ -71,7 +72,37 @@ export async function POST(request: NextRequest) {
         where: { id: targetUserId },
       });
 
-      const nextStreak = result === "win" ? (existing?.streak ?? 0) + 1 : 0;
+      // Calculate true calendar daily streak (days of training, NOT consecutive puzzle wins)
+      let nextStreak = existing?.streak ?? 0;
+      if (typeof dailyStreak === "number" && dailyStreak > 0) {
+        nextStreak = dailyStreak;
+      } else {
+        const now = new Date();
+        const todayStr = now.toISOString().slice(0, 10);
+        const lastHistory = await prisma.puzzleHistory.findFirst({
+          where: { userId: targetUserId },
+          orderBy: { solvedAt: "desc" },
+          select: { solvedAt: true },
+        });
+
+        if (!lastHistory) {
+          nextStreak = 1;
+        } else {
+          const lastDateStr = lastHistory.solvedAt.toISOString().slice(0, 10);
+          const d1 = new Date(lastDateStr + "T00:00:00Z");
+          const d2 = new Date(todayStr + "T00:00:00Z");
+          const diffDays = Math.floor((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24));
+
+          if (diffDays === 0) {
+            nextStreak = Math.max(1, existing?.streak ?? 1);
+          } else if (diffDays === 1) {
+            nextStreak = (existing?.streak ?? 0) + 1;
+          } else {
+            nextStreak = 1;
+          }
+        }
+      }
+
       const nextBestStreak = Math.max(existing?.bestStreak ?? 0, nextStreak);
       const nextPeakElo = Math.max(existing?.peakElo ?? 800, newElo);
 

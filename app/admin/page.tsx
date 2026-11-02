@@ -917,9 +917,12 @@ export default function AdminPage() {
                           </div>
 
                           <div className="flex items-center gap-3 shrink-0">
-                            <div className="flex items-center gap-1 text-xs text-amber-400 font-bold">
-                              <Flame className="w-3.5 h-3.5" />
-                              <span>{user.streak || 0}d</span>
+                            <div
+                              className="flex items-center gap-1 text-xs text-amber-400 font-bold"
+                              title={`Active daily streak: ${user.streak || 0} consecutive days`}
+                            >
+                              <Flame className="w-3.5 h-3.5 fill-amber-400/20" />
+                              <span>{user.streak || 0}d streak</span>
                             </div>
 
                             <div className={`px-2.5 py-1 rounded-lg border text-xs font-black font-mono ${rank.bg}`}>
@@ -1055,7 +1058,7 @@ export default function AdminPage() {
                   className="bg-zinc-950 border border-zinc-800 text-zinc-300 text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-[#c29b78] cursor-pointer"
                 >
                   <option value="elo">Sort: Highest Elo</option>
-                  <option value="streak">Sort: Longest Streak</option>
+                  <option value="streak">Sort: Longest Daily Streak</option>
                   <option value="createdAt">Sort: Recently Joined</option>
                 </select>
               </div>
@@ -1171,13 +1174,19 @@ export default function AdminPage() {
                             {/* Streak & Activity */}
                             <td className="py-3 px-4">
                               <div className="flex items-center gap-2">
-                                <span className="inline-flex items-center gap-1 font-bold text-amber-400">
-                                  <Flame className="w-3.5 h-3.5" />
-                                  <span>{user.streak}d</span>
+                                <span
+                                  className="inline-flex items-center gap-1 font-bold text-amber-400"
+                                  title={`Current active daily streak: ${user.streak || 0} consecutive days`}
+                                >
+                                  <Flame className="w-3.5 h-3.5 fill-amber-400/20" />
+                                  <span>{user.streak || 0}d streak</span>
                                 </span>
                                 <span className="text-zinc-600">•</span>
-                                <span className="text-[11px] text-emerald-400 font-medium">
-                                  Active
+                                <span
+                                  className="text-[11px] text-zinc-400 font-mono"
+                                  title={`Best daily streak record: ${user.bestStreak || user.streak || 0} days`}
+                                >
+                                  Best: {user.bestStreak || user.streak || 0}d
                                 </span>
                               </div>
                             </td>

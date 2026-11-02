@@ -35,6 +35,7 @@ export async function POST(request: NextRequest) {
         bestStreak: true,
         isCalibrated: true,
         calibrationStep: true,
+        plan: true,
       },
     });
 
@@ -58,6 +59,7 @@ export async function POST(request: NextRequest) {
             bestStreak: true,
             isCalibrated: true,
             calibrationStep: true,
+            plan: true,
           },
         });
       }
@@ -71,8 +73,12 @@ export async function POST(request: NextRequest) {
           displayName: user.displayName,
           avatar: user.avatar,
           elo: user.elo,
+          peakElo: user.peakElo,
+          streak: user.streak,
+          bestStreak: user.bestStreak,
           isCalibrated: user.isCalibrated,
           calibrationStep: user.calibrationStep,
+          plan: user.plan || "free",
         },
       });
 
@@ -147,8 +153,12 @@ export async function POST(request: NextRequest) {
         displayName: true,
         avatar: true,
         elo: true,
+        peakElo: true,
+        streak: true,
+        bestStreak: true,
         isCalibrated: true,
         calibrationStep: true,
+        plan: true,
       },
     });
 

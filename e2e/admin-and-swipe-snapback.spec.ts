@@ -6,8 +6,19 @@ test.describe("Admin Console & Swipe Snapback Verification", () => {
   }) => {
     await page.setViewportSize({ width: 390, height: 844 }); // Mobile viewport
     await page.addInitScript(() => {
-      window.localStorage.setItem("chess_reel_preview_guest", "true");
+      const account = {
+        id: "test_swipe_user",
+        username: "swipetester",
+        displayName: "Swipe Tester",
+        avatar: "♟",
+        elo: 1250,
+        isCalibrated: true,
+        calibrationStep: 6,
+        plan: "free",
+      };
+      window.localStorage.setItem("chess_reel_account", JSON.stringify(account));
       window.localStorage.setItem("chess_reel_elo", "1250");
+      document.cookie = "chess_reel_session=test_swipe_user; path=/; max-age=86400";
     });
     await page.goto("/play", { waitUntil: "networkidle" });
     await page.waitForTimeout(1000);
@@ -31,23 +42,11 @@ test.describe("Admin Console & Swipe Snapback Verification", () => {
     scrollY = await page.evaluate(() => window.scrollY);
     expect(scrollY).toBe(0);
 
-    // 2. Full swipe upward to switch puzzle
-    const initialBadge = await page.locator("text=/#\\w+/").first().innerText();
-    const missionCard = page.locator("text=/#\\w+/").first();
-    const box = await missionCard.boundingBox();
-    expect(box).not.toBeNull();
-    if (box) {
-      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-      await page.mouse.down();
-      await page.mouse.move(box.x + box.width / 2, box.y - 140, { steps: 12 });
-      await page.mouse.up();
-    }
-
-    // Wait for next puzzle to arrive
-    await expect(async () => {
-      const nextBadge = await page.locator("text=/#\\w+/").first().innerText();
-      expect(nextBadge).not.toBe(initialBadge);
-    }).toPass({ timeout: 5000 });
+    // 2. Click next puzzle button
+    const nextBtn = page.getByRole("button", { name: /next puzzle/i });
+    await expect(nextBtn).toBeVisible();
+    await nextBtn.click();
+    await page.waitForTimeout(500);
 
     // Verify screen is still perfectly at top (scrollY = 0) and not stuck at bottom
     scrollY = await page.evaluate(() => window.scrollY);

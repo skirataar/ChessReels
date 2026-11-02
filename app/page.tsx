@@ -668,6 +668,13 @@ export default function RootPage() {
         window.localStorage.setItem("chess_reel_account", JSON.stringify(data.user));
         window.localStorage.setItem("chess_reel_elo", String(data.user.elo || startingElo));
         window.localStorage.setItem("chess_reel_plan", data.user.plan || "free");
+        window.localStorage.removeItem("chess_reel_peak_elo");
+        window.localStorage.removeItem("chess_reel_best_streak");
+        window.localStorage.removeItem("chess_reel_daily_streak");
+        window.localStorage.removeItem("chess_reel_solve_combo");
+        window.localStorage.removeItem("chess_reel_best_combo");
+        window.localStorage.removeItem("chess_reel_total_solved");
+        window.localStorage.removeItem("chess_reel_total_failed");
         window.localStorage.removeItem("chess_reel_tier_session");
         window.localStorage.removeItem("chess_reel_tier_session_guest");
         window.localStorage.removeItem("chess_reel_last_solved_puzzle");
@@ -675,6 +682,7 @@ export default function RootPage() {
         document.cookie = `chess_reel_session=${encodeURIComponent(data.user.id)}; path=/; max-age=${60 * 60 * 24 * 30}`;
         window.dispatchEvent(new Event("account-updated"));
         window.dispatchEvent(new Event("tier-session-updated"));
+        window.dispatchEvent(new Event("plan-updated"));
         router.push("/play");
       }
     } catch {
@@ -778,7 +786,14 @@ export default function RootPage() {
           } else {
             window.localStorage.removeItem("chess_reel_plan");
           }
-          // Clear any stale guest session or old solved puzzle to prevent cross-account bleeding
+          // Clear any stale stats or old solved puzzle to prevent cross-account bleeding
+          window.localStorage.removeItem("chess_reel_peak_elo");
+          window.localStorage.removeItem("chess_reel_best_streak");
+          window.localStorage.removeItem("chess_reel_daily_streak");
+          window.localStorage.removeItem("chess_reel_solve_combo");
+          window.localStorage.removeItem("chess_reel_best_combo");
+          window.localStorage.removeItem("chess_reel_total_solved");
+          window.localStorage.removeItem("chess_reel_total_failed");
           window.localStorage.removeItem("chess_reel_tier_session");
           window.localStorage.removeItem("chess_reel_tier_session_guest");
           window.localStorage.removeItem("chess_reel_last_solved_puzzle");
@@ -834,7 +849,14 @@ export default function RootPage() {
           } else {
             window.localStorage.removeItem("chess_reel_plan");
           }
-          // Clear any stale guest session or old solved puzzle to prevent cross-account bleeding
+          // Clear any stale stats or old solved puzzle to prevent cross-account bleeding
+          window.localStorage.removeItem("chess_reel_peak_elo");
+          window.localStorage.removeItem("chess_reel_best_streak");
+          window.localStorage.removeItem("chess_reel_daily_streak");
+          window.localStorage.removeItem("chess_reel_solve_combo");
+          window.localStorage.removeItem("chess_reel_best_combo");
+          window.localStorage.removeItem("chess_reel_total_solved");
+          window.localStorage.removeItem("chess_reel_total_failed");
           window.localStorage.removeItem("chess_reel_tier_session");
           window.localStorage.removeItem("chess_reel_tier_session_guest");
           window.localStorage.removeItem("chess_reel_last_solved_puzzle");
