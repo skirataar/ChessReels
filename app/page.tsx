@@ -729,15 +729,6 @@ export default function RootPage() {
                     <ArrowRight className="w-4 h-4 stroke-[2]" />
                   </button>
 
-                  <button
-                    onClick={handleGoogleAuth}
-                    type="button"
-                    className="w-full h-12 rounded-full bg-[#12100e] hover:bg-[#1a1714] border border-white/[0.08] hover:border-white/20 text-[#f5f2eb] font-medium text-sm transition-all duration-150 active:scale-[0.98] flex items-center justify-center gap-3 cursor-pointer"
-                  >
-                    <GoogleLogo />
-                    <span>Continue with Google</span>
-                  </button>
-
                   <div className="pt-2 text-center">
                     <button
                       onClick={() => {

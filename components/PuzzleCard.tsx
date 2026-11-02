@@ -64,6 +64,7 @@ export interface PuzzleCardProps {
   mode?: "ranked" | "practice";
   isPro?: boolean;
   canPlay?: boolean;
+  isPaywallOpen?: boolean;
   onModeChange?: (mode: "ranked" | "practice") => void;
   onStatusChange: (status: PuzzleStatus) => void;
   onEloUpdate: (newElo: number, change: number, isWin?: boolean) => void;
@@ -156,6 +157,7 @@ export function PuzzleCard({
   mode = "ranked",
   isPro = false,
   canPlay = true,
+  isPaywallOpen = false,
   onModeChange,
   onStatusChange,
   onEloUpdate,
@@ -183,7 +185,9 @@ export function PuzzleCard({
   const [autoNextCountdown, setAutoNextCountdown] = useState<number | null>(
     null
   );
-  const [isReviewing, setIsReviewing] = useState<boolean>(false);
+  const [isReviewing, setIsReviewing] = useState<boolean>(
+    () => Boolean(!canPlay && !isPro && status === "solved")
+  );
 
   // Mode and Timer state
   const [activeMode, setActiveMode] = useState<"ranked" | "practice">(mode);
@@ -443,6 +447,39 @@ export function PuzzleCard({
       const movesArray = puzzle.moves.trim().split(/\s+/);
       setAllMoves(movesArray);
 
+      // If puzzle is already marked solved (e.g. reviewing previously solved puzzle under paywall):
+      if (status === "solved") {
+        const initialTurn = new Chess(puzzle.fen).turn();
+        const playerColor: "white" | "black" =
+          movesArray.length % 2 === 0 && movesArray.length > 0
+            ? initialTurn === "w" ? "black" : "white"
+            : initialTurn === "w" ? "white" : "black";
+        setBoardOrientation(playerColor);
+
+        const solvedGame = new Chess(puzzle.fen);
+        for (let i = 0; i < movesArray.length; i++) {
+          const uci = movesArray[i];
+          if (uci) {
+            try {
+              solvedGame.move({
+                from: uci.slice(0, 2),
+                to: uci.slice(2, 4),
+                promotion: uci.length === 5 ? uci[4].toLowerCase() : undefined,
+              });
+            } catch (e) {
+              console.error("Error replaying solved moves:", e);
+            }
+          }
+        }
+
+        gameRef.current = solvedGame;
+        setFen(solvedGame.fen());
+        setCurrentMoveIndex(movesArray.length);
+        setIsReviewing(true);
+        setPlayerTurnMessage("Puzzle Solved");
+        return;
+      }
+
       // QOL Step Preservation:
       // If user made a mistake on step x+1 (currentMoveIndex > solutionStartIndex) and did not explicitly request full restart:
       // restore board state to step x+1, keeping the completed x moves intact!
@@ -511,7 +548,7 @@ export function PuzzleCard({
       setCurrentMoveIndex(initStartIndex);
       onStatusChange("playing");
     },
-    [puzzle, currentMoveIndex, solutionStartIndex, onStatusChange, showToast]
+    [puzzle, status, currentMoveIndex, solutionStartIndex, onStatusChange, showToast]
   );
 
   useEffect(() => {
@@ -551,8 +588,8 @@ export function PuzzleCard({
     }
 
     // 2. If user chooses to review the board, or if user is paywalled (out of free quota), do not auto-advance
-    if (isReviewing || (canPlay === false && !isPro)) {
-      if (canPlay === false && !isPro && !isReviewing) {
+    if (isReviewing || (canPlay === false && !isPro) || isPaywallOpen) {
+      if ((canPlay === false && !isPro && !isReviewing) || isPaywallOpen) {
         setIsReviewing(true);
       }
       setAutoNextCountdown(null);
@@ -587,7 +624,22 @@ export function PuzzleCard({
         clearTimeout(autoNextTimerRef.current);
       }
     };
-  }, [status, isReviewing, canPlay, isPro, onNextPuzzle]);
+  }, [status, isReviewing, canPlay, isPro, isPaywallOpen, onNextPuzzle]);
+
+  // Whenever the user is paywalled or the paywall modal is open, ensure the board is never exited or hidden, and stays in review mode
+  useEffect(() => {
+    if ((canPlay === false && !isPro) || isPaywallOpen) {
+      setIsExiting(false);
+      setDragY(0);
+      setIsSwiping(false);
+      setIsReviewing(true);
+      setAutoNextCountdown(null);
+      if (autoNextTimerRef.current) {
+        clearTimeout(autoNextTimerRef.current);
+        autoNextTimerRef.current = null;
+      }
+    }
+  }, [canPlay, isPro, isPaywallOpen]);
 
   // Keyboard shortcut to advance when solved (Space, Enter, or ArrowRight)
   useEffect(() => {
@@ -596,13 +648,18 @@ export function PuzzleCard({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === "Space" || e.code === "Enter" || e.code === "ArrowRight") {
         e.preventDefault();
+        if (canPlay === false && !isPro) {
+          setIsReviewing(true);
+          setIsExiting(false);
+          setDragY(0);
+        }
         onNextPuzzle();
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [status, onNextPuzzle]);
+  }, [status, onNextPuzzle, canPlay, isPro]);
 
   // Unified move executor for both Drag-and-Drop and Click-to-Move
   const executeUserMove = useCallback(
@@ -1017,6 +1074,14 @@ export function PuzzleCard({
 
   // Trigger next puzzle advance with smooth reel upward launch
   const triggerSwipeNext = useCallback(() => {
+    if ((canPlay === false && !isPro) || isPaywallOpen) {
+      setIsExiting(false);
+      setDragY(0);
+      setIsSwiping(false);
+      setIsReviewing(true);
+      onNextPuzzle();
+      return;
+    }
     if (isExiting) return;
     setIsExiting(true);
     setDragY(-360);
@@ -1030,7 +1095,7 @@ export function PuzzleCard({
         window.scrollTo({ top: 0, left: 0, behavior: "instant" });
       }
     }, 180);
-  }, [isExiting, onNextPuzzle]);
+  }, [isExiting, onNextPuzzle, canPlay, isPro, isPaywallOpen]);
 
   // User drawn arrows state (synced with react-chessboard options.arrows)
   const [touchArrows, setTouchArrows] = useState<Array<{ startSquare: string; endSquare: string; color: string }>>([]);
@@ -1511,6 +1576,11 @@ export function PuzzleCard({
                   <button
                     onClick={() => {
                       haptics.tap();
+                      if ((canPlay === false && !isPro) || isPaywallOpen) {
+                        setIsReviewing(true);
+                        setIsExiting(false);
+                        setDragY(0);
+                      }
                       onNextPuzzle();
                     }}
                     className="w-full h-11 bg-[#c29b78] hover:bg-[#d4b08f] text-[#151413] font-black rounded-xl shadow-lg shadow-[#c29b78]/30 flex items-center justify-center gap-2 transition-transform active:scale-95 cursor-pointer"

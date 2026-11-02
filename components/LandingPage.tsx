@@ -5,7 +5,7 @@ import { LogIn, Sparkles, Zap, Target, Trophy, Crown, ArrowRight } from "lucide-
 import { AnimatedChessHero } from "./AnimatedChessHero";
 
 interface LandingPageProps {
-  onContinueWithGoogle: () => void;
+  onContinueWithGoogle?: () => void;
   onOpenRegister?: (prefill?: string) => void;
   onOpenLogin: () => void;
   onPreviewAsGuest?: () => void;
@@ -77,38 +77,25 @@ export function LandingPage({
 
         {/* Primary Action Section */}
         <div className="w-full space-y-2.5 px-1">
-          {/* 1. Continue with Google */}
+          {/* 1. Get Started (Enter Onboarding Calibration) */}
           <button
-            onClick={onContinueWithGoogle}
+            onClick={() => {
+              if (typeof window !== "undefined") {
+                window.location.href = "/";
+              }
+            }}
             type="button"
-            className="w-full h-11 rounded-2xl bg-[#1e1c1a] hover:bg-[#282522] border border-white/15 hover:border-amber-400/50 text-white font-bold text-xs sm:text-sm transition-all duration-150 ease-out flex items-center justify-center gap-3 shadow-xl shadow-black/60 active:scale-[0.98] cursor-pointer group"
+            className="w-full h-11 rounded-2xl bg-[#c29b78] hover:bg-[#d4b08f] text-[#0a0908] font-bold text-xs sm:text-sm tracking-wide transition-all duration-150 ease-out flex items-center justify-center gap-2 shadow-xl shadow-[#c29b78]/25 active:scale-[0.98] cursor-pointer"
           >
-            <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-              <path
-                d="M12 5c1.6 0 3 .6 4.1 1.7l3.1-3.1C17.3 1.8 14.8 1 12 1 7.5 1 3.7 3.6 1.9 7.3l3.7 2.9C6.5 7.4 9 5 12 5z"
-                fill="#EA4335"
-              />
-              <path
-                d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.6h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.9z"
-                fill="#4285F4"
-              />
-              <path
-                d="M5.6 14.8c-.2-.7-.4-1.5-.4-2.8s.2-2.1.4-2.8L1.9 6.3C.7 8.7 0 10.3 0 12s.7 3.3 1.9 5.7l3.7-2.9z"
-                fill="#FBBC05"
-              />
-              <path
-                d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.5-2.4-6.4-5.2L1.9 16C3.7 19.7 7.5 23 12 23z"
-                fill="#34A853"
-              />
-            </svg>
-            <span>Continue with Google</span>
+            <span>Get Started</span>
+            <ArrowRight className="w-4 h-4 stroke-[2.5]" />
           </button>
 
           {/* 2. Log In Button */}
           <button
             onClick={onOpenLogin}
             type="button"
-            className="w-full h-11 rounded-2xl bg-gradient-to-r from-amber-400 to-[#c29b78] hover:from-amber-300 hover:to-[#d4b08f] text-zinc-950 font-black text-xs sm:text-sm uppercase tracking-wider transition-all duration-150 ease-out flex items-center justify-center gap-2 shadow-xl shadow-amber-500/20 active:scale-[0.98] cursor-pointer"
+            className="w-full h-11 rounded-2xl bg-[#1e1c1a] hover:bg-[#282522] border border-white/15 hover:border-[#c29b78]/50 text-white font-bold text-xs sm:text-sm transition-all duration-150 ease-out flex items-center justify-center gap-2 shadow-xl shadow-black/60 active:scale-[0.98] cursor-pointer"
           >
             <LogIn className="w-4 h-4 stroke-[2.5]" />
             <span>Sign In</span>

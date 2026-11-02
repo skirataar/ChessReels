@@ -328,6 +328,22 @@ export function PlayView({
   const fetchNextPuzzle = useCallback(async () => {
     // If free user has exhausted their quota window, block advance and show paywall (placement test exempt)
     if (!canPlay && !isPro && !isCalibrating) {
+      if (!currentPuzzle) {
+        const lastSolvedRaw =
+          typeof window !== "undefined"
+            ? window.localStorage.getItem("chess_reel_last_solved_puzzle")
+            : null;
+        if (lastSolvedRaw) {
+          try {
+            setCurrentPuzzle(JSON.parse(lastSolvedRaw));
+          } catch {
+            setCurrentPuzzle(FALLBACK_PUZZLES[0]);
+          }
+        } else {
+          setCurrentPuzzle(FALLBACK_PUZZLES[0]);
+        }
+      }
+      setPuzzleStatus("solved");
       setPaywallReason("quota");
       setIsQuotaModalOpen(true);
       return;
@@ -932,6 +948,7 @@ export function PlayView({
               streak={dailyStreak}
               combo={combo}
               canPlay={canPlay}
+              isPaywallOpen={isQuotaModalOpen}
               lastEloChange={lastEloChange}
               isCalibration={isCalibrating}
               calibrationStep={currentCalibrationStep}
@@ -1022,6 +1039,7 @@ export function PlayView({
         onClose={() => {
           setIsAdOpen(false);
           if (!canPlay && !isPro) {
+            setPuzzleStatus("solved");
             setPaywallReason("quota");
             setIsQuotaModalOpen(true);
           } else {
@@ -1035,7 +1053,27 @@ export function PlayView({
       {/* 5. Free Tier Quota Paywall Modal (4 puzzles per 4h window) */}
       <QuotaPaywallModal
         isOpen={isQuotaModalOpen}
-        onClose={() => setIsQuotaModalOpen(false)}
+        onClose={() => {
+          setIsQuotaModalOpen(false);
+          if (!canPlay && !isPro && !isCalibrating) {
+            setPuzzleStatus("solved");
+            if (!currentPuzzle) {
+              const lastSolvedRaw =
+                typeof window !== "undefined"
+                  ? window.localStorage.getItem("chess_reel_last_solved_puzzle")
+                  : null;
+              if (lastSolvedRaw) {
+                try {
+                  setCurrentPuzzle(JSON.parse(lastSolvedRaw));
+                } catch {
+                  setCurrentPuzzle(FALLBACK_PUZZLES[0]);
+                }
+              } else {
+                setCurrentPuzzle(FALLBACK_PUZZLES[0]);
+              }
+            }
+          }
+        }}
         onUpgradeToPro={upgradeToPro}
         resetsInMs={resetsInMs}
         limit={windowLimit}
