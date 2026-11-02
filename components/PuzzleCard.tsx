@@ -247,7 +247,31 @@ export function PuzzleCard({
   const [highlightStyles, setHighlightStyles] = useState<
     Record<string, React.CSSProperties>
   >({});
+  // Board markings (coordinates notation) state
+  const [showCoordinates, setShowCoordinates] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    try {
+      const stored = window.localStorage.getItem("chess_reel_show_coordinates");
+      return stored !== "0";
+    } catch {
+      return true;
+    }
+  });
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleCoordUpdate = (e: Event) => {
+      const detail = (e as CustomEvent<{ show?: boolean }>).detail;
+      if (typeof detail?.show === "boolean") {
+        setShowCoordinates(detail.show);
+      } else {
+        const stored = window.localStorage.getItem("chess_reel_show_coordinates");
+        setShowCoordinates(stored !== "0");
+      }
+    };
+    window.addEventListener("board-coordinates-updated", handleCoordUpdate);
+    return () => window.removeEventListener("board-coordinates-updated", handleCoordUpdate);
+  }, []);
 
   const gameRef = useRef<Chess | null>(initialPuzzleState.game);
   const autoNextTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -1048,17 +1072,27 @@ export function PuzzleCard({
     // Highlight the hint squares with glowing gold aura
     setHighlightStyles({
       [fromSquare]: {
-        backgroundColor: "rgba(255, 185, 95, 0.4)",
-        boxShadow: "inset 0 0 0 3px rgba(255, 185, 95, 0.9)",
+        backgroundColor: "rgba(194, 155, 120, 0.45)",
+        boxShadow: "inset 0 0 0 3px #c29b78, 0 0 16px rgba(194, 155, 120, 0.7)",
       },
       [toSquare]: {
         background:
-          "radial-gradient(circle, rgba(255, 185, 95, 0.7) 28%, transparent 30%)",
-        boxShadow: "inset 0 0 0 2px rgba(255, 185, 95, 0.6)",
+          "radial-gradient(circle, rgba(194, 155, 120, 0.75) 28%, transparent 30%)",
+        boxShadow: "inset 0 0 0 2px rgba(194, 155, 120, 0.6)",
       },
     });
 
-    showToast(`Hint: Focus on ${fromSquare.toUpperCase()}!`);
+    const piece = gameRef.current ? gameRef.current.get(fromSquare as any) : null;
+    const pieceNames: Record<string, string> = {
+      p: "Pawn",
+      n: "Knight",
+      b: "Bishop",
+      r: "Rook",
+      q: "Queen",
+      k: "King",
+    };
+    const pieceLabel = piece ? ` (${pieceNames[piece.type] || piece.type.toUpperCase()})` : "";
+    showToast(`Hint: Focus on ${fromSquare.toUpperCase()}${pieceLabel}!`);
   };
 
   // Calculate puzzle completion steps
@@ -1511,7 +1545,35 @@ export function PuzzleCard({
                 },
                 squareStyles: highlightStyles,
                 animationDurationInMs: 250,
-                showNotation: false,
+                showNotation: showCoordinates,
+                darkSquareNotationStyle: {
+                  color: boardTheme.light,
+                  fontWeight: 700,
+                },
+                lightSquareNotationStyle: {
+                  color: boardTheme.dark,
+                  fontWeight: 700,
+                },
+                alphaNotationStyle: {
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  position: "absolute",
+                  bottom: 1,
+                  right: 3,
+                  userSelect: "none",
+                  lineHeight: 1,
+                  opacity: 0.9,
+                },
+                numericNotationStyle: {
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  position: "absolute",
+                  top: 2,
+                  left: 3,
+                  userSelect: "none",
+                  lineHeight: 1,
+                  opacity: 0.9,
+                },
                 boardStyle: { borderRadius: "0px" },
                 darkSquareStyle: { backgroundColor: boardTheme.dark },
                 lightSquareStyle: { backgroundColor: boardTheme.light },

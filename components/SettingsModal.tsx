@@ -61,6 +61,7 @@ export function SettingsModal({
 
   // Gameplay state
   const [autoAdvance, setAutoAdvance] = useState<boolean>(true);
+  const [showCoordinates, setShowCoordinates] = useState<boolean>(true);
   const [animSpeed, setAnimSpeed] = useState<"snappy" | "smooth" | "instant">("snappy");
 
   // Sync state on open
@@ -77,6 +78,10 @@ export function SettingsModal({
     // Auto advance
     const auto = window.localStorage.getItem("chess_reel_auto_advance");
     setAutoAdvance(auto !== "0");
+
+    // Board coordinates / markings
+    const coords = window.localStorage.getItem("chess_reel_show_coordinates");
+    setShowCoordinates(coords !== "0");
 
     // Anim speed
     const speed = window.localStorage.getItem("chess_reel_anim_speed");
@@ -131,6 +136,18 @@ export function SettingsModal({
     setAutoAdvance(next);
     if (typeof window !== "undefined") {
       window.localStorage.setItem("chess_reel_auto_advance", next ? "1" : "0");
+    }
+  };
+
+  // Toggle board markings / coordinates
+  const handleToggleCoordinates = () => {
+    const nextState = !showCoordinates;
+    setShowCoordinates(nextState);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("chess_reel_show_coordinates", nextState ? "1" : "0");
+      window.dispatchEvent(
+        new CustomEvent("board-coordinates-updated", { detail: { show: nextState } })
+      );
     }
   };
 
@@ -500,6 +517,29 @@ export function SettingsModal({
                   <div
                     className={`w-4 h-4 rounded-full bg-[#0a0908] transition-transform duration-200 absolute top-1 left-1 ${
                       autoAdvance ? "translate-x-5 bg-[#0a0908]" : "translate-x-0 bg-white"
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Board Coordinates / Markings */}
+              <div className="flex items-center justify-between p-3 rounded-2xl bg-[#141210] border border-white/[0.08]">
+                <div>
+                  <span className="text-xs font-medium text-[#f5f2eb] block">Board Markings</span>
+                  <span className="text-[10px] text-[#78716c]">Display coordinates notation on rank & file (a-h, 1-8)</span>
+                </div>
+
+                <button
+                  type="button"
+                  data-testid="toggle-coordinates-btn"
+                  onClick={handleToggleCoordinates}
+                  className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
+                    showCoordinates ? "bg-[#c29b78]" : "bg-white/[0.1]"
+                  }`}
+                >
+                  <div
+                    className={`w-4 h-4 rounded-full bg-[#0a0908] transition-transform duration-200 absolute top-1 left-1 ${
+                      showCoordinates ? "translate-x-5 bg-[#0a0908]" : "translate-x-0 bg-white"
                     }`}
                   />
                 </button>
