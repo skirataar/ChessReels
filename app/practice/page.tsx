@@ -71,14 +71,40 @@ export default function PracticePage() {
   const router = useRouter();
 
   // User account & Tier state
-  const [account, setAccount] = useState<{ id?: string; plan?: string } | null>(null);
+  const [account, setAccount] = useState<{ id?: string; plan?: string } | null>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const raw = window.localStorage.getItem("chess_reel_account");
+        if (raw) return JSON.parse(raw);
+      } catch {}
+    }
+    return null;
+  });
   const [isClientReady, setIsClientReady] = useState(false);
 
   useEffect(() => {
     setIsClientReady(true);
     try {
       const raw = window.localStorage.getItem("chess_reel_account");
-      if (raw) setAccount(JSON.parse(raw));
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        setAccount(parsed);
+        if (parsed?.id) {
+          fetch(`/api/user/account?userId=${encodeURIComponent(parsed.id)}`)
+            .then((res) => (res.ok ? res.json() : null))
+            .then((data) => {
+              if (data?.user) {
+                setAccount(data.user);
+                window.localStorage.setItem("chess_reel_account", JSON.stringify(data.user));
+                if (data.user.plan) {
+                  window.localStorage.setItem("chess_reel_plan", data.user.plan);
+                  window.dispatchEvent(new Event("plan-updated"));
+                }
+              }
+            })
+            .catch(() => {});
+        }
+      }
     } catch {}
   }, []);
 
@@ -528,7 +554,12 @@ export default function PracticePage() {
       {/* 4. Purchase Paywall Modal for Practice Mode */}
       <QuotaPaywallModal
         isOpen={isPaywallOpen}
-        onClose={() => setIsPaywallOpen(false)}
+        onClose={() => {
+          setIsPaywallOpen(false);
+          if (!isPro) {
+            router.push("/play");
+          }
+        }}
         onUpgradeToPro={upgradeToPro}
         resetsInMs={0}
         proPrice={proPrice}

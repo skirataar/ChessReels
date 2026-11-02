@@ -196,6 +196,7 @@ export async function GET(request: NextRequest) {
       elo: user.elo,
       isCalibrated: user.isCalibrated,
       calibrationStep: user.calibrationStep,
+      plan: user.plan || "free",
     };
 
     const targetUrl = buildPublicRedirectUrl(returnTarget, request, originBase);

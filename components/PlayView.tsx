@@ -212,6 +212,18 @@ export function PlayView({
   }, []);
 
   // Initialize persistent guest ID, saved account, and saved Elo from localStorage
+  // Sync landing visibility to hide/show dock
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const isLanding = showLanding || (!userAccount && hasMounted);
+      window.dispatchEvent(
+        new CustomEvent("landing-visibility", {
+          detail: { visible: isLanding },
+        })
+      );
+    }
+  }, [showLanding, userAccount, hasMounted]);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -243,6 +255,10 @@ export function PlayView({
                 window.localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(oauthUser));
                 if (oauthUser.elo) {
                   window.localStorage.setItem(ELO_STORAGE_KEY, String(oauthUser.elo));
+                }
+                if (oauthUser.plan) {
+                  window.localStorage.setItem("chess_reel_plan", oauthUser.plan);
+                  window.dispatchEvent(new Event("plan-updated"));
                 }
                 setUserAccount(oauthUser);
                 if (oauthUser.elo) setCurrentElo(oauthUser.elo);
@@ -291,6 +307,10 @@ export function PlayView({
                       ACCOUNT_STORAGE_KEY,
                       JSON.stringify(data.user)
                     );
+                    if (data.user.plan) {
+                      window.localStorage.setItem("chess_reel_plan", data.user.plan);
+                      window.dispatchEvent(new Event("plan-updated"));
+                    }
                   }
                 })
                 .catch(() => {});
@@ -513,6 +533,10 @@ export function PlayView({
         document.cookie = `chess_reel_session=${encodeURIComponent(user.id)}; path=/; max-age=${60 * 60 * 24 * 30}`;
         window.localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(user));
         window.localStorage.setItem(ELO_STORAGE_KEY, (user.elo || 800).toString());
+        if (user.plan) {
+          window.localStorage.setItem("chess_reel_plan", user.plan);
+          window.dispatchEvent(new Event("plan-updated"));
+        }
         window.dispatchEvent(new Event("account-updated"));
       }
     } catch {}

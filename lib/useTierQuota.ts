@@ -16,7 +16,18 @@ export function useTierQuota(
   userPlan?: string | null
 ) {
   const [config, setConfig] = useState<TierConfig>(DEFAULT_TIER_CONFIG);
-  const [isPro, setIsPro] = useState<boolean>(userPlan === "premium");
+  const [isPro, setIsPro] = useState<boolean>(() => {
+    if (userPlan === "premium") return true;
+    if (typeof window !== "undefined") {
+      const localPlan = window.localStorage.getItem(PLAN_STORAGE_KEY);
+      if (localPlan === "premium") return true;
+      try {
+        const acc = JSON.parse(window.localStorage.getItem("chess_reel_account") || "{}");
+        if (acc?.plan === "premium") return true;
+      } catch {}
+    }
+    return false;
+  });
   const [puzzlesRemaining, setPuzzlesRemaining] = useState<number>(DEFAULT_TIER_CONFIG.freePuzzleLimit);
   const [puzzlesSinceLastAd, setPuzzlesSinceLastAd] = useState<number>(0);
   const [canPlay, setCanPlay] = useState<boolean>(true);

@@ -36,6 +36,16 @@ export function BottomNav() {
   const [hasMounted, setHasMounted] = useState<boolean>(false);
   const [isPro, setIsPro] = useState<boolean>(false);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [isLandingShowing, setIsLandingShowing] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handleLandingVisibility = (e: Event) => {
+      const detail = (e as CustomEvent<{ visible?: boolean }>).detail;
+      setIsLandingShowing(Boolean(detail?.visible));
+    };
+    window.addEventListener("landing-visibility", handleLandingVisibility);
+    return () => window.removeEventListener("landing-visibility", handleLandingVisibility);
+  }, []);
 
   useEffect(() => {
     setHasMounted(true);
@@ -68,29 +78,31 @@ export function BottomNav() {
     };
   }, []);
 
-  // Hide on standalone admin console (dock remains permanently visible across all app views)
-  if (!hasMounted || pathname?.startsWith("/admin")) return null;
+  // Hide dock on admin console, unauthenticated visitors, and landing page
+  if (
+    !hasMounted ||
+    pathname?.startsWith("/admin") ||
+    !isAuthenticated ||
+    pathname === "/" ||
+    isLandingShowing
+  ) {
+    return null;
+  }
 
   const handleNavClick = (e: React.MouseEvent, href: string) => {
     if (!isAuthenticated) {
-      if (href === "/practice" || href === "/stats") {
-        e.preventDefault();
-        window.dispatchEvent(
-          new CustomEvent("open-auth-modal", { detail: { tab: "login" } })
-        );
-        if (pathname !== "/play" && pathname !== "/") {
-          router.push("/play");
-        }
-        return;
-      }
+      e.preventDefault();
+      window.dispatchEvent(
+        new CustomEvent("open-auth-modal", { detail: { tab: "login" } })
+      );
+      return;
     }
     if (href === "/practice" && !isPro) {
-      if (pathname === "/play" || pathname === "/" || pathname === "/practice") {
-        e.preventDefault();
-        window.dispatchEvent(
-          new CustomEvent("open-quota-paywall", { detail: { reason: "practice" } })
-        );
-      }
+      e.preventDefault();
+      window.dispatchEvent(
+        new CustomEvent("open-quota-paywall", { detail: { reason: "practice" } })
+      );
+      return;
     }
   };
 

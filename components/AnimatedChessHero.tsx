@@ -1,238 +1,209 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { motion } from "framer-motion";
-import { Sparkles, Zap } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Flame,
+  Zap,
+  Sparkles,
+  Heart,
+  Share2,
+  ChevronUp,
+  Volume2,
+  Trophy,
+} from "lucide-react";
+import { Chessboard } from "react-chessboard";
+
+// Famous rapid tactic: Queen mate Qxf7#
+const INITIAL_FEN = "r1bqkb1r/pppp1ppp/2n5/4p2Q/2B1n3/8/PPPP1PPP/RNB1K1NR w KQkq - 0 1";
+const MATING_FEN = "r1bqkb1r/pppp1Qpp/2n5/4p3/2B1n3/8/PPPP1PPP/RNB1K1NR b KQkq - 0 1";
 
 export function AnimatedChessHero() {
   const [hasMounted, setHasMounted] = useState(false);
-  const [tacticCycle, setTacticCycle] = useState(0);
+  const [isMate, setIsMate] = useState(false);
+  const [likeCount, setLikeCount] = useState(2480);
+  const [isLiked, setIsLiked] = useState(false);
 
   useEffect(() => {
     setHasMounted(true);
+    // Cycle tactic every 3.5 seconds
     const interval = setInterval(() => {
-      setTacticCycle((prev) => (prev + 1) % 2);
-    }, 3800);
+      setIsMate((prev) => !prev);
+    }, 3200);
+
     return () => clearInterval(interval);
   }, []);
 
   if (!hasMounted) {
     return (
-      <div className="w-full max-w-[340px] h-[240px] mx-auto flex items-center justify-center">
+      <div className="w-full max-w-[320px] h-[380px] mx-auto flex items-center justify-center">
         <div className="w-10 h-10 rounded-full border-2 border-[#c29b78]/40 border-t-[#c29b78] animate-spin" />
       </div>
     );
   }
 
-  // 4x4 mini tactical board representation
-  const squares = Array.from({ length: 16 });
+  const customSquareStyles: Record<string, React.CSSProperties> = isMate
+    ? {
+        f7: {
+          backgroundColor: "rgba(239, 68, 68, 0.45)",
+          boxShadow: "inset 0 0 12px rgba(239, 68, 68, 0.8)",
+        },
+        h5: {
+          backgroundColor: "rgba(194, 155, 120, 0.35)",
+        },
+      }
+    : {
+        h5: {
+          backgroundColor: "rgba(194, 155, 120, 0.4)",
+          boxShadow: "inset 0 0 8px rgba(194, 155, 120, 0.6)",
+        },
+        c4: {
+          backgroundColor: "rgba(194, 155, 120, 0.25)",
+        },
+      };
 
   return (
-    <div className="relative w-full max-w-[340px] sm:max-w-[380px] h-[240px] sm:h-[260px] mx-auto flex items-center justify-center select-none overflow-visible">
-      {/* Background radial glow */}
-      <div className="absolute inset-0 bg-radial from-[#c29b78]/25 via-[#c29b78]/5 to-transparent blur-3xl pointer-events-none transform -translate-y-2" />
+    <div className="relative w-full max-w-[320px] sm:max-w-[340px] mx-auto select-none">
+      {/* Golden ambient background lighting */}
+      <div className="absolute -inset-4 bg-gradient-to-tr from-amber-500/15 via-[#c29b78]/10 to-transparent blur-3xl pointer-events-none rounded-3xl" />
 
-      {/* Floating ambient particles */}
+      {/* Floating Tactical Badges */}
       <motion.div
-        animate={{ y: [-6, 6, -6], opacity: [0.3, 0.7, 0.3] }}
+        animate={{ y: [-3, 3, -3] }}
         transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-        className="absolute top-4 left-6 w-2 h-2 rounded-full bg-[#c29b78] blur-[1px]"
-      />
-      <motion.div
-        animate={{ y: [6, -8, 6], opacity: [0.2, 0.6, 0.2] }}
-        transition={{ duration: 5, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-        className="absolute top-10 right-8 w-1.5 h-1.5 rounded-full bg-[#e8be99] blur-[1px]"
-      />
-      <motion.div
-        animate={{ y: [-4, 8, -4], opacity: [0.4, 0.8, 0.4] }}
-        transition={{ duration: 3.5, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
-        className="absolute bottom-6 left-10 w-1 h-1 rounded-full bg-[#c29b78]"
-      />
-
-      {/* 3D Chessboard Stage */}
-      <motion.div
-        animate={{
-          y: [-5, 5, -5],
-          rotateX: [44, 46, 44],
-          rotateZ: [-22, -20, -22],
-        }}
-        transition={{
-          duration: 6,
-          repeat: Infinity,
-          ease: "easeInOut",
-        }}
-        style={{
-          transformStyle: "preserve-3d",
-          perspective: 1000,
-        }}
-        className="relative w-[210px] h-[210px] rounded-2xl bg-gradient-to-b from-[#2d2925] to-[#1c1a18] p-2.5 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.9),0_0_40px_rgba(194,155,120,0.15)] border border-[#c29b78]/30"
+        className="absolute -top-3.5 -left-3 z-30 px-2.5 py-1 rounded-full bg-[#1e1c1a]/95 border border-amber-500/40 text-amber-300 text-[11px] font-bold flex items-center gap-1.5 shadow-xl shadow-black/80 backdrop-blur-md"
       >
-        {/* Board Outer Rim Bevel */}
-        <div className="w-full h-full rounded-xl bg-[#191816] p-1.5 border border-white/5 relative">
-          {/* 4x4 Tactical Grid */}
-          <div className="w-full h-full grid grid-cols-4 grid-rows-4 rounded-lg overflow-hidden border border-white/10 shadow-inner">
-            {squares.map((_, idx) => {
-              const row = Math.floor(idx / 4);
-              const col = idx % 4;
-              const isDark = (row + col) % 2 === 1;
+        <Zap className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+        <span>Tactical Reel #402</span>
+      </motion.div>
 
-              // Key tactical squares
-              const isSourceSquare = idx === 12; // Bottom left
-              const isTargetSquare = idx === 5; // Target jump
-              const isQueenSquare = idx === 1; // Target piece
+      <motion.div
+        animate={{ y: [3, -3, 3] }}
+        transition={{ duration: 4.5, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
+        className="absolute -top-3.5 -right-3 z-30 px-2.5 py-1 rounded-full bg-[#1e1c1a]/95 border border-[#c29b78]/40 text-[#c29b78] text-[11px] font-bold flex items-center gap-1.5 shadow-xl shadow-black/80 backdrop-blur-md"
+      >
+        <Flame className="w-3.5 h-3.5 text-orange-400 fill-orange-400" />
+        <span>7 Day Streak</span>
+      </motion.div>
 
-              return (
-                <div
-                  key={idx}
-                  className={`relative flex items-center justify-center transition-colors duration-500 ${
-                    isDark ? "bg-[#25221e]" : "bg-[#3d3731]"
-                  } ${
-                    tacticCycle === 1 && isTargetSquare
-                      ? "ring-2 ring-inset ring-[#c29b78] bg-[#4a3f33]"
-                      : ""
-                  }`}
-                >
-                  {/* Subtle target highlight on jump */}
-                  {isTargetSquare && (
-                    <motion.div
-                      animate={{
-                        opacity: tacticCycle === 1 ? [0, 0.8, 0] : 0,
-                        scale: tacticCycle === 1 ? [0.6, 1.4, 1.8] : 0.6,
-                      }}
-                      transition={{ duration: 1.2, ease: "easeOut" }}
-                      className="absolute inset-0 rounded-full bg-[#c29b78]/30 pointer-events-none"
-                    />
-                  )}
-
-                  {/* Golden Queen standing on top row */}
-                  {isQueenSquare && (
-                    <div
-                      style={{ transform: "rotateZ(20deg) rotateX(-45deg)" }}
-                      className="relative z-10 filter drop-shadow-[0_8px_10px_rgba(0,0,0,0.8)]"
-                    >
-                      <svg
-                        className="w-8 h-8 text-[#f5ecd8]"
-                        viewBox="0 0 45 45"
-                        fill="currentColor"
-                      >
-                        <path
-                          d="M9 26c8.5-1.5 21-1.5 27 0l2-12-7 11V11l-5.5 13.5-3.5-16-3.5 16-5.5-13.5V25l-7-11 2 12z"
-                          fill="url(#queenGold)"
-                        />
-                        <path
-                          d="M9 26c0 2 1.5 2 2.5 4 1 1.5 1 1 .5 3.5-1.5 1-1.5 2.5-1.5 2.5-1.5 1.5.5 2.5.5 2.5 6.5 1 16.5 1 23 0 0 0 2-1 .5-2.5 0 0 0-1.5-1.5-2.5-.5-2.5-.5-2 .5-3.5 1-2 2.5-2 2.5-4-8.5-1.5-18.5-1.5-27 0z"
-                          fill="url(#queenGold)"
-                        />
-                        <defs>
-                          <linearGradient id="queenGold" x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" stopColor="#fff3d6" />
-                            <stop offset="50%" stopColor="#e5ba82" />
-                            <stop offset="100%" stopColor="#a57948" />
-                          </linearGradient>
-                        </defs>
-                      </svg>
-                      {/* Queen crown sparkle */}
-                      <motion.div
-                        animate={{ scale: [0.8, 1.2, 0.8], opacity: [0.4, 1, 0.4] }}
-                        transition={{ duration: 2, repeat: Infinity }}
-                        className="absolute -top-1 left-3 text-[#fff3d6]"
-                      >
-                        <Sparkles className="w-3 h-3 text-[#c29b78]" />
-                      </motion.div>
-                    </div>
-                  )}
-
-                  {/* Golden Knight making animated tactical leap */}
-                  {isSourceSquare && (
-                    <motion.div
-                      animate={
-                        tacticCycle === 0
-                          ? {
-                              x: 0,
-                              y: 0,
-                              scale: 1,
-                            }
-                          : {
-                              // Leap up-right towards target square
-                              x: 48,
-                              y: -92,
-                              scale: [1, 1.25, 1],
-                            }
-                      }
-                      transition={{
-                        duration: 1.1,
-                        ease: [0.25, 1, 0.5, 1],
-                      }}
-                      style={{
-                        transform: "rotateZ(20deg) rotateX(-45deg)",
-                        transformStyle: "preserve-3d",
-                      }}
-                      className="absolute z-20 pointer-events-none filter drop-shadow-[0_12px_14px_rgba(0,0,0,0.85)]"
-                    >
-                      <svg
-                        className="w-9 h-9"
-                        viewBox="0 0 45 45"
-                        fill="currentColor"
-                      >
-                        <path
-                          d="M22 10c10.5 1 16.5 8 16 29H15c0-9 10-6.5 8-21"
-                          fill="url(#knightGold)"
-                          stroke="#1a1816"
-                          strokeWidth="1.2"
-                        />
-                        <path
-                          d="M24 18c.33 1.17 1 2 2 2.5M28 26c0 .5-.5 1-1 1M18 14c-1.5 2-2 5-1 8 1 3 3 5 5 6"
-                          stroke="#ffffff"
-                          strokeWidth="1.2"
-                          strokeLinecap="round"
-                        />
-                        <circle cx="28" cy="15" r="1.5" fill="#151413" />
-                        <defs>
-                          <linearGradient id="knightGold" x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" stopColor="#ffeed0" />
-                            <stop offset="45%" stopColor="#d4a373" />
-                            <stop offset="100%" stopColor="#8d6232" />
-                          </linearGradient>
-                        </defs>
-                      </svg>
-
-                      {/* Knight shadow beneath */}
-                      <motion.div
-                        animate={{
-                          scale: tacticCycle === 1 ? [1, 0.6, 1] : 1,
-                          opacity: tacticCycle === 1 ? [0.6, 0.2, 0.6] : 0.6,
-                        }}
-                        transition={{ duration: 1.1 }}
-                        className="w-6 h-2 bg-black/60 rounded-full blur-[2px] mx-auto mt-0.5"
-                      />
-                    </motion.div>
-                  )}
-                </div>
-              );
-            })}
+      {/* Smartphone / Vertical Reel Card */}
+      <div className="relative w-full rounded-[28px] bg-[#1a1816]/95 border border-white/10 p-3 pb-3.5 shadow-2xl shadow-black/90 backdrop-blur-xl overflow-hidden">
+        {/* Top Reel HUD Header */}
+        <div className="w-full flex items-center justify-between gap-2 px-1 mb-2.5">
+          <div className="flex items-center gap-1.5 bg-[#252220] px-2.5 py-1 rounded-full border border-white/5">
+            <span className="text-amber-400 font-bold text-xs">⚡ 1540</span>
+            <span className="text-[10px] text-zinc-400 font-semibold uppercase">Elo</span>
           </div>
 
-          {/* Floating Checkmate / Tactic Badge that appears on landing */}
-          <motion.div
-            animate={{
-              opacity: tacticCycle === 1 ? [0, 1, 1, 0] : 0,
-              y: tacticCycle === 1 ? [-10, -22, -22, -28] : -10,
-              scale: tacticCycle === 1 ? [0.7, 1.05, 1, 0.9] : 0.7,
-            }}
-            transition={{
-              duration: 2.2,
-              times: [0, 0.2, 0.8, 1],
-            }}
-            style={{ transform: "rotateZ(20deg) rotateX(-45deg)" }}
-            className="absolute top-8 left-16 z-30 pointer-events-none"
-          >
-            <div className="px-2.5 py-1 rounded-full bg-gradient-to-r from-[#c29b78] to-[#dfb489] text-[#151413] text-[10px] font-black uppercase tracking-wider shadow-lg shadow-[#c29b78]/40 flex items-center gap-1 border border-white/30 whitespace-nowrap">
-              <Zap className="w-3 h-3 fill-[#151413]" />
-              <span>Tactical Strike</span>
+          <div className="flex items-center gap-1 text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+            <Sparkles className="w-3 h-3" />
+            <span>Mate in 1</span>
+          </div>
+        </div>
+
+        {/* Board Container + Right Action Column */}
+        <div className="relative flex items-center justify-center gap-2">
+          {/* Main 8x8 Chessboard */}
+          <div className="relative rounded-2xl overflow-hidden border border-white/10 shadow-lg">
+            <div className="w-[220px] h-[220px]">
+              <Chessboard
+                options={{
+                  id: "landing-reel-hero-board",
+                  position: isMate ? MATING_FEN : INITIAL_FEN,
+                  allowDragging: false,
+                  canDragPiece: () => false,
+                  showNotation: false,
+                  animationDurationInMs: 300,
+                  darkSquareStyle: { backgroundColor: "#262421" },
+                  lightSquareStyle: { backgroundColor: "#3d3b38" },
+                  squareStyles: customSquareStyles,
+                  boardStyle: { borderRadius: "14px" },
+                }}
+              />
             </div>
+
+            {/* Checkmate / Success Banner overlay */}
+            <AnimatePresence>
+              {isMate && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.85, y: 10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.85 }}
+                  transition={{ duration: 0.2 }}
+                  className="absolute inset-x-2 bottom-2 z-20 py-1 px-2.5 rounded-xl bg-emerald-500/95 text-zinc-950 font-black text-xs flex items-center justify-between shadow-lg backdrop-blur-md"
+                >
+                  <div className="flex items-center gap-1">
+                    <Trophy className="w-3.5 h-3.5 fill-zinc-950" />
+                    <span>CHECKMATE!</span>
+                  </div>
+                  <span className="bg-zinc-950/20 px-1.5 py-0.5 rounded-full text-[10px] font-bold">
+                    +16 Elo
+                  </span>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Reel Social Buttons Rail (Right) */}
+          <div className="flex flex-col items-center gap-3 py-1">
+            <button
+              type="button"
+              onClick={() => {
+                setIsLiked(!isLiked);
+                setLikeCount((c) => (isLiked ? c - 1 : c + 1));
+              }}
+              className="flex flex-col items-center gap-0.5 group cursor-pointer"
+            >
+              <div
+                className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
+                  isLiked
+                    ? "bg-rose-500/20 text-rose-500 border border-rose-500/40"
+                    : "bg-[#252220] text-zinc-300 hover:text-white border border-white/5"
+                }`}
+              >
+                <Heart
+                  className={`w-4 h-4 ${
+                    isLiked ? "fill-rose-500" : "group-hover:scale-110"
+                  } transition-transform`}
+                />
+              </div>
+              <span className="text-[9px] font-bold text-zinc-400">
+                {likeCount.toLocaleString()}
+              </span>
+            </button>
+
+            <div className="flex flex-col items-center gap-0.5">
+              <div className="w-8 h-8 rounded-full bg-[#252220] border border-white/5 flex items-center justify-center text-zinc-400">
+                <Share2 className="w-3.5 h-3.5" />
+              </div>
+              <span className="text-[9px] font-bold text-zinc-400">Share</span>
+            </div>
+
+            <div className="w-8 h-8 rounded-full bg-[#252220] border border-white/5 flex items-center justify-center text-[#c29b78]">
+              <Volume2 className="w-3.5 h-3.5" />
+            </div>
+          </div>
+        </div>
+
+        {/* Reel Bottom Swipe Hint */}
+        <div className="mt-2.5 pt-2 border-t border-white/5 flex items-center justify-between text-zinc-400 px-1">
+          <div className="flex items-center gap-1.5">
+            <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-[11px] font-medium text-zinc-300">
+              {isMate ? "Tactical solution played" : "White to move and win"}
+            </span>
+          </div>
+
+          <motion.div
+            animate={{ y: [-2, 2, -2] }}
+            transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+            className="flex items-center gap-0.5 text-[10px] font-bold text-[#c29b78]"
+          >
+            <span>Swipe next</span>
+            <ChevronUp className="w-3.5 h-3.5" />
           </motion.div>
         </div>
-      </motion.div>
+      </div>
     </div>
   );
 }
