@@ -394,24 +394,6 @@ function SmotheredMateVignette() {
           </svg>
         )}
       </div>
-
-      {/* Floating Checkmate Alert Pill */}
-      <div className="h-6 mt-3 flex items-center justify-center">
-        <AnimatePresence>
-          {isCheckmated && (
-            <motion.div
-              initial={{ opacity: 0, y: 6, scale: 0.92 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -4, scale: 0.95 }}
-              transition={{ type: "spring", stiffness: 350, damping: 22 }}
-              className="px-3 py-1 rounded-full bg-red-950/80 border border-red-500/40 text-red-400 font-mono text-[10px] font-bold tracking-widest flex items-center gap-2 shadow-xl shadow-red-950/80"
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping" />
-              <span>SMOTHERED CHECKMATE</span>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
     </div>
   );
 }
