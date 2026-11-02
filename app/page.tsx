@@ -62,12 +62,74 @@ const ELO_OPTIONS: EloOption[] = [
 ];
 
 const BOARD_THEMES: BoardTheme[] = [
-  { id: "tournament", name: "Tournament Green", light: "#eeeed2", dark: "#769656" },
   { id: "walnut", name: "Walnut Wood", light: "#edd6b0", dark: "#b88762" },
+  { id: "tournament", name: "Tournament Green", light: "#eeeed2", dark: "#769656" },
+  { id: "obsidian", name: "Obsidian Charcoal", light: "#26221f", dark: "#161311" },
   { id: "icy-sea", name: "Icy Sea", light: "#dee3e6", dark: "#7896a4" },
-  { id: "obsidian", name: "Obsidian Brass", light: "#3a3532", dark: "#1b1816" },
-  { id: "coral", name: "Coral", light: "#f7e6d4", dark: "#d18b72" },
+  { id: "coral", name: "Coral Stone", light: "#f7e6d4", dark: "#d18b72" },
+  { id: "midnight", name: "Midnight Navy", light: "#e2e8f0", dark: "#334155" },
 ];
+
+function GoogleLogo({ className = "w-4 h-4 shrink-0" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24">
+      <path
+        fill="#4285F4"
+        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+      />
+      <path
+        fill="#34A853"
+        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+      />
+      <path
+        fill="#EA4335"
+        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+      />
+    </svg>
+  );
+}
+
+function getSkillCategory(elo: number): {
+  tier: "Beginner" | "Intermediate" | "Advanced";
+  desc: string;
+  color: string;
+  border: string;
+  bg: string;
+  skillLevel: "beginner" | "intermediate" | "advanced";
+} {
+  if (elo < 1100) {
+    return {
+      tier: "Beginner",
+      desc: "Pattern recognition & piece coordination",
+      color: "text-emerald-400",
+      border: "border-emerald-500/30",
+      bg: "bg-emerald-500/15",
+      skillLevel: "beginner",
+    };
+  }
+  if (elo < 1650) {
+    return {
+      tier: "Intermediate",
+      desc: "Forks, pins, skewers & tactical conversion",
+      color: "text-[#c29b78]",
+      border: "border-[#c29b78]/40",
+      bg: "bg-[#c29b78]/15",
+      skillLevel: "intermediate",
+    };
+  }
+  return {
+    tier: "Advanced",
+    desc: "Complex deep calculations & instinct",
+    color: "text-purple-400",
+    border: "border-purple-500/30",
+    bg: "bg-purple-500/15",
+    skillLevel: "advanced",
+  };
+}
 
 // --- Authentic Staunton SVG Chess Pieces ---
 function MinimalPiece({
@@ -432,9 +494,9 @@ export default function RootPage() {
   const [direction, setDirection] = useState<number>(1);
 
   // User calibration choices
-  const [selectedElo, setSelectedElo] = useState<EloOption>(ELO_OPTIONS[0]);
-  const [selectedGoal, setSelectedGoal] = useState<number>(1400);
-  const [selectedTheme, setSelectedTheme] = useState<BoardTheme>(BOARD_THEMES[1]); // Walnut default
+  const [startingElo, setStartingElo] = useState<number>(1000);
+  const [targetElo, setTargetElo] = useState<number>(1400);
+  const [selectedTheme, setSelectedTheme] = useState<BoardTheme>(BOARD_THEMES[0]); // Walnut Wood default
 
   // Auth form state
   const [authMode, setAuthMode] = useState<"signup" | "signin">("signup");
@@ -454,28 +516,15 @@ export default function RootPage() {
     } catch {}
   }, [router]);
 
-  // Compute goal options dynamically based on chosen starting Elo
-  const availableGoals: GoalOption[] = React.useMemo(() => {
-    const base = selectedElo.baseline;
-    const goals: GoalOption[] = [];
-
-    if (base < 1000) goals.push({ value: 1000, label: "1,000 Elo", badge: "Club Player" });
-    if (base < 1400) goals.push({ value: 1400, label: "1,400 Elo", badge: "Tactical Striker" });
-    goals.push({ value: 1800, label: "1,800 Elo", badge: "Expert" });
-    goals.push({ value: 2200, label: "2,200+ Elo", badge: "Master Instinct" });
-
-    return goals;
-  }, [selectedElo]);
-
-  // Ensure selected goal remains valid when starting Elo changes
+  // Keep target Elo higher than starting Elo automatically
   useEffect(() => {
-    if (availableGoals.length > 0) {
-      const currentValid = availableGoals.some((g) => g.value === selectedGoal);
-      if (!currentValid) {
-        setSelectedGoal(availableGoals[0].value);
-      }
+    if (targetElo < startingElo + 100) {
+      setTargetElo(Math.min(2600, startingElo + 300));
     }
-  }, [availableGoals, selectedGoal]);
+  }, [startingElo, targetElo]);
+
+  // Derived current skill category
+  const skill = getSkillCategory(startingElo);
 
   // Step transition helpers
   const goTo = (nextStep: FlowStep, dir: number = 1) => {
@@ -507,8 +556,8 @@ export default function RootPage() {
   const saveCalibrationToStorage = () => {
     if (typeof window === "undefined") return;
     try {
-      window.localStorage.setItem("chess_reel_elo", String(selectedElo.baseline));
-      window.localStorage.setItem("chess_reel_target_elo", String(selectedGoal));
+      window.localStorage.setItem("chess_reel_elo", String(startingElo));
+      window.localStorage.setItem("chess_reel_target_elo", String(targetElo));
       window.localStorage.setItem("chess_reel_board_theme", selectedTheme.id);
     } catch {}
   };
@@ -517,7 +566,8 @@ export default function RootPage() {
   const handleGoogleAuth = () => {
     saveCalibrationToStorage();
     const returnUrl = encodeURIComponent("/play");
-    window.location.href = `/api/auth/google?skillLevel=${selectedElo.skillLevel}&returnUrl=${returnUrl}`;
+    const skillLevel = skill.skillLevel;
+    window.location.href = `/api/auth/google?skillLevel=${skillLevel}&returnUrl=${returnUrl}`;
   };
 
   // Handle direct guest access
@@ -552,7 +602,7 @@ export default function RootPage() {
           body: JSON.stringify({
             username: cleanUser,
             password,
-            skillLevel: selectedElo.skillLevel,
+            skillLevel: skill.skillLevel,
           }),
         });
         const data = await res.json();
@@ -564,7 +614,7 @@ export default function RootPage() {
 
         if (data.user) {
           window.localStorage.setItem("chess_reel_account", JSON.stringify(data.user));
-          window.localStorage.setItem("chess_reel_elo", String(data.user.elo || selectedElo.baseline));
+          window.localStorage.setItem("chess_reel_elo", String(data.user.elo || startingElo));
           document.cookie = `chess_reel_session=${encodeURIComponent(data.user.id)}; path=/; max-age=${60 * 60 * 24 * 30}`;
           window.dispatchEvent(new Event("account-updated"));
           router.push("/play");
@@ -685,24 +735,7 @@ export default function RootPage() {
                     type="button"
                     className="w-full h-12 rounded-full bg-[#12100e] hover:bg-[#1a1714] border border-white/[0.08] hover:border-white/20 text-[#f5f2eb] font-medium text-sm transition-all duration-150 active:scale-[0.98] flex items-center justify-center gap-3 cursor-pointer"
                   >
-                    <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                      <path
-                        fill="#EA4335"
-                        d="M12 5c1.6 0 3 .6 4.1 1.7l3.1-3.1C17.3 1.8 14.8 1 12 1 7.5 1 3.7 3.6 1.9 7.3l3.7 2.9C6.5 7.3 9 5 12 5z"
-                      />
-                      <path
-                        fill="#4285F4"
-                        d="M23.5 12.3c0-.8-.1-1.7-.2-2.3H12v4.6h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.9z"
-                      />
-                      <path
-                        fill="#FBBC05"
-                        d="M5.6 14.8c-.2-.7-.4-1.5-.4-2.3 0-.8.2-1.6.4-2.3L1.9 7.3C.7 9.7 0 12.3 0 15s.7 5.3 1.9 7.7l3.7-2.9z"
-                      />
-                      <path
-                        fill="#34A853"
-                        d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.5-2.3-6.4-5.2L1.9 16c1.8 3.7 5.6 7 10.1 7z"
-                      />
-                    </svg>
+                    <GoogleLogo />
                     <span>Continue with Google</span>
                   </button>
 
@@ -723,7 +756,7 @@ export default function RootPage() {
             )}
 
             {/* ============================================================ */}
-            {/* STATE 1: 'step-elo' (Current Rating Calibration)             */}
+            {/* STATE 1: 'step-elo' (Starting Rating Calibration Slider)     */}
             {/* ============================================================ */}
             {step === "step-elo" && (
               <motion.div
@@ -740,43 +773,80 @@ export default function RootPage() {
                     Where are you starting from?
                   </h2>
                   <p className="text-xs text-[#78716c] mt-1">
-                    Calibrate your initial tactical feed.
+                    Calibrate your initial tactical puzzle feed.
                   </p>
 
-                  <div className="space-y-2.5 mt-6">
-                    {ELO_OPTIONS.map((opt) => {
-                      const isSelected = selectedElo.id === opt.id;
+                  {/* Dynamic Rating Card */}
+                  <div className="mt-5 p-5 rounded-2xl bg-[#12100e] border border-white/[0.08] relative overflow-hidden">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-4xl font-mono font-bold text-[#f5f2eb]">
+                          {startingElo}
+                        </span>
+                        <span className="text-xs font-mono uppercase text-[#78716c]">Elo</span>
+                      </div>
+                      <span
+                        className={`px-3 py-1 rounded-full text-xs font-semibold ${skill.bg} ${skill.color} border ${skill.border} tracking-wide`}
+                      >
+                        {skill.tier}
+                      </span>
+                    </div>
+                    <p className="text-xs text-[#78716c] mt-2.5">
+                      {skill.desc}
+                    </p>
+                  </div>
+
+                  {/* Interactive Slider */}
+                  <div className="mt-6 px-1">
+                    <div className="relative flex items-center">
+                      <input
+                        type="range"
+                        min={400}
+                        max={2200}
+                        step={25}
+                        value={startingElo}
+                        onChange={(e) => setStartingElo(Number(e.target.value))}
+                        className="w-full h-2 rounded-lg appearance-none cursor-pointer bg-white/[0.08] accent-[#c29b78]
+                          [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:h-6 
+                          [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[#c29b78] 
+                          [&::-webkit-slider-thumb]:shadow-[0_0_12px_rgba(194,155,120,0.6)] [&::-webkit-slider-thumb]:border-2 
+                          [&::-webkit-slider-thumb]:border-[#0a0908] [&::-webkit-slider-thumb]:cursor-pointer
+                          [&::-moz-range-thumb]:w-6 [&::-moz-range-thumb]:h-6 [&::-moz-range-thumb]:rounded-full 
+                          [&::-moz-range-thumb]:bg-[#c29b78] [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-[#0a0908]
+                          [&::-moz-range-thumb]:cursor-pointer"
+                        style={{
+                          background: `linear-gradient(to right, #c29b78 0%, #c29b78 ${((startingElo - 400) / (2200 - 400)) * 100}%, rgba(255,255,255,0.08) ${((startingElo - 400) / (2200 - 400)) * 100}%, rgba(255,255,255,0.08) 100%)`,
+                        }}
+                      />
+                    </div>
+
+                    <div className="flex justify-between items-center text-[11px] font-mono text-[#78716c] mt-3">
+                      <span>400</span>
+                      <span className="text-[#a8a29e]">1,200</span>
+                      <span>2,200+</span>
+                    </div>
+                  </div>
+
+                  {/* Quick-snap tier buttons */}
+                  <div className="grid grid-cols-3 gap-2 mt-5">
+                    {[
+                      { label: "Beginner", elo: 700 },
+                      { label: "Intermediate", elo: 1200 },
+                      { label: "Advanced", elo: 1700 },
+                    ].map((tier) => {
+                      const isActive = skill.tier === tier.label;
                       return (
                         <button
-                          key={opt.id}
-                          onClick={() => {
-                            setSelectedElo(opt);
-                          }}
+                          key={tier.label}
+                          onClick={() => setStartingElo(tier.elo)}
                           type="button"
-                          className={`w-full p-4 rounded-2xl text-left border transition-all duration-150 flex items-center justify-between cursor-pointer ${
-                            isSelected
-                              ? "bg-[#c29b78]/[0.08] border-[#c29b78] shadow-sm shadow-[#c29b78]/10"
-                              : "bg-[#12100e] border-white/[0.07] hover:border-white/20"
+                          className={`py-2 px-1 rounded-xl text-xs font-medium border text-center transition-all cursor-pointer ${
+                            isActive
+                              ? "bg-[#c29b78]/[0.12] border-[#c29b78] text-[#c29b78]"
+                              : "bg-[#12100e] border-white/[0.06] text-[#78716c] hover:border-white/20 hover:text-[#f5f2eb]"
                           }`}
                         >
-                          <div>
-                            <div className="text-sm font-medium text-[#f5f2eb]">
-                              {opt.title}
-                            </div>
-                            <div className="text-xs text-[#78716c] mt-0.5">
-                              {opt.description}
-                            </div>
-                          </div>
-
-                          <div
-                            className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors ${
-                              isSelected
-                                ? "border-[#c29b78] bg-[#c29b78]"
-                                : "border-white/20 bg-transparent"
-                            }`}
-                          >
-                            {isSelected && <Check className="w-3 h-3 text-[#0a0908] stroke-[3]" />}
-                          </div>
+                          {tier.label}
                         </button>
                       );
                     })}
@@ -797,7 +867,7 @@ export default function RootPage() {
             )}
 
             {/* ============================================================ */}
-            {/* STATE 2: 'step-goal' (Target Rating Goal)                    */}
+            {/* STATE 2: 'step-goal' (Target Rating Goal Slider)             */}
             {/* ============================================================ */}
             {step === "step-goal" && (
               <motion.div
@@ -817,45 +887,90 @@ export default function RootPage() {
                     Your difficulty curve will scale toward this mark.
                   </p>
 
-                  {/* Minimal Trajectory Badge */}
-                  <div className="mt-4 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.08] text-xs text-stone-300">
-                    <span className="text-stone-400 font-mono">{selectedElo.baseline}</span>
-                    <span className="text-[#c29b78]">→</span>
-                    <span className="text-[#c29b78] font-semibold font-mono">{selectedGoal} Elo</span>
+                  {/* Trajectory Hero Card */}
+                  <div className="mt-5 p-5 rounded-2xl bg-[#12100e] border border-white/[0.08]">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-xs font-mono text-[#78716c]">
+                        <span>From {startingElo}</span>
+                        <span className="text-[#c29b78]">→</span>
+                      </div>
+                      <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                        +{Math.max(0, targetElo - startingElo)} Elo
+                      </span>
+                    </div>
+
+                    <div className="flex items-baseline gap-2 mt-2">
+                      <span className="text-4xl font-mono font-bold text-[#c29b78]">
+                        {targetElo}
+                      </span>
+                      <span className="text-xs font-mono uppercase text-[#78716c]">Target Elo</span>
+                    </div>
+
+                    <p className="text-xs text-[#78716c] mt-2">
+                      {targetElo - startingElo < 300
+                        ? "Steady, consistent tactical progression"
+                        : targetElo - startingElo < 600
+                        ? "Focused tactical mastery & pattern elevation"
+                        : "Ambitious tournament-grade mastery"}
+                    </p>
                   </div>
 
-                  <div className="space-y-2.5 mt-5">
-                    {availableGoals.map((goal) => {
-                      const isSelected = selectedGoal === goal.value;
+                  {/* Interactive Target Slider */}
+                  <div className="mt-6 px-1">
+                    <div className="relative flex items-center">
+                      <input
+                        type="range"
+                        min={Math.min(2500, startingElo + 50)}
+                        max={2600}
+                        step={25}
+                        value={targetElo}
+                        onChange={(e) => setTargetElo(Number(e.target.value))}
+                        className="w-full h-2 rounded-lg appearance-none cursor-pointer bg-white/[0.08] accent-[#c29b78]
+                          [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:h-6 
+                          [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[#c29b78] 
+                          [&::-webkit-slider-thumb]:shadow-[0_0_12px_rgba(194,155,120,0.6)] [&::-webkit-slider-thumb]:border-2 
+                          [&::-webkit-slider-thumb]:border-[#0a0908] [&::-webkit-slider-thumb]:cursor-pointer
+                          [&::-moz-range-thumb]:w-6 [&::-moz-range-thumb]:h-6 [&::-moz-range-thumb]:rounded-full 
+                          [&::-moz-range-thumb]:bg-[#c29b78] [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-[#0a0908]
+                          [&::-moz-range-thumb]:cursor-pointer"
+                        style={{
+                          background: `linear-gradient(to right, #c29b78 0%, #c29b78 ${
+                            ((targetElo - Math.min(2500, startingElo + 50)) /
+                              (2600 - Math.min(2500, startingElo + 50))) *
+                            100
+                          }%, rgba(255,255,255,0.08) ${
+                            ((targetElo - Math.min(2500, startingElo + 50)) /
+                              (2600 - Math.min(2500, startingElo + 50))) *
+                            100
+                          }%, rgba(255,255,255,0.08) 100%)`,
+                        }}
+                      />
+                    </div>
+
+                    <div className="flex justify-between items-center text-[11px] font-mono text-[#78716c] mt-3">
+                      <span>{Math.min(2500, startingElo + 50)}</span>
+                      <span className="text-[#a8a29e]">1,800</span>
+                      <span>2,600 Max</span>
+                    </div>
+                  </div>
+
+                  {/* Quick Delta Chips */}
+                  <div className="grid grid-cols-4 gap-2 mt-5">
+                    {[200, 400, 600, 800].map((delta) => {
+                      const value = Math.min(2600, startingElo + delta);
+                      const isSelected = targetElo === value;
                       return (
                         <button
-                          key={goal.value}
-                          onClick={() => setSelectedGoal(goal.value)}
+                          key={delta}
+                          onClick={() => setTargetElo(value)}
                           type="button"
-                          className={`w-full p-4 rounded-2xl text-left border transition-all duration-150 flex items-center justify-between cursor-pointer ${
+                          className={`py-2 px-1 rounded-xl text-xs font-mono font-medium border text-center transition-all cursor-pointer ${
                             isSelected
-                              ? "bg-[#c29b78]/[0.08] border-[#c29b78] shadow-sm shadow-[#c29b78]/10"
-                              : "bg-[#12100e] border-white/[0.07] hover:border-white/20"
+                              ? "bg-[#c29b78]/[0.15] border-[#c29b78] text-[#c29b78]"
+                              : "bg-[#12100e] border-white/[0.06] text-[#78716c] hover:border-white/20 hover:text-[#f5f2eb]"
                           }`}
                         >
-                          <div>
-                            <div className="text-sm font-medium text-[#f5f2eb]">
-                              {goal.label}
-                            </div>
-                            <div className="text-xs text-[#78716c] mt-0.5">
-                              {goal.badge}
-                            </div>
-                          </div>
-
-                          <div
-                            className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors ${
-                              isSelected
-                                ? "border-[#c29b78] bg-[#c29b78]"
-                                : "border-white/20 bg-transparent"
-                            }`}
-                          >
-                            {isSelected && <Check className="w-3 h-3 text-[#0a0908] stroke-[3]" />}
-                          </div>
+                          +{delta}
                         </button>
                       );
                     })}
@@ -876,7 +991,7 @@ export default function RootPage() {
             )}
 
             {/* ============================================================ */}
-            {/* STATE 3: 'step-board' (Board Theme Personalization)          */}
+            {/* STATE 3: 'step-board' (Board Theme 2x3 Grid, No Pieces)      */}
             {/* ============================================================ */}
             {step === "step-board" && (
               <motion.div
@@ -893,37 +1008,11 @@ export default function RootPage() {
                     Choose your board.
                   </h2>
                   <p className="text-xs text-[#78716c] mt-1">
-                    Match your aesthetic in the feed.
+                    Select your aesthetic for the puzzle reels feed.
                   </p>
 
-                  {/* Interactive 4x4 Mini Board Preview */}
-                  <div className="my-4 flex items-center justify-center">
-                    <div className="w-48 h-48 rounded-2xl grid grid-cols-4 grid-rows-4 overflow-hidden border border-white/[0.1] shadow-2xl shadow-black transition-colors duration-200">
-                      {[...Array(16)].map((_, i) => {
-                        const row = Math.floor(i / 4);
-                        const col = i % 4;
-                        const isDark = (row + col) % 2 === 1;
-
-                        return (
-                          <div
-                            key={i}
-                            className="w-full h-full flex items-center justify-center transition-colors duration-200"
-                            style={{
-                              backgroundColor: isDark ? selectedTheme.dark : selectedTheme.light,
-                            }}
-                          >
-                            {i === 1 && <MinimalPiece type="k" isWhite={false} className="w-6 h-6" />}
-                            {i === 2 && <MinimalPiece type="q" isWhite={false} className="w-6 h-6" />}
-                            {i === 9 && <MinimalPiece type="n" isWhite={true} className="w-6 h-6" />}
-                            {i === 10 && <MinimalPiece type="p" isWhite={true} className="w-5 h-5" />}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Theme Swatches */}
-                  <div className="space-y-1.5 mt-2">
+                  {/* 2x3 Grid of Board Options (Pure checkerboards, No pieces) */}
+                  <div className="grid grid-cols-2 gap-3 mt-4">
                     {BOARD_THEMES.map((theme) => {
                       const isSelected = selectedTheme.id === theme.id;
                       return (
@@ -931,26 +1020,45 @@ export default function RootPage() {
                           key={theme.id}
                           onClick={() => setSelectedTheme(theme)}
                           type="button"
-                          className={`w-full py-2.5 px-3 rounded-xl border flex items-center justify-between transition-all duration-150 cursor-pointer ${
+                          className={`relative p-3 rounded-2xl border transition-all duration-150 flex flex-col items-center gap-2 cursor-pointer ${
                             isSelected
-                              ? "bg-[#c29b78]/[0.08] border-[#c29b78]"
-                              : "bg-[#12100e] border-white/[0.06] hover:border-white/20"
+                              ? "bg-[#c29b78]/[0.1] border-[#c29b78] shadow-lg shadow-[#c29b78]/15 ring-1 ring-[#c29b78]"
+                              : "bg-[#12100e] border-white/[0.08] hover:border-white/20 hover:bg-[#181512]"
                           }`}
                         >
-                          <div className="flex items-center gap-3">
-                            {/* Two-tone circle swatch */}
-                            <div className="w-5 h-5 rounded-full overflow-hidden flex border border-white/20 shrink-0">
-                              <div className="w-1/2 h-full" style={{ backgroundColor: theme.light }} />
-                              <div className="w-1/2 h-full" style={{ backgroundColor: theme.dark }} />
+                          {/* Selected Check Badge */}
+                          {isSelected && (
+                            <div className="absolute top-2 right-2 w-4 h-4 rounded-full bg-[#c29b78] text-[#0a0908] flex items-center justify-center shadow-md">
+                              <Check className="w-2.5 h-2.5 stroke-[3]" />
                             </div>
-                            <span className="text-xs font-medium text-[#f5f2eb]">
-                              {theme.name}
-                            </span>
+                          )}
+
+                          {/* 4x4 Mini Checkerboard Swatch (Clean, no pieces) */}
+                          <div className="w-20 h-20 rounded-xl overflow-hidden grid grid-cols-4 grid-rows-4 border border-black/40 shadow-inner shrink-0">
+                            {[...Array(16)].map((_, idx) => {
+                              const r = Math.floor(idx / 4);
+                              const c = idx % 4;
+                              const isDark = (r + c) % 2 === 1;
+                              return (
+                                <div
+                                  key={idx}
+                                  className="w-full h-full"
+                                  style={{
+                                    backgroundColor: isDark ? theme.dark : theme.light,
+                                  }}
+                                />
+                              );
+                            })}
                           </div>
 
-                          {isSelected && (
-                            <Check className="w-3.5 h-3.5 text-[#c29b78] stroke-[2.5]" />
-                          )}
+                          {/* Board Name Underneath */}
+                          <span
+                            className={`text-xs font-medium text-center transition-colors ${
+                              isSelected ? "text-[#f5f2eb]" : "text-[#a8a29e]"
+                            }`}
+                          >
+                            {theme.name}
+                          </span>
                         </button>
                       );
                     })}
@@ -994,9 +1102,9 @@ export default function RootPage() {
                   {/* Summary Pill */}
                   {authMode === "signup" && (
                     <div className="mt-2.5 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/[0.04] border border-white/[0.08] text-[11px] text-stone-300">
-                      <span className="text-stone-400 font-mono">{selectedElo.baseline}</span>
+                      <span className="text-stone-400 font-mono">{startingElo}</span>
                       <span className="text-[#c29b78]">→</span>
-                      <span className="text-[#c29b78] font-semibold font-mono">{selectedGoal} Elo</span>
+                      <span className="text-[#c29b78] font-semibold font-mono">{targetElo} Elo</span>
                       <span className="text-stone-600">•</span>
                       <span className="text-stone-300">{selectedTheme.name}</span>
                     </div>
@@ -1009,24 +1117,7 @@ export default function RootPage() {
                       type="button"
                       className="w-full h-11 rounded-2xl bg-[#12100e] hover:bg-[#1a1714] border border-white/[0.1] hover:border-white/20 text-[#f5f2eb] font-medium text-xs sm:text-sm transition-all duration-150 active:scale-[0.98] flex items-center justify-center gap-3 cursor-pointer"
                     >
-                      <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                        <path
-                          fill="#EA4335"
-                          d="M12 5c1.6 0 3 .6 4.1 1.7l3.1-3.1C17.3 1.8 14.8 1 12 1 7.5 1 3.7 3.6 1.9 7.3l3.7 2.9C6.5 7.3 9 5 12 5z"
-                        />
-                        <path
-                          fill="#4285F4"
-                          d="M23.5 12.3c0-.8-.1-1.7-.2-2.3H12v4.6h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.9z"
-                        />
-                        <path
-                          fill="#FBBC05"
-                          d="M5.6 14.8c-.2-.7-.4-1.5-.4-2.3 0-.8.2-1.6.4-2.3L1.9 7.3C.7 9.7 0 12.3 0 15s.7 5.3 1.9 7.7l3.7-2.9z"
-                        />
-                        <path
-                          fill="#34A853"
-                          d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.5-2.3-6.4-5.2L1.9 16c1.8 3.7 5.6 7 10.1 7z"
-                        />
-                      </svg>
+                      <GoogleLogo />
                       <span>Continue with Google</span>
                     </button>
                   </div>
