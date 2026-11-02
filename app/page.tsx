@@ -70,82 +70,136 @@ const BOARD_THEMES: BoardTheme[] = [
 ];
 
 // --- Authentic Staunton SVG Chess Pieces ---
-function MinimalPiece({ type, isWhite = true, className = "w-7 h-7" }: { type: "k" | "q" | "n" | "p"; isWhite?: boolean; className?: string }) {
-  const fillColor = isWhite ? "#f5f2eb" : "#141210";
+function MinimalPiece({
+  type,
+  isWhite = true,
+  className = "w-8 h-8",
+}: {
+  type: "k" | "q" | "r" | "b" | "n" | "p";
+  isWhite?: boolean;
+  className?: string;
+}) {
+  const fillColor = isWhite ? "#fcfaf6" : "#141210";
   const strokeColor = isWhite ? "#c29b78" : "#a8a29e";
-  const shadowFilter = isWhite ? "drop-shadow(0 2px 4px rgba(0,0,0,0.5))" : "drop-shadow(0 2px 4px rgba(255,255,255,0.15))";
+  const shadowFilter = isWhite
+    ? "drop-shadow(0 2px 4px rgba(0,0,0,0.6))"
+    : "drop-shadow(0 2px 4px rgba(255,255,255,0.18))";
 
   if (type === "n") {
-    // Knight
+    // Knight / Horse: Clear horse snout, pricked ears, mane bristles, and eye
     return (
       <svg className={className} style={{ filter: shadowFilter }} viewBox="0 0 45 45" fill="none">
         <path
-          d="M22 10C20.5 10 18.5 10.8 17 12C16 11 14.5 11 13.5 12C12.5 13 12.5 14.5 13.5 15.5C11.5 17 10 19.5 10 22C10 24 11 25.5 11.5 26C9.5 27 8.5 29.5 9.5 32C10.5 34.5 13.5 36 17 36H28C30 36 32 34 32 31C32 29 31 27.5 29.5 26.5C31.5 24.5 32.5 21.5 31.5 18C30.5 14.5 26.5 10 22 10Z"
+          d="M23 8C20 8 16 10 14.5 13C13 11.5 11 11.5 9.5 13C8 14.5 9 17 11 18.5C9.5 20.5 8 23 8.5 26C9 28 11.5 29 13.5 28C11.5 30 11.5 33 13 35H32C32 35 32.5 30 31.5 27C30.5 24 28 22 29 19C30 16 30 13 28 10C26 7 24 8 23 8Z"
           fill={fillColor}
           stroke={strokeColor}
-          strokeWidth="1.75"
+          strokeWidth="1.8"
           strokeLinejoin="round"
         />
-        <circle cx="15.5" cy="18.5" r="1.5" fill={isWhite ? "#141210" : "#f5f2eb"} />
-        <path d="M12 28C14 27 18 27 20 28.5" stroke={strokeColor} strokeWidth="1.5" strokeLinecap="round" />
-        <path d="M10.5 36H29.5" stroke={strokeColor} strokeWidth="2" strokeLinecap="round" />
+        <circle cx="14" cy="17" r="1.5" fill={isWhite ? "#141210" : "#fcfaf6"} />
+        <path d="M18 10C18 13 22 14 24 16" stroke={strokeColor} strokeWidth="1.5" strokeLinecap="round" />
+        <path d="M10.5 35H32.5V38.5H10.5V35Z" fill={fillColor} stroke={strokeColor} strokeWidth="1.8" strokeLinejoin="round" />
       </svg>
     );
   }
 
   if (type === "k") {
-    // King
+    // King: Prominent Latin Cross, royal crown arches, jeweled center
     return (
       <svg className={className} style={{ filter: shadowFilter }} viewBox="0 0 45 45" fill="none">
-        {/* Cross */}
-        <path d="M22.5 7V13M19.5 10H25.5" stroke={strokeColor} strokeWidth="2" strokeLinecap="round" />
+        {/* Prominent Cross */}
+        <path d="M22.5 5.5V12.5M19 9H26" stroke={strokeColor} strokeWidth="2.2" strokeLinecap="round" />
         {/* Crown body */}
         <path
-          d="M12.5 37H32.5C32.5 37 35 29 33 24C31 19 28 17 22.5 17C17 17 14 19 12 24C10 29 12.5 37 12.5 37Z"
+          d="M12.5 35H32.5C32.5 35 34.5 27 32 21C29.5 15 25.5 14 22.5 14C19.5 14 15.5 15 13 21C10.5 27 12.5 35 12.5 35Z"
           fill={fillColor}
           stroke={strokeColor}
-          strokeWidth="1.75"
+          strokeWidth="1.8"
           strokeLinejoin="round"
         />
-        <path d="M11.5 37H33.5V40H11.5V37Z" fill={fillColor} stroke={strokeColor} strokeWidth="1.75" strokeLinejoin="round" />
-        <circle cx="22.5" cy="23" r="2" fill={strokeColor} />
+        <path d="M11 35H34V39H11V35Z" fill={fillColor} stroke={strokeColor} strokeWidth="1.8" strokeLinejoin="round" />
+        <circle cx="22.5" cy="22" r="2.5" fill={strokeColor} />
+        <path d="M16 27C19 29 26 29 29 27" stroke={strokeColor} strokeWidth="1.5" strokeLinecap="round" />
       </svg>
     );
   }
 
   if (type === "q") {
-    // Queen
+    // Queen: 5-pointed crown coronet with pearls & hourglass waist
     return (
       <svg className={className} style={{ filter: shadowFilter }} viewBox="0 0 45 45" fill="none">
-        <circle cx="9" cy="14" r="2" fill={fillColor} stroke={strokeColor} strokeWidth="1.5" />
-        <circle cx="15.5" cy="11" r="2" fill={fillColor} stroke={strokeColor} strokeWidth="1.5" />
-        <circle cx="22.5" cy="9.5" r="2" fill={fillColor} stroke={strokeColor} strokeWidth="1.5" />
-        <circle cx="29.5" cy="11" r="2" fill={fillColor} stroke={strokeColor} strokeWidth="1.5" />
-        <circle cx="36" cy="14" r="2" fill={fillColor} stroke={strokeColor} strokeWidth="1.5" />
+        <circle cx="8" cy="13.5" r="2" fill={fillColor} stroke={strokeColor} strokeWidth="1.5" />
+        <circle cx="15" cy="10" r="2" fill={fillColor} stroke={strokeColor} strokeWidth="1.5" />
+        <circle cx="22.5" cy="8.5" r="2.2" fill={fillColor} stroke={strokeColor} strokeWidth="1.5" />
+        <circle cx="30" cy="10" r="2" fill={fillColor} stroke={strokeColor} strokeWidth="1.5" />
+        <circle cx="37" cy="13.5" r="2" fill={fillColor} stroke={strokeColor} strokeWidth="1.5" />
         <path
-          d="M10 16.5L13 32H32L35 16.5L28 23L22.5 13L17 23L10 16.5Z"
+          d="M9.5 16L12.5 33H32.5L35.5 16L28 23L22.5 12L17 23L9.5 16Z"
           fill={fillColor}
           stroke={strokeColor}
-          strokeWidth="1.75"
+          strokeWidth="1.8"
           strokeLinejoin="round"
         />
-        <path d="M12 36H33V39H12V36Z" fill={fillColor} stroke={strokeColor} strokeWidth="1.75" strokeLinejoin="round" />
+        <path d="M11 33H34V37H11V33Z" fill={fillColor} stroke={strokeColor} strokeWidth="1.8" strokeLinejoin="round" />
       </svg>
     );
   }
 
-  // Pawn
+  if (type === "r") {
+    // Rook / Castle: 3 deep notched crenellations & fortress tower
+    return (
+      <svg className={className} style={{ filter: shadowFilter }} viewBox="0 0 45 45" fill="none">
+        <path
+          d="M12 12V18H16V14H20V18H25V14H29V18H33V12H12Z"
+          fill={fillColor}
+          stroke={strokeColor}
+          strokeWidth="1.8"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M14 18L15.5 34H29.5L31 18H14Z"
+          fill={fillColor}
+          stroke={strokeColor}
+          strokeWidth="1.8"
+          strokeLinejoin="round"
+        />
+        <path d="M11 34H34V38H11V34Z" fill={fillColor} stroke={strokeColor} strokeWidth="1.8" strokeLinejoin="round" />
+        <path d="M15 26H30" stroke={strokeColor} strokeWidth="1.5" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  if (type === "b") {
+    // Bishop: Mitre head with cross-slash
+    return (
+      <svg className={className} style={{ filter: shadowFilter }} viewBox="0 0 45 45" fill="none">
+        <circle cx="22.5" cy="8.5" r="2" fill={strokeColor} />
+        <path
+          d="M16 35H29C29 35 32 25 29 19C26 13 22.5 11 22.5 11C22.5 11 19 13 16 19C13 25 16 35 16 35Z"
+          fill={fillColor}
+          stroke={strokeColor}
+          strokeWidth="1.8"
+          strokeLinejoin="round"
+        />
+        <path d="M21 16L27 22" stroke={strokeColor} strokeWidth="1.8" strokeLinecap="round" />
+        <path d="M13 35H32V38.5H13V35Z" fill={fillColor} stroke={strokeColor} strokeWidth="1.8" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+
+  // Pawn: Distinct spherical orb head on collar neck
   return (
     <svg className={className} style={{ filter: shadowFilter }} viewBox="0 0 45 45" fill="none">
-      <circle cx="22.5" cy="13" r="5" fill={fillColor} stroke={strokeColor} strokeWidth="1.75" />
+      <circle cx="22.5" cy="13.5" r="5.5" fill={fillColor} stroke={strokeColor} strokeWidth="1.8" />
+      <path d="M17 21H28" stroke={strokeColor} strokeWidth="1.5" strokeLinecap="round" />
       <path
-        d="M16 23C14 26 13 32 13 36H32C32 32 31 26 29 23C27 21 18 21 16 23Z"
+        d="M16 23C14 26 13 31 13 35H32C32 31 31 26 29 23C27 21.5 18 21.5 16 23Z"
         fill={fillColor}
         stroke={strokeColor}
-        strokeWidth="1.75"
+        strokeWidth="1.8"
         strokeLinejoin="round"
       />
-      <path d="M12 36H33V39H12V36Z" fill={fillColor} stroke={strokeColor} strokeWidth="1.75" strokeLinejoin="round" />
+      <path d="M11 35H34V38.5H11V35Z" fill={fillColor} stroke={strokeColor} strokeWidth="1.8" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -177,6 +231,190 @@ const slideVariants = {
     },
   }),
 };
+
+// --- Interactive Smothered Mate Vignette ---
+function SmotheredMateVignette() {
+  const [animPhase, setAnimPhase] = useState<"idle" | "jump" | "mate">("idle");
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (animPhase === "idle") {
+      timer = setTimeout(() => setAnimPhase("jump"), 1100);
+    } else if (animPhase === "jump") {
+      timer = setTimeout(() => setAnimPhase("mate"), 700);
+    } else if (animPhase === "mate") {
+      timer = setTimeout(() => setAnimPhase("idle"), 2800);
+    }
+    return () => clearTimeout(timer);
+  }, [animPhase]);
+
+  const isCheckmated = animPhase === "mate";
+
+  return (
+    <div className="my-auto flex flex-col items-center justify-center relative py-2">
+      {/* 4x4 Cropped Chess Board (240px x 240px = 60px/sq) */}
+      <div
+        className="w-60 h-60 rounded-2xl grid grid-cols-4 grid-rows-4 overflow-hidden border border-white/[0.08] shadow-2xl shadow-black relative"
+        style={{
+          maskImage: "radial-gradient(circle at center, black 65%, transparent 98%)",
+          WebkitMaskImage: "radial-gradient(circle at center, black 65%, transparent 98%)",
+        }}
+      >
+        {[...Array(16)].map((_, i) => {
+          const row = Math.floor(i / 4);
+          const col = i % 4;
+          const isDark = (row + col) % 2 === 1;
+
+          // Square 0 (row 0, col 0): Black King (smothered in the corner)
+          const isKingSquare = i === 0;
+          // Square 1 (row 0, col 1): Black Rook (blocks King right)
+          const isRookSquare = i === 1;
+          // Square 4 (row 1, col 0): Black Pawn (blocks King bottom)
+          const isPawn1Square = i === 4;
+          // Square 5 (row 1, col 1): Black Pawn (blocks King diagonal)
+          const isPawn2Square = i === 5;
+          // Square 6 (row 1, col 2): Landing checkmate square for White Knight
+          const isTargetSquare = i === 6;
+          // Square 13 (row 3, col 1): Starting square for White Knight
+          const isKnightStartSquare = i === 13;
+
+          return (
+            <div
+              key={i}
+              className={`w-full h-full flex items-center justify-center relative transition-colors duration-300 ${
+                isKingSquare && isCheckmated
+                  ? "bg-red-600/40 border-2 border-red-500 shadow-[inset_0_0_18px_rgba(239,68,68,0.85)]"
+                  : ""
+              }`}
+              style={{
+                backgroundColor:
+                  isKingSquare && isCheckmated
+                    ? undefined
+                    : isDark
+                    ? "#161311"
+                    : "#26221f",
+              }}
+            >
+              {/* 1. Black King at square 0 - Topples over cleanly within its square when smothered! */}
+              {isKingSquare && (
+                <motion.div
+                  animate={
+                    isCheckmated
+                      ? {
+                          rotate: 85,
+                          y: 4,
+                          x: 0,
+                          scale: 0.92,
+                          transition: {
+                            type: "spring",
+                            stiffness: 280,
+                            damping: 15,
+                          },
+                        }
+                      : {
+                          rotate: 0,
+                          y: 0,
+                          x: 0,
+                          scale: 1,
+                          transition: { duration: 0.3 },
+                        }
+                  }
+                  style={{ transformOrigin: "center" }}
+                  className="relative z-10 flex items-center justify-center"
+                >
+                  <MinimalPiece type="k" isWhite={false} className="w-8 h-8" />
+                </motion.div>
+              )}
+
+              {/* 2. Smothering Black army */}
+              {isRookSquare && (
+                <MinimalPiece type="r" isWhite={false} className="w-8 h-8 opacity-85" />
+              )}
+              {isPawn1Square && (
+                <MinimalPiece type="p" isWhite={false} className="w-7 h-7 opacity-85" />
+              )}
+              {isPawn2Square && (
+                <MinimalPiece type="p" isWhite={false} className="w-7 h-7 opacity-85" />
+              )}
+
+              {/* 3. Target square golden impact ring */}
+              {isTargetSquare && isCheckmated && (
+                <div className="absolute inset-0 rounded-lg border border-[#c29b78]/50 bg-[#c29b78]/10 animate-pulse pointer-events-none" />
+              )}
+
+              {/* 4. White Knight: leaps from square 13 (row 3, col 1) to square 6 (row 1, col 2) */}
+              {isKnightStartSquare && (
+                <motion.div
+                  animate={
+                    animPhase === "idle"
+                      ? { x: 0, y: 0, scale: 1, rotate: 0 }
+                      : {
+                          x: [0, 20, 60],
+                          y: [0, -85, -120],
+                          scale: [1, 1.35, 1],
+                          rotate: [0, -10, 2, 0],
+                        }
+                  }
+                  transition={
+                    animPhase === "idle"
+                      ? { duration: 0.3 }
+                      : {
+                          duration: 0.65,
+                          ease: [0.22, 1, 0.36, 1],
+                        }
+                  }
+                  className="relative z-20 flex items-center justify-center cursor-default"
+                >
+                  <div className="relative">
+                    {/* Glowing golden aura */}
+                    <div className="absolute inset-0 rounded-full bg-[#c29b78]/30 blur-md animate-pulse" />
+                    <MinimalPiece
+                      type="n"
+                      isWhite={true}
+                      className="w-8 h-8 relative z-10 drop-shadow-[0_0_10px_rgba(194,155,120,0.85)]"
+                    />
+                  </div>
+                </motion.div>
+              )}
+            </div>
+          );
+        })}
+
+        {/* Trajectory Guide (pulsing while idle) */}
+        {animPhase === "idle" && (
+          <svg className="absolute inset-0 w-full h-full pointer-events-none">
+            <path
+              d="M 90 210 Q 100 135 150 90"
+              fill="none"
+              stroke="#c29b78"
+              strokeWidth="1.5"
+              strokeDasharray="4 4"
+              className="opacity-40 animate-pulse"
+            />
+          </svg>
+        )}
+      </div>
+
+      {/* Floating Checkmate Alert Pill */}
+      <div className="h-6 mt-3 flex items-center justify-center">
+        <AnimatePresence>
+          {isCheckmated && (
+            <motion.div
+              initial={{ opacity: 0, y: 6, scale: 0.92 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -4, scale: 0.95 }}
+              transition={{ type: "spring", stiffness: 350, damping: 22 }}
+              className="px-3 py-1 rounded-full bg-red-950/80 border border-red-500/40 text-red-400 font-mono text-[10px] font-bold tracking-widest flex items-center gap-2 shadow-xl shadow-red-950/80"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping" />
+              <span>SMOTHERED CHECKMATE</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+}
 
 export default function RootPage() {
   const router = useRouter();
@@ -410,7 +648,7 @@ export default function RootPage() {
                 {/* Header Wordmark */}
                 <div className="text-center shrink-0">
                   <span className="text-[11px] font-semibold tracking-[0.3em] text-[#c29b78] uppercase font-mono">
-                    CHESSREELS
+                    DOOMCHESS
                   </span>
                   <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-[#f5f2eb] leading-tight mt-2">
                     Turn doomscrolling into instinct.
@@ -420,60 +658,8 @@ export default function RootPage() {
                   </p>
                 </div>
 
-                {/* Visual Centerpiece: 4x4 Cropped Chess Board Vignette */}
-                <div className="my-auto flex items-center justify-center relative py-4">
-                  <div
-                    className="w-56 h-56 rounded-2xl grid grid-cols-4 grid-rows-4 overflow-hidden border border-white/[0.08] shadow-2xl shadow-black relative"
-                    style={{
-                      maskImage: "radial-gradient(circle at center, black 55%, transparent 95%)",
-                      WebkitMaskImage: "radial-gradient(circle at center, black 55%, transparent 95%)",
-                    }}
-                  >
-                    {[...Array(16)].map((_, i) => {
-                      const row = Math.floor(i / 4);
-                      const col = i % 4;
-                      const isDark = (row + col) % 2 === 1;
-
-                      // Knight fork setup on 4x4 vignette:
-                      // Knight on (2, 1) [i = 9]
-                      // Black King on (0, 0) [i = 0]
-                      // Black Queen on (0, 2) [i = 2]
-                      // White Pawn on (3, 2) [i = 14]
-                      return (
-                        <div
-                          key={i}
-                          className="w-full h-full flex items-center justify-center relative"
-                          style={{
-                            backgroundColor: isDark ? "#1a1715" : "#2a2522",
-                          }}
-                        >
-                          {i === 9 && (
-                            <div className="relative flex items-center justify-center">
-                              {/* Glowing Fork Pulse */}
-                              <div className="absolute inset-0 rounded-full bg-[#c29b78]/30 blur-md animate-pulse" />
-                              <MinimalPiece type="n" isWhite={true} className="w-8 h-8 relative z-10 drop-shadow-[0_0_8px_rgba(194,155,120,0.8)]" />
-                            </div>
-                          )}
-                          {i === 0 && (
-                            <MinimalPiece type="k" isWhite={false} className="w-7 h-7 opacity-75" />
-                          )}
-                          {i === 2 && (
-                            <MinimalPiece type="q" isWhite={false} className="w-7 h-7 opacity-75" />
-                          )}
-                          {i === 14 && (
-                            <MinimalPiece type="p" isWhite={true} className="w-6 h-6 opacity-60" />
-                          )}
-                        </div>
-                      );
-                    })}
-
-                    {/* Subtle Tactical Fork Overlay Rays */}
-                    <svg className="absolute inset-0 w-full h-full pointer-events-none stroke-[#c29b78]/50 stroke-[1.5] stroke-dasharray-[3_3]">
-                      <line x1="37.5%" y1="62.5%" x2="12.5%" y2="12.5%" />
-                      <line x1="37.5%" y1="62.5%" x2="62.5%" y2="12.5%" />
-                    </svg>
-                  </div>
-                </div>
+                {/* Animated Smothered Mate Vignette */}
+                <SmotheredMateVignette />
 
                 {/* Bottom Pinned CTAs */}
                 <div className="w-full space-y-2.5 pb-2 shrink-0">
