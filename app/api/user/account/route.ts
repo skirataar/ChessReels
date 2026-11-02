@@ -192,7 +192,7 @@ export async function GET(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json();
-    const { userId, avatar, displayName } = body;
+    const { userId, avatar, displayName, username } = body;
 
     if (!userId) {
       return NextResponse.json(
@@ -205,6 +205,34 @@ export async function PATCH(request: NextRequest) {
     if (avatar !== undefined) dataToUpdate.avatar = avatar;
     if (displayName !== undefined && typeof displayName === "string") {
       dataToUpdate.displayName = displayName.trim();
+    }
+    if (username !== undefined && typeof username === "string") {
+      const cleanUsername = username.trim().toLowerCase();
+      if (!/^[a-z0-9_]{3,20}$/.test(cleanUsername)) {
+        return NextResponse.json(
+          {
+            error:
+              "Username must be 3-20 characters long and contain only letters, numbers, and underscores.",
+          },
+          { status: 400 }
+        );
+      }
+
+      const existing = await prisma.user.findFirst({
+        where: {
+          username: cleanUsername,
+          NOT: { id: userId },
+        },
+      });
+
+      if (existing) {
+        return NextResponse.json(
+          { error: "This username is already taken. Please choose another." },
+          { status: 409 }
+        );
+      }
+
+      dataToUpdate.username = cleanUsername;
     }
 
     const updatedUser = await prisma.user.update({

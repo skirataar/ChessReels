@@ -28,6 +28,16 @@ class SoundEffects {
     return this.isMuted;
   }
 
+  setIsMuted(muted: boolean): boolean {
+    this.isMuted = muted;
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("chess_reel_sfx_muted", this.isMuted ? "1" : "0");
+      } catch {}
+    }
+    return this.isMuted;
+  }
+
   getIsMuted(): boolean {
     return this.isMuted;
   }

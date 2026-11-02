@@ -3,8 +3,9 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Play, Target, User, Lock } from "lucide-react";
+import { Play, Target, User, Lock, Settings } from "lucide-react";
 import { motion } from "framer-motion";
+import { SettingsModal } from "@/components/SettingsModal";
 
 interface NavItem {
   name: string;
@@ -28,6 +29,11 @@ const NAV_ITEMS: NavItem[] = [
     href: "/stats",
     icon: User,
   },
+  {
+    name: "Settings",
+    href: "#settings",
+    icon: Settings,
+  },
 ];
 
 export function BottomNav() {
@@ -37,14 +43,24 @@ export function BottomNav() {
   const [isPro, setIsPro] = useState<boolean>(false);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isLandingShowing, setIsLandingShowing] = useState<boolean>(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  const [userAccount, setUserAccount] = useState<any>(null);
 
   useEffect(() => {
     const handleLandingVisibility = (e: Event) => {
       const detail = (e as CustomEvent<{ visible?: boolean }>).detail;
       setIsLandingShowing(Boolean(detail?.visible));
     };
+    const handleOpenSettings = () => {
+      setIsSettingsOpen(true);
+    };
+
     window.addEventListener("landing-visibility", handleLandingVisibility);
-    return () => window.removeEventListener("landing-visibility", handleLandingVisibility);
+    window.addEventListener("open-settings-modal", handleOpenSettings);
+    return () => {
+      window.removeEventListener("landing-visibility", handleLandingVisibility);
+      window.removeEventListener("open-settings-modal", handleOpenSettings);
+    };
   }, []);
 
   useEffect(() => {
@@ -53,13 +69,16 @@ export function BottomNav() {
       try {
         const plan = window.localStorage.getItem("chess_reel_plan");
         const accRaw = window.localStorage.getItem("chess_reel_account");
+        const guestId = window.localStorage.getItem("chess_reel_guest_id");
         let accPlan: string | undefined;
         if (accRaw) {
           try {
-            accPlan = JSON.parse(accRaw)?.plan;
+            const parsed = JSON.parse(accRaw);
+            setUserAccount(parsed);
+            accPlan = parsed?.plan;
           } catch {}
         }
-        setIsAuthenticated(Boolean(accRaw));
+        setIsAuthenticated(Boolean(accRaw || guestId));
         setIsPro(plan === "premium" || accPlan === "premium");
       } catch {
         setIsAuthenticated(false);
@@ -90,6 +109,11 @@ export function BottomNav() {
   }
 
   const handleNavClick = (e: React.MouseEvent, href: string) => {
+    if (href === "#settings") {
+      e.preventDefault();
+      setIsSettingsOpen(true);
+      return;
+    }
     if (!isAuthenticated) {
       e.preventDefault();
       window.dispatchEvent(
@@ -107,76 +131,85 @@ export function BottomNav() {
   };
 
   return (
-    <nav
-      aria-label="Bottom Navigation"
-      className="fixed bottom-0 left-0 right-0 z-40 flex items-center justify-center pointer-events-none pb-safe"
-    >
-      <div className="w-full max-w-[320px] sm:max-w-[340px] mx-auto px-3 pb-2 pt-0.5 pointer-events-auto">
-        <div className="relative flex items-center justify-around h-12 rounded-full bg-[#201e1d]/95 backdrop-blur-xl border border-white/10 shadow-xl shadow-black/80 px-2">
-          {NAV_ITEMS.map((item) => {
-            const Icon = item.icon;
-            const isActive =
-              pathname === item.href ||
-              (item.href === "/play" && (pathname === "/" || pathname === "/play")) ||
-              (item.href === "/stats" && pathname === "/profile");
+    <>
+      <nav
+        aria-label="Bottom Navigation"
+        className="fixed bottom-0 left-0 right-0 z-40 flex items-center justify-center pointer-events-none pb-safe"
+      >
+        <div className="w-full max-w-[360px] sm:max-w-[380px] mx-auto px-2 pb-2 pt-0.5 pointer-events-auto">
+          <div className="relative flex items-center justify-around h-12 rounded-full bg-[#201e1d]/95 backdrop-blur-xl border border-white/10 shadow-xl shadow-black/80 px-2">
+            {NAV_ITEMS.map((item) => {
+              const Icon = item.icon;
+              const isActive =
+                (item.href === "#settings" && isSettingsOpen) ||
+                (item.href === "/play" && (pathname === "/" || pathname === "/play") && !isSettingsOpen) ||
+                (item.href === "/practice" && pathname === "/practice" && !isSettingsOpen) ||
+                (item.href === "/stats" && (pathname === "/stats" || pathname === "/profile") && !isSettingsOpen);
 
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                data-testid={`bottom-nav-${item.name.toLowerCase()}`}
-                data-nav-item={item.name.toLowerCase()}
-                onClick={(e) => handleNavClick(e, item.href)}
-                className="relative flex-1 flex flex-col items-center justify-center py-0.5 transition-all duration-200 select-none group"
-              >
-                <motion.div
-                  whileTap={{ scale: 0.94 }}
-                  animate={
-                    isActive
-                      ? {
-                          scale: 1.04,
-                          y: -1,
-                        }
-                      : { scale: 1, y: 0 }
-                  }
-                  transition={{ type: "spring", stiffness: 400, damping: 25 }}
-                  className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-full transition-colors ${
-                    isActive
-                      ? "text-[#c29b78] bg-[#c29b78]/15 shadow-[0_0_12px_rgba(194,155,120,0.2)] border border-[#c29b78]/30"
-                      : "text-[#a3a3a3] hover:text-[#f5f5f5]"
-                  }`}
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  data-testid={`bottom-nav-${item.name.toLowerCase()}`}
+                  data-nav-item={item.name.toLowerCase()}
+                  onClick={(e) => handleNavClick(e, item.href)}
+                  className="relative flex-1 flex flex-col items-center justify-center py-0.5 transition-all duration-200 select-none group"
                 >
-                  <div className="relative">
-                    <Icon
-                      className={`w-4 h-4 transition-transform duration-200 ${
-                        isActive
-                          ? "stroke-[2.5] text-[#c29b78] fill-[#c29b78]/20"
-                          : "stroke-[2] text-[#a3a3a3] group-hover:text-[#f5f5f5]"
-                      }`}
-                    />
-                    {hasMounted && item.href === "/practice" && !isPro && (
-                      <span
-                        data-testid="bottom-nav-practice-lock"
-                        className="absolute -top-1 -right-1.5 px-1 py-0.2 rounded-full bg-amber-500 text-[7px] font-black text-zinc-950 flex items-center justify-center border border-[#22201e] shadow-sm"
-                        title="Pro only"
-                      >
-                        <Lock className="w-1.5 h-1.5" />
-                      </span>
-                    )}
-                  </div>
-                  <span
-                    className={`text-[10px] font-bold tracking-tight flex items-center gap-1 ${
-                      isActive ? "text-[#c29b78]" : "text-[#a3a3a3] group-hover:text-[#f5f5f5]"
+                  <motion.div
+                    whileTap={{ scale: 0.94 }}
+                    animate={
+                      isActive
+                        ? {
+                            scale: 1.04,
+                            y: -1,
+                          }
+                        : { scale: 1, y: 0 }
+                    }
+                    transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                    className={`flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-full transition-colors ${
+                      isActive
+                        ? "text-[#c29b78] bg-[#c29b78]/15 shadow-[0_0_12px_rgba(194,155,120,0.2)] border border-[#c29b78]/30"
+                        : "text-[#a3a3a3] hover:text-[#f5f5f5]"
                     }`}
                   >
-                    <span>{item.name}</span>
-                  </span>
-                </motion.div>
-              </Link>
-            );
-          })}
+                    <div className="relative">
+                      <Icon
+                        className={`w-4 h-4 transition-transform duration-200 ${
+                          isActive
+                            ? "stroke-[2.5] text-[#c29b78] fill-[#c29b78]/20"
+                            : "stroke-[2] text-[#a3a3a3] group-hover:text-[#f5f5f5]"
+                        }`}
+                      />
+                      {hasMounted && item.href === "/practice" && !isPro && (
+                        <span
+                          data-testid="bottom-nav-practice-lock"
+                          className="absolute -top-1 -right-1.5 px-1 py-0.2 rounded-full bg-amber-500 text-[7px] font-black text-zinc-950 flex items-center justify-center border border-[#22201e] shadow-sm"
+                          title="Pro only"
+                        >
+                          <Lock className="w-1.5 h-1.5" />
+                        </span>
+                      )}
+                    </div>
+                    <span
+                      className={`text-[10px] font-bold tracking-tight flex items-center gap-1 ${
+                        isActive ? "text-[#c29b78]" : "text-[#a3a3a3] group-hover:text-[#f5f5f5]"
+                      }`}
+                    >
+                      <span>{item.name}</span>
+                    </span>
+                  </motion.div>
+                </Link>
+              );
+            })}
+          </div>
         </div>
-      </div>
-    </nav>
+      </nav>
+
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        userAccount={userAccount}
+      />
+    </>
   );
 }

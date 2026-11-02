@@ -33,6 +33,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 
 import { Chessboard, defaultArrowOptions } from "react-chessboard";
+import { useBoardTheme } from "@/lib/boardThemes";
 
 export interface PuzzleData {
   id: string;
@@ -157,6 +158,7 @@ export function PuzzleCard({
   onNextPuzzle,
   onOpenStats,
 }: PuzzleCardProps) {
+  const [boardTheme] = useBoardTheme();
   const initialPuzzleState = computePuzzleInitialState(puzzle);
   const [fen, setFen] = useState<string>(initialPuzzleState.fen);
   const [boardOrientation, setBoardOrientation] = useState<"white" | "black">(
@@ -1411,8 +1413,8 @@ export function PuzzleCard({
                 animationDurationInMs: 250,
                 showNotation: false,
                 boardStyle: { borderRadius: "0px" },
-                darkSquareStyle: { backgroundColor: "#b58863" },
-                lightSquareStyle: { backgroundColor: "#f0d9b5" },
+                darkSquareStyle: { backgroundColor: boardTheme.dark },
+                lightSquareStyle: { backgroundColor: boardTheme.light },
                 dropSquareStyle: {
                   boxShadow: "inset 0 0 1px 3px rgba(194, 155, 120, 0.9)",
                 },

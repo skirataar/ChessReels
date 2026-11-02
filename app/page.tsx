@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ArrowRight, Check } from "lucide-react";
+import { BOARD_THEMES, BoardTheme, setStoredBoardTheme, getStoredBoardTheme } from "@/lib/boardThemes";
 
 // --- Types ---
 type FlowStep = "gate" | "step-elo" | "step-goal" | "step-board" | "auth";
@@ -20,13 +21,6 @@ interface GoalOption {
   value: number;
   label: string;
   badge: string;
-}
-
-interface BoardTheme {
-  id: string;
-  name: string;
-  light: string;
-  dark: string;
 }
 
 // --- Data Constants ---
@@ -59,15 +53,6 @@ const ELO_OPTIONS: EloOption[] = [
     baseline: 1600,
     skillLevel: "advanced",
   },
-];
-
-const BOARD_THEMES: BoardTheme[] = [
-  { id: "walnut", name: "Walnut Wood", light: "#edd6b0", dark: "#b88762" },
-  { id: "tournament", name: "Tournament Green", light: "#eeeed2", dark: "#769656" },
-  { id: "obsidian", name: "Obsidian Charcoal", light: "#26221f", dark: "#161311" },
-  { id: "icy-sea", name: "Icy Sea", light: "#dee3e6", dark: "#7896a4" },
-  { id: "coral", name: "Coral Stone", light: "#f7e6d4", dark: "#d18b72" },
-  { id: "midnight", name: "Midnight Navy", light: "#e2e8f0", dark: "#334155" },
 ];
 
 function GoogleLogo({ className = "w-4 h-4 shrink-0" }: { className?: string }) {
@@ -496,7 +481,7 @@ export default function RootPage() {
   // User calibration choices
   const [startingElo, setStartingElo] = useState<number>(1000);
   const [targetElo, setTargetElo] = useState<number>(1400);
-  const [selectedTheme, setSelectedTheme] = useState<BoardTheme>(BOARD_THEMES[0]); // Walnut Wood default
+  const [selectedTheme, setSelectedTheme] = useState<BoardTheme>(() => getStoredBoardTheme());
 
   // Auth form state
   const [authMode, setAuthMode] = useState<"signup" | "signin">("signup");
@@ -558,7 +543,7 @@ export default function RootPage() {
     try {
       window.localStorage.setItem("chess_reel_elo", String(startingElo));
       window.localStorage.setItem("chess_reel_target_elo", String(targetElo));
-      window.localStorage.setItem("chess_reel_board_theme", selectedTheme.id);
+      setStoredBoardTheme(selectedTheme.id);
     } catch {}
   };
 
@@ -573,6 +558,20 @@ export default function RootPage() {
   // Handle direct guest access
   const handleGuestEnter = () => {
     saveCalibrationToStorage();
+    const guestAccount = {
+      id: `guest_${Date.now()}`,
+      username: `tactician_${Math.floor(1000 + Math.random() * 9000)}`,
+      displayName: "Guest Tactician",
+      avatar: "♟",
+      elo: startingElo,
+      isCalibrated: true,
+      calibrationStep: 6,
+      plan: "free",
+    };
+    window.localStorage.setItem("chess_reel_account", JSON.stringify(guestAccount));
+    window.localStorage.setItem("chess_reel_username", guestAccount.username);
+    window.localStorage.setItem("chess_reel_elo", String(startingElo));
+    window.dispatchEvent(new Event("account-updated"));
     router.push("/play");
   };
 
@@ -1018,7 +1017,10 @@ export default function RootPage() {
                       return (
                         <button
                           key={theme.id}
-                          onClick={() => setSelectedTheme(theme)}
+                          onClick={() => {
+                            setSelectedTheme(theme);
+                            setStoredBoardTheme(theme.id);
+                          }}
                           type="button"
                           className={`relative p-3 rounded-2xl border transition-all duration-150 flex flex-col items-center gap-2 cursor-pointer ${
                             isSelected
