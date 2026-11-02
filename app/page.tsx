@@ -295,20 +295,20 @@ function SmotheredMateVignette() {
                     : "#26221f",
               }}
             >
-              {/* 1. Black King at square 0 - Topples over cleanly within its square when smothered! */}
+              {/* 1. Black King at square 0 - Topples over cleanly when smothered! */}
               {isKingSquare && (
                 <motion.div
                   animate={
                     isCheckmated
                       ? {
-                          rotate: 85,
-                          y: 4,
+                          rotate: 84,
+                          y: 6,
                           x: 0,
-                          scale: 0.92,
+                          scale: 0.88,
                           transition: {
                             type: "spring",
                             stiffness: 280,
-                            damping: 15,
+                            damping: 14,
                           },
                         }
                       : {
@@ -322,56 +322,73 @@ function SmotheredMateVignette() {
                   style={{ transformOrigin: "center" }}
                   className="relative z-10 flex items-center justify-center"
                 >
-                  <MinimalPiece type="k" isWhite={false} className="w-8 h-8" />
+                  <img
+                    src="/Sprites/b_king.svg"
+                    alt="Black King"
+                    className="w-12 h-12 object-contain select-none pointer-events-none drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)]"
+                  />
                 </motion.div>
               )}
 
               {/* 2. Smothering Black army */}
               {isRookSquare && (
-                <MinimalPiece type="r" isWhite={false} className="w-8 h-8 opacity-85" />
+                <img
+                  src="/Sprites/b_rook.svg"
+                  alt="Black Rook"
+                  className="w-11 h-11 object-contain select-none pointer-events-none drop-shadow-[0_0_1.5px_rgba(255,255,255,0.35)] drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)]"
+                />
               )}
               {isPawn1Square && (
-                <MinimalPiece type="p" isWhite={false} className="w-7 h-7 opacity-85" />
+                <img
+                  src="/Sprites/b_pawn.svg"
+                  alt="Black Pawn"
+                  className="w-10 h-10 object-contain select-none pointer-events-none drop-shadow-[0_0_1.5px_rgba(255,255,255,0.4)] drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)]"
+                />
               )}
               {isPawn2Square && (
-                <MinimalPiece type="p" isWhite={false} className="w-7 h-7 opacity-85" />
+                <img
+                  src="/Sprites/b_pawn.svg"
+                  alt="Black Pawn"
+                  className="w-10 h-10 object-contain select-none pointer-events-none drop-shadow-[0_0_1.5px_rgba(255,255,255,0.4)] drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)]"
+                />
               )}
 
               {/* 3. Target square golden impact ring */}
               {isTargetSquare && isCheckmated && (
-                <div className="absolute inset-0 rounded-lg border border-[#c29b78]/50 bg-[#c29b78]/10 animate-pulse pointer-events-none" />
+                <div className="absolute inset-0 rounded-lg border-2 border-[#c29b78]/60 bg-[#c29b78]/15 animate-pulse pointer-events-none" />
               )}
 
-              {/* 4. White Knight: leaps from square 13 (row 3, col 1) to square 6 (row 1, col 2) */}
+              {/* 4. White Knight: leaps in authentic chess L-shape from square 13 (row 3, col 1) to square 6 (row 1, col 2) */}
               {isKnightStartSquare && (
                 <motion.div
                   animate={
                     animPhase === "idle"
                       ? { x: 0, y: 0, scale: 1, rotate: 0 }
                       : {
-                          x: [0, 20, 60],
-                          y: [0, -85, -120],
-                          scale: [1, 1.35, 1],
-                          rotate: [0, -10, 2, 0],
+                          x: [0, 0, 60],
+                          y: [0, -120, -120],
+                          scale: [1, 1.3, 1],
+                          rotate: [0, -6, 0],
                         }
                   }
                   transition={
                     animPhase === "idle"
                       ? { duration: 0.3 }
                       : {
-                          duration: 0.65,
-                          ease: [0.22, 1, 0.36, 1],
+                          duration: 0.72,
+                          times: [0, 0.55, 1],
+                          ease: ["easeInOut", "easeOut"],
                         }
                   }
                   className="relative z-20 flex items-center justify-center cursor-default"
                 >
                   <div className="relative">
                     {/* Glowing golden aura */}
-                    <div className="absolute inset-0 rounded-full bg-[#c29b78]/30 blur-md animate-pulse" />
-                    <MinimalPiece
-                      type="n"
-                      isWhite={true}
-                      className="w-8 h-8 relative z-10 drop-shadow-[0_0_10px_rgba(194,155,120,0.85)]"
+                    <div className="absolute inset-0 rounded-full bg-[#c29b78]/35 blur-md animate-pulse" />
+                    <img
+                      src="/Sprites/w_knight.svg"
+                      alt="White Knight"
+                      className="w-12 h-12 object-contain select-none pointer-events-none relative z-10 drop-shadow-[0_0_12px_rgba(194,155,120,0.9)]"
                     />
                   </div>
                 </motion.div>
@@ -380,16 +397,33 @@ function SmotheredMateVignette() {
           );
         })}
 
-        {/* Trajectory Guide (pulsing while idle) */}
+        {/* Authentic Chess Broadcast Tactical L-Arrow */}
         {animPhase === "idle" && (
-          <svg className="absolute inset-0 w-full h-full pointer-events-none">
+          <svg className="absolute inset-0 w-full h-full pointer-events-none z-15">
+            <defs>
+              <marker
+                id="chess-arrowhead"
+                viewBox="0 0 10 10"
+                refX="7"
+                refY="5"
+                markerWidth="6"
+                markerHeight="6"
+                orient="auto-start-reverse"
+              >
+                <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#c29b78" opacity="0.9" />
+              </marker>
+            </defs>
+            {/* Solid L-shaped arrow: 2 squares UP, 1 square RIGHT */}
             <path
-              d="M 90 210 Q 100 135 150 90"
+              d="M 90 196 L 90 98 Q 90 90 98 90 L 138 90"
               fill="none"
               stroke="#c29b78"
-              strokeWidth="1.5"
-              strokeDasharray="4 4"
-              className="opacity-40 animate-pulse"
+              strokeWidth="5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              opacity="0.8"
+              markerEnd="url(#chess-arrowhead)"
+              className="drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]"
             />
           </svg>
         )}
