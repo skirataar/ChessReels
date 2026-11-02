@@ -18,7 +18,7 @@ export function LandingPage({
   onOpenLogin,
 }: LandingPageProps) {
   return (
-    <div className="min-h-screen bg-[#151413] font-sans text-[#f5f5f5] selection:bg-[#c29b78] selection:text-[#151413] flex flex-col justify-center items-center px-4 py-8 relative overflow-hidden">
+    <div className="min-h-screen bg-[#0f0e0d] font-sans text-[#f5f5f5] selection:bg-[#c29b78] selection:text-[#0f0e0d] flex flex-col justify-center items-center px-4 py-8 relative overflow-hidden">
       {/* Ambient background glow accents */}
       <div className="absolute top-1/4 -left-20 w-72 h-72 rounded-full bg-[#c29b78]/10 blur-[90px] pointer-events-none" />
       <div className="absolute bottom-1/4 -right-20 w-72 h-72 rounded-full bg-[#c29b78]/10 blur-[90px] pointer-events-none" />
@@ -32,10 +32,10 @@ export function LandingPage({
         {/* Brand Name directly on top of the buttons */}
         <div className="text-center mb-6">
           <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-[#f5f5f5]">
-            Chess<span className="text-[#c29b78]">Reel</span>
+            Doom<span className="text-[#c29b78]">Chess</span>
           </h1>
-          <p className="text-xs sm:text-sm text-[#a3a3a3] mt-1.5 font-medium">
-            Master tactics in 30-second bites
+          <p className="text-xs sm:text-sm text-[#a3a3a3] mt-1.5 font-medium tracking-wide">
+            Turn doomscrolling into tactical mastery
           </p>
         </div>
 
@@ -45,7 +45,7 @@ export function LandingPage({
           <button
             onClick={onContinueWithGoogle}
             type="button"
-            className="w-full h-12 rounded-xl bg-[#22201e] hover:bg-[#2a2724] border border-[#c29b78]/30 hover:border-[#c29b78]/60 text-white font-bold text-sm transition-all duration-200 flex items-center justify-center gap-3 shadow-lg shadow-black/40 active:scale-98 cursor-pointer"
+            className="w-full h-12 rounded-xl bg-[#1f1d1b] hover:bg-[#282522] border border-[#c29b78]/30 hover:border-[#c29b78]/60 text-white font-bold text-sm transition-[transform,background-color,border-color] duration-150 ease-out flex items-center justify-center gap-3 shadow-lg shadow-black/40 active:scale-[0.97] cursor-pointer"
           >
             <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
               <path
@@ -72,7 +72,7 @@ export function LandingPage({
           <button
             onClick={onOpenLogin}
             type="button"
-            className="w-full h-12 rounded-xl bg-[#c29b78] hover:bg-[#d4b08f] text-[#151413] font-black text-sm uppercase tracking-wider transition-all duration-200 flex items-center justify-center gap-2 shadow-lg shadow-[#c29b78]/25 active:scale-98 cursor-pointer"
+            className="w-full h-12 rounded-xl bg-[#c29b78] hover:bg-[#d4b08f] text-[#0f0e0d] font-black text-sm uppercase tracking-wider transition-[transform,background-color] duration-150 ease-out flex items-center justify-center gap-2 shadow-lg shadow-[#c29b78]/25 active:scale-[0.97] cursor-pointer"
           >
             <LogIn className="w-4 h-4 stroke-[2.5]" />
             <span>Log In</span>

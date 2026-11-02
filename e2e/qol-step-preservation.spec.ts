@@ -24,9 +24,25 @@ test.describe("QOL Step Preservation on Retry", () => {
       });
     });
 
+    await page.route("**/api/user/account**", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          user: {
+            id: "test-qol-calibrated-user-1",
+            username: "qol_user_1",
+            elo: 1250,
+            isCalibrated: true,
+            plan: "free",
+          },
+        }),
+      });
+    });
+
     await page.addInitScript(() => {
       window.localStorage.setItem("chess_reel_account", JSON.stringify({
-        id: "test-qol-user-1",
+        id: "test-qol-calibrated-user-1",
         username: "qol_user_1",
         elo: 1250,
         isCalibrated: true,
@@ -36,6 +52,7 @@ test.describe("QOL Step Preservation on Retry", () => {
       window.localStorage.setItem("chess_reel_elo", "1250");
     });
 
+    await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/play", { waitUntil: "networkidle" });
 
     const boardContainer = page.locator('[data-testid="chessboard-container"]');
@@ -78,7 +95,7 @@ test.describe("QOL Step Preservation on Retry", () => {
     await expect(restartBtn).toBeVisible();
 
     // 4. Click "Retry"
-    await retryBtn.click();
+    await retryBtn.click({ force: true });
 
     // Error banner should disappear and NO "Saved progress" toast pill dropdown should appear
     await expect(failedBanner).not.toBeVisible();
@@ -135,6 +152,7 @@ test.describe("QOL Step Preservation on Retry", () => {
       window.localStorage.setItem("chess_reel_elo", "1250");
     });
 
+    await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/play", { waitUntil: "networkidle" });
 
     const boardContainer = page.locator('[data-testid="chessboard-container"]');
@@ -157,7 +175,7 @@ test.describe("QOL Step Preservation on Retry", () => {
 
     // Click "Restart"
     const restartBtn = page.locator('[data-testid="restart-puzzle-btn"]');
-    await restartBtn.click();
+    await restartBtn.click({ force: true });
 
     // Should reset all the way back to Step 1 of 2
     await expect(page.getByText(/Step 1 of 2/i)).toBeVisible();

@@ -174,11 +174,11 @@ test.describe("Checklist Verification - Sections 3, 5, 6 & Bug Fixes", () => {
       expect(res.ok()).toBe(true);
 
       const manifest = await res.json();
-      expect(manifest.name).toBe("Chess Reel");
-      expect(manifest.short_name).toBe("ChessReel");
+      expect(manifest.name).toBe("DoomChess");
+      expect(manifest.short_name).toBe("DoomChess");
       expect(manifest.display).toBe("standalone");
       expect(manifest.start_url).toBe("/");
-      expect(manifest.theme_color).toBe("#0a0a0a");
+      expect(manifest.theme_color).toBe("#0f0e0d");
       expect(manifest.icons.length).toBeGreaterThan(0);
     });
 

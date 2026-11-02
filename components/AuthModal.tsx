@@ -1,7 +1,23 @@
 "use client";
 
 import React, { useState, useRef } from "react";
-import { X, ArrowRight, LogIn, UserPlus, ShieldCheck, Check, Lock, Eye, EyeOff, Sparkles, Upload, Camera } from "lucide-react";
+import {
+  X,
+  ArrowRight,
+  LogIn,
+  UserPlus,
+  ShieldCheck,
+  Check,
+  Lock,
+  Eye,
+  EyeOff,
+  Sparkles,
+  Upload,
+  Camera,
+  Target,
+  Zap,
+  Trophy,
+} from "lucide-react";
 import { CURATED_AVATARS, compressImageFile } from "@/lib/avatarUpload";
 
 export interface AuthModalProps {
@@ -30,7 +46,6 @@ const SKILL_OPTIONS: {
   ratingLabel: string;
   baseElo: number;
   description: string;
-  icon: string;
 }[] = [
   {
     id: "beginner",
@@ -38,7 +53,6 @@ const SKILL_OPTIONS: {
     ratingLabel: "< 1000 Elo",
     baseElo: 600,
     description: "New to tactics, learning basic forks & pins",
-    icon: "🌱",
   },
   {
     id: "intermediate",
@@ -46,7 +60,6 @@ const SKILL_OPTIONS: {
     ratingLabel: "1000 – 1500 Elo",
     baseElo: 1200,
     description: "Solid tactical foundations & discoveries",
-    icon: "⚔️",
   },
   {
     id: "advanced",
@@ -54,7 +67,6 @@ const SKILL_OPTIONS: {
     ratingLabel: "1500+ Elo",
     baseElo: 1600,
     description: "Sharp calculation & deep combinations",
-    icon: "👑",
   },
 ];
 
@@ -254,7 +266,7 @@ export function AuthModal({
               <p className="text-[11px] text-[#a3a3a3] font-medium">
                 {tab === "register"
                   ? "Save your rating & streaks securely in the cloud"
-                  : "Welcome back to ChessReel"}
+                  : "Welcome back to DoomChess"}
               </p>
             </div>
           </div>
@@ -270,50 +282,52 @@ export function AuthModal({
         {/* Google Authentication Dialog Prompt */}
         {showGooglePrompt ? (
           <div className="p-5 space-y-4 bg-[#151413] overflow-y-auto">
-            <div className="flex items-center gap-3 p-3 rounded-xl bg-[#22201e] border border-white/10">
-              <svg className="w-6 h-6 shrink-0" viewBox="0 0 24 24">
+            <div className="flex items-center gap-3 p-3.5 rounded-2xl bg-[#22201e] border border-white/10 shadow-sm">
+              <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
                 <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
                 <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
                 <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
               </svg>
               <div>
-                <p className="text-xs font-bold text-[#f5f5f5]">Sign in with Google to Chess Reel</p>
-                <p className="text-[11px] text-[#a3a3a3]">Sync your Elo securely via Google OAuth 2.0</p>
+                <p className="text-xs font-bold text-[#f5f5f5]">Sign in with Google</p>
+                <p className="text-[11px] text-[#a3a3a3]">Save your rating, streaks, and progress securely</p>
               </div>
             </div>
 
-            {/* Skill Tier for New Google Users */}
+            {/* Skill Baseline for New Google Users */}
             <div>
-              <label className="text-[11px] font-bold uppercase tracking-wider text-[#a3a3a3] block mb-1.5">
+              <label className="text-[10px] font-bold uppercase tracking-wider text-[#a3a3a3] block mb-1.5">
                 Select Your Skill Baseline
               </label>
               <div className="grid grid-cols-3 gap-2">
-                {SKILL_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    onClick={() => setSelectedSkill(opt.id)}
-                    className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
-                      selectedSkill === opt.id
-                        ? "bg-[#22201e] border-[#c29b78] shadow-sm shadow-[#c29b78]/20"
-                        : "bg-[#22201e]/60 border-white/5 hover:border-white/20"
-                    }`}
-                  >
-                    <div className="text-sm">{opt.icon}</div>
-                    <div className="text-xs font-bold text-[#f5f5f5]">{opt.title}</div>
-                    <div className="text-[10px] text-[#c29b78] font-mono">{opt.baseElo} Elo</div>
-                  </button>
-                ))}
+                {SKILL_OPTIONS.map((opt) => {
+                  const isSelected = selectedSkill === opt.id;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setSelectedSkill(opt.id)}
+                      className={`p-3 rounded-xl text-center border transition-all cursor-pointer ${
+                        isSelected
+                          ? "bg-[#282420] border-[#c29b78] shadow-sm shadow-[#c29b78]/25 ring-1 ring-[#c29b78]/40"
+                          : "bg-[#22201e]/60 border-white/5 hover:border-white/20"
+                      }`}
+                    >
+                      <div className="text-xs font-bold text-[#f5f5f5] mb-0.5">{opt.title}</div>
+                      <div className="text-[11px] text-[#c29b78] font-mono font-semibold">{opt.baseElo} Elo</div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            {/* Primary Google OAuth Button */}
+            {/* Primary Google Button */}
             <button
               type="button"
               disabled={isLoading}
               onClick={handleGoogleOAuthRedirect}
-              className="w-full py-3 rounded-xl bg-white hover:bg-neutral-100 text-neutral-900 text-xs font-bold uppercase tracking-wider transition-all shadow-md cursor-pointer flex items-center justify-center gap-2.5 active:scale-98"
+              className="w-full py-3 rounded-xl bg-white hover:bg-neutral-100 text-neutral-900 text-xs font-bold transition-all shadow-md cursor-pointer flex items-center justify-center gap-2.5 active:scale-98"
             >
               <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -321,8 +335,8 @@ export function AuthModal({
                 <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
                 <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
               </svg>
-              <span>{isLoading ? "Redirecting to Google..." : "Continue with Google (OAuth)"}</span>
-              <ArrowRight className="w-4 h-4" />
+              <span>{isLoading ? "Redirecting..." : "Continue with Google"}</span>
+              <ArrowRight className="w-4 h-4 text-neutral-700" />
             </button>
 
             {/* Quick Test Sign-In */}
@@ -429,8 +443,9 @@ export function AuthModal({
               {/* Google OAuth Quick Button */}
               <button
                 type="button"
-                onClick={() => setShowGooglePrompt(true)}
-                className="w-full py-2.5 rounded-xl bg-[#22201e] hover:bg-[#2d2a28] border border-white/10 text-white text-xs font-bold transition-all shadow-sm cursor-pointer flex items-center justify-center gap-2.5 active:scale-98"
+                disabled={isLoading}
+                onClick={handleGoogleOAuthRedirect}
+                className="w-full py-2.5 rounded-xl bg-[#22201e] hover:bg-[#282522] border border-white/10 text-white text-xs font-bold transition-[transform,background-color] duration-150 ease-out shadow-sm cursor-pointer flex items-center justify-center gap-2.5 active:scale-[0.97]"
               >
                 <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
                   <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -438,7 +453,7 @@ export function AuthModal({
                   <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
                   <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
                 </svg>
-                <span>Continue with Google</span>
+                <span>{isLoading ? "Connecting to Google..." : "Continue with Google"}</span>
               </button>
 
               <div className="flex items-center gap-3">
@@ -470,8 +485,14 @@ export function AuthModal({
                                 : "bg-[#22201e]/60 border-white/5 hover:border-white/20"
                             }`}
                           >
-                            <div className="w-8 h-8 rounded-lg bg-[#151413] flex items-center justify-center text-base shrink-0">
-                              {opt.icon}
+                            <div className="w-8 h-8 rounded-lg bg-[#151413] border border-white/5 flex items-center justify-center shrink-0">
+                              {opt.id === "beginner" ? (
+                                <Target className="w-4 h-4 text-[#a3a3a3]" />
+                              ) : opt.id === "intermediate" ? (
+                                <Zap className="w-4 h-4 text-[#c29b78]" />
+                              ) : (
+                                <Trophy className="w-4 h-4 text-[#e5ba82]" />
+                              )}
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center justify-between">
@@ -738,13 +759,23 @@ export function AuthModal({
                   <button
                     type="submit"
                     disabled={isLoading}
-                    className="w-full py-3 rounded-xl bg-[#c29b78] hover:bg-[#d4b08f] disabled:opacity-50 text-[#151413] font-black text-xs uppercase tracking-wider transition-all cursor-pointer shadow-lg shadow-[#c29b78]/25 flex items-center justify-center gap-2 active:scale-98"
+                    className="w-full py-3 rounded-xl bg-[#c29b78] hover:bg-[#d4b08f] disabled:opacity-50 text-[#0f0e0d] font-black text-xs uppercase tracking-wider transition-[transform,background-color] duration-150 ease-out cursor-pointer shadow-lg shadow-[#c29b78]/25 flex items-center justify-center gap-2 active:scale-[0.97]"
                   >
-                    <span>{isLoading ? "Signing In..." : "Sign In to ChessReel"}</span>
+                    <span>{isLoading ? "Signing In..." : "Sign In to DoomChess"}</span>
                     <LogIn className="w-4 h-4 stroke-[2.5]" />
                   </button>
                 </form>
               )}
+              {/* Developer / Offline Quick Test Sign-In Option */}
+              <div className="pt-1 text-center">
+                <button
+                  type="button"
+                  onClick={() => setShowGooglePrompt(true)}
+                  className="text-[10px] text-[#737373] hover:text-[#c29b78] transition-colors cursor-pointer"
+                >
+                  Quick Test Sign-In (without Google)
+                </button>
+              </div>
             </div>
           </div>
         )}

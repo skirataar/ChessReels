@@ -1,12 +1,12 @@
 {
-  "name": "Chess Reel",
-  "short_name": "ChessReel",
-  "description": "Mobile-first, Elo-adaptive chess puzzle reels",
+  "name": "DoomChess",
+  "short_name": "DoomChess",
+  "description": "Turn doomscrolling into tactical chess mastery",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#0a0a0a",
-  "theme_color": "#0a0a0a",
+  "background_color": "#0f0e0d",
+  "theme_color": "#0f0e0d",
   "icons": [
     {
       "src": "/icons/icon.svg",

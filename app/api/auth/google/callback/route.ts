@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { getPublicBaseUrl, buildPublicRedirectUrl } from "@/lib/authUrl";
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -7,26 +8,13 @@ export async function GET(request: NextRequest) {
   const state = searchParams.get("state");
   const error = searchParams.get("error");
 
-  const host = request.headers.get("host") || "localhost:3000";
-  const protocol =
-    request.headers.get("x-forwarded-proto") ||
-    (host.startsWith("localhost") ? "http" : "https");
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || `${protocol}://${host}`;
-  const redirectUri = `${appUrl}/api/auth/google/callback`;
-
-  // 1. Handle error returned by Google
-  if (error) {
-    console.error("Google OAuth returned an error:", error);
-    const returnUrl = new URL("/", request.url);
-    returnUrl.searchParams.set("oauth_error", error);
-    return NextResponse.redirect(returnUrl);
-  }
-
-  // 2. Decode state payload
+  // 1. Decode state payload first to restore original initiating origin
   let stateData: {
     skillLevel?: string;
     guestId?: string;
     returnUrl?: string;
+    origin?: string;
+    redirectUri?: string;
   } = {};
 
   if (state) {
@@ -37,11 +25,21 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  const originBase = stateData.origin || getPublicBaseUrl(request);
+  const redirectUri = stateData.redirectUri || `${originBase}/api/auth/google/callback`;
   const skillLevel = stateData.skillLevel || "intermediate";
-  const returnTarget = stateData.returnUrl || "/";
+  const returnTarget = stateData.returnUrl || "/play";
+
+  // 2. Handle error returned by Google
+  if (error) {
+    console.error("Google OAuth returned an error:", error);
+    const returnUrl = buildPublicRedirectUrl("/", request, originBase);
+    returnUrl.searchParams.set("oauth_error", error);
+    return NextResponse.redirect(returnUrl);
+  }
 
   if (!code) {
-    const returnUrl = new URL(returnTarget, request.url);
+    const returnUrl = buildPublicRedirectUrl(returnTarget, request, originBase);
     returnUrl.searchParams.set("oauth_error", "missing_authorization_code");
     return NextResponse.redirect(returnUrl);
   }
@@ -63,7 +61,7 @@ export async function GET(request: NextRequest) {
       const clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
 
       if (!clientId || !clientSecret) {
-        const returnUrl = new URL(returnTarget, request.url);
+        const returnUrl = buildPublicRedirectUrl(returnTarget, request, originBase);
         returnUrl.searchParams.set("oauth_error", "missing_credentials");
         return NextResponse.redirect(returnUrl);
       }
@@ -84,7 +82,7 @@ export async function GET(request: NextRequest) {
       if (!tokenResponse.ok) {
         const errText = await tokenResponse.text();
         console.error("Failed to exchange code for token with Google:", errText);
-        const returnUrl = new URL(returnTarget, request.url);
+        const returnUrl = buildPublicRedirectUrl(returnTarget, request, originBase);
         returnUrl.searchParams.set("oauth_error", "token_exchange_failed");
         return NextResponse.redirect(returnUrl);
       }
@@ -103,7 +101,7 @@ export async function GET(request: NextRequest) {
       if (!userInfoResponse.ok) {
         const errText = await userInfoResponse.text();
         console.error("Failed to fetch userinfo from Google:", errText);
-        const returnUrl = new URL(returnTarget, request.url);
+        const returnUrl = buildPublicRedirectUrl(returnTarget, request, originBase);
         returnUrl.searchParams.set("oauth_error", "userinfo_fetch_failed");
         return NextResponse.redirect(returnUrl);
       }
@@ -116,7 +114,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (!email) {
-      const returnUrl = new URL(returnTarget, request.url);
+      const returnUrl = buildPublicRedirectUrl(returnTarget, request, originBase);
       returnUrl.searchParams.set("oauth_error", "email_not_provided");
       return NextResponse.redirect(returnUrl);
     }
@@ -200,7 +198,7 @@ export async function GET(request: NextRequest) {
       calibrationStep: user.calibrationStep,
     };
 
-    const targetUrl = new URL(returnTarget, request.url);
+    const targetUrl = buildPublicRedirectUrl(returnTarget, request, originBase);
     targetUrl.searchParams.set("google_auth", "success");
 
     const response = NextResponse.redirect(targetUrl);
@@ -212,7 +210,7 @@ export async function GET(request: NextRequest) {
       {
         path: "/",
         httpOnly: false, // Accessible to client-side script on page load
-        secure: process.env.NODE_ENV === "production",
+        secure: process.env.NODE_ENV === "production" || originBase.startsWith("https"),
         sameSite: "lax",
         maxAge: 60 * 5, // 5 minutes
       }
@@ -227,7 +225,7 @@ export async function GET(request: NextRequest) {
     return response;
   } catch (err) {
     console.error("Exception in Google OAuth callback:", err);
-    const returnUrl = new URL(returnTarget, request.url);
+    const returnUrl = buildPublicRedirectUrl(returnTarget, request, originBase);
     returnUrl.searchParams.set("oauth_error", "internal_oauth_error");
     return NextResponse.redirect(returnUrl);
   }

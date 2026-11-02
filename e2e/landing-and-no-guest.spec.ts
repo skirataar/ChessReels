@@ -21,13 +21,13 @@ test.describe("Landing Page & No-Guest Access Auth Flow", () => {
     await page.waitForTimeout(1000);
 
     // 1. Verify Animated Hero is rendered
-    const brandTitle = page.locator("h1:has-text('Chess')");
+    const brandTitle = page.locator("h1:has-text('Doom')");
     await expect(brandTitle).toBeVisible();
-    await expect(page.locator("text=Reel")).toBeVisible();
+    await expect(page.locator("text=Chess")).toBeVisible();
 
     // 2. Verify Tagline directly under name
     await expect(
-      page.locator("text=Master tactics in 30-second bites")
+      page.locator("text=Turn doomscrolling into tactical mastery")
     ).toBeVisible();
 
     // 3. Verify exactly two primary action buttons: Continue with Google & Log In
@@ -69,7 +69,7 @@ test.describe("Landing Page & No-Guest Access Auth Flow", () => {
     // Should show landing page, chessboard should not be playable
     await expect(page.locator("button:has-text('Continue with Google')")).toBeVisible();
     await expect(page.locator("button:has-text('Log In')")).toBeVisible();
-    await expect(page.locator("h1:has-text('Chess')")).toBeVisible();
+    await expect(page.locator("h1:has-text('Doom')")).toBeVisible();
   });
 
   test("3. Unauthenticated visit to /stats redirects to root landing page", async ({
@@ -170,4 +170,106 @@ test.describe("Landing Page & No-Guest Access Auth Flow", () => {
       fullPage: true,
     });
   });
+
+  test("6. Clicking Continue with Google directly redirects to Google OAuth without asking for Elo again", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("http://localhost:3000/");
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
+    await page.waitForTimeout(1000);
+
+    // 1. In Log In modal, Continue with Google initiates Google OAuth directly without showing skill picker
+    const loginBtn = page.locator("button:has-text('Log In')");
+    await loginBtn.click();
+    await expect(page.locator("text=Sign In to DoomChess")).toBeVisible();
+
+    const [request] = await Promise.all([
+      page.waitForRequest((req) => req.url().includes("/api/auth/google")),
+      page.locator("role=dialog").locator("button:has-text('Continue with Google')").click(),
+    ]);
+    expect(request.url()).toContain("/api/auth/google");
+
+    // 2. On Landing page, Continue with Google also directly navigates to /api/auth/google
+    await page.goto("http://localhost:3000/");
+    await page.waitForTimeout(500);
+
+    const [landingRequest] = await Promise.all([
+      page.waitForRequest((req) => req.url().includes("/api/auth/google")),
+      page.locator("main").locator("button:has-text('Continue with Google')").click(),
+    ]);
+    expect(landingRequest.url()).toContain("/api/auth/google");
+  });
+
+  test("7. Bottom dock is permanently visible across unauthenticated, authenticated, and post-logout states", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("http://localhost:3000/");
+
+    // Clear state
+    await page.evaluate(() => {
+      localStorage.clear();
+      document.cookie = "chess_reel_session=; path=/; max-age=0";
+      document.cookie = "chess_reel_oauth_user=; path=/; max-age=0";
+    });
+    await page.reload();
+    await page.waitForTimeout(1000);
+
+    // 1. Unauthenticated on Landing Page: dock is visible!
+    const bottomNav = page.locator("nav[aria-label='Bottom Navigation']");
+    await expect(bottomNav).toBeVisible();
+
+    const playTab = page.locator("[data-testid='bottom-nav-play']");
+    const practiceTab = page.locator("[data-testid='bottom-nav-practice']");
+    const profileTab = page.locator("[data-testid='bottom-nav-profile']");
+
+    await expect(playTab).toBeVisible();
+    await expect(practiceTab).toBeVisible();
+    await expect(profileTab).toBeVisible();
+
+    // 2. Clicking Profile while unauthenticated opens AuthModal
+    await profileTab.click();
+    await expect(page.locator("role=dialog")).toBeVisible();
+    await expect(page.locator("text=Sign In to DoomChess")).toBeVisible();
+
+    // Close AuthModal
+    await page.locator("button[aria-label='Close modal']").click();
+    await page.waitForTimeout(400);
+
+    // 3. Clicking Practice while unauthenticated opens AuthModal
+    await practiceTab.click();
+    await expect(page.locator("role=dialog")).toBeVisible();
+
+    // Close AuthModal
+    await page.locator("button[aria-label='Close modal']").click();
+    await page.waitForTimeout(400);
+
+    // 4. Authenticate user
+    await page.evaluate(() => {
+      const mockUser = {
+        id: "user-persistent-dock-test",
+        username: "DockMaster",
+        displayName: "Dock Master",
+        elo: 1400,
+        plan: "free",
+        isCalibrated: true,
+      };
+      localStorage.setItem("chess_reel_account", JSON.stringify(mockUser));
+      document.cookie = "chess_reel_session=user-persistent-dock-test; path=/; max-age=86400";
+    });
+    await page.reload();
+    await page.waitForTimeout(1000);
+
+    // Dock is still visible in game view
+    await expect(bottomNav).toBeVisible();
+
+    // Take screenshot of mobile screen with visible dock
+    await page.screenshot({
+      path: path.join(ARTIFACT_DIR, "dock_visible_mobile.png"),
+      fullPage: false,
+    });
+  });
 });
+

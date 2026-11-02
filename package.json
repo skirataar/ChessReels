@@ -4,14 +4,19 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma generate && next build --webpack",
     "start": "next start",
     "admin": "tsx scripts/admin-console.ts",
-    "lint": "eslint"
+    "lint": "eslint",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1161.0",
     "@base-ui/react": "^1.9.0",
     "@ducanh2912/next-pwa": "^10.2.9",
+    "@neon/config": "^1.10.0",
+    "@neon/env": "^1.6.8",
+    "@neon/realtime": "^0.1.2",
     "@prisma/adapter-pg": "^7.10.1",
     "@prisma/client": "7.10.1",
     "canvas-confetti": "^1.9.4",

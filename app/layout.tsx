@@ -21,13 +21,13 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Chess Reel - Elo-Adaptive Chess Puzzles",
-  description: "Mobile-first, Elo-adaptive chess puzzle reels with instant feedback",
+  title: "DoomChess — Tactical Chess Puzzle Reels & Elo Mastery",
+  description: "Turn doomscrolling into tactical chess mastery. Mobile-first, Elo-adaptive chess puzzle reels with instant feedback.",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Chess Reel",
+    title: "DoomChess",
   },
   icons: {
     icon: "/icons/icon.svg",
@@ -39,7 +39,7 @@ import { BottomNav } from "@/components/BottomNav";
 import { PageTransition } from "@/components/PageTransition";
 
 export const viewport: Viewport = {
-  themeColor: "#151413",
+  themeColor: "#0f0e0d",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,

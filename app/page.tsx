@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import PlayPage from "./play/page";
+import PlayView from "@/components/PlayView";
 
 export default function RootPage() {
   const router = useRouter();
@@ -22,7 +22,7 @@ export default function RootPage() {
   }, [router]);
 
   if (shouldRenderLanding === true) {
-    return <PlayPage initialShowLanding={true} />;
+    return <PlayView initialShowLanding={true} />;
   }
 
   return (

@@ -177,4 +177,35 @@ Use this interactive checklist to test gameplay mechanics, edge cases, mobile UX
   - **Animated Chess Hero (`AnimatedChessHero.tsx`)**: 3D perspective floating tactical chessboard with smooth knight leap, landing ripple shockwave, golden Queen with sparkles, floating ambient dust motes, and radiant gold aura.
   - **Focused 2-Action Landing Page (`LandingPage.tsx`)**: Removed all pricing tables, feature checklists, and guest preview buttons. Features brand name `ChessReel` directly above two primary buttons: `Continue with Google` and `Log In` (with subtle `Create Account` link).
   - **Bottom Dock Protection**: Hidden for unauthenticated visitors so the landing page remains 100% immersive.
-  - **E2E Test Coverage**: Verified with 5 comprehensive tests in `e2e/landing-and-no-guest.spec.ts`.
+  - **E2E Test Coverage**: Verified with 5 comprehensive tests in `e2e/landing-and-no-guest.spec.ts`
+- [x] **Universal OAuth Public Domain Resolution (`lib/authUrl.ts`)**:
+  - Eliminates hardcoded `localhost:3000` redirects during Google OAuth authentication.
+  - Dynamically extracts public host and protocol from `x-forwarded-host`, `x-forwarded-proto`, and `NEXT_PUBLIC_APP_URL`.
+  - Guarantees seamless login redirects when operating over Cloudflare tunnels (`*.trycloudflare.com`), custom domains, or production reverse proxies.
+- [x] **Clean Professional Google Auth Dialog (`AuthModal.tsx`)**:
+  - Removed all emojis (`🌱`, `⚔️`, `👑`) from the Elo skill baseline selection cards.
+  - Changed the primary action button to `"Continue with Google"` (removed technical `"(OAuth)"` label).
+  - Streamlined modal header copy from `"via Google OAuth 2.0"` to `"Save your rating, streaks, and progress securely"`.
+  - Replaced emojis in account creation with clean, minimalist Lucide icons.
+- [x] **Direct 1-Click Google Sign-In Flow**:
+  - Removed confusing intermediate popup that asked users to choose their skill baseline/Elo again when clicking 'Continue with Google'.
+  - Clicking 'Continue with Google' on either the Landing Page or the Log In modal directly redirects to `/api/auth/google`.
+  - Preserves existing accounts and Elo ratings seamlessly without any unwanted signup prompts.
+- [x] **Fully Dynamic OAuth Origin Reflection**:
+  - Eliminates hardcoded or environment-enforced domain redirects.
+  - When accessing via `http://localhost:3000`, Google OAuth redirects strictly back to `http://localhost:3000`.
+  - When accessing via Cloudflare tunnel, port-forwarding, or production domains, Google OAuth redirects back to that exact public domain.
+  - Round-trips the caller origin through OAuth `state` parameter for guaranteed return fidelity.
+- [x] **Persistent Bottom Navigation Dock (`BottomNav.tsx`)**:
+  - Fixed issue where the bottom dock vanished whenever users were unauthenticated, logged out, or after Google OAuth redirection.
+  - Dock remains permanently mounted and visible across all app views (`/play`, `/`, `/practice`, `/stats`), only hiding on `/admin`.
+  - Unauthenticated clicks on 'Practice' or 'Profile' dock tabs gracefully dispatch the sign-in modal rather than leaving the user stranded or hiding navigation.
+  - Synced `chess_reel_session` cookie and `account-updated` event dispatch on all Google and password authentication pathways.
+- [x] **Arrow Line Drawing & Swipe Isolation (`PuzzleCard.tsx`)**:
+  - Fixed bug where right-clicking or dragging on the chessboard to draw tactical lines/arrows inadvertently triggered vertical reel swipe up.
+  - Strictly required primary left-click (`e.button === 0`) for desktop drag-to-swipe simulation, allowing right-click arrow drawing to pass directly to `react-chessboard`.
+  - Ignored any touch or mouse drag gestures originating inside `[data-testid='chessboard-container']` so all piece moves, square selections, and annotations remain strictly isolated from reel transitions.
+  - Added mobile touch arrow drawing support with brand-tailored DoomChess warm gold arrows (`#c29b78`).
+  - Preserved fluid reel navigation when swiping outside the chessboard (mission header bar, status bar, and floating swipe cue pill).
+
+

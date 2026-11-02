@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Play, Target, User, Lock } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -32,6 +32,7 @@ const NAV_ITEMS: NavItem[] = [
 
 export function BottomNav() {
   const pathname = usePathname();
+  const router = useRouter();
   const [hasMounted, setHasMounted] = useState<boolean>(false);
   const [isPro, setIsPro] = useState<boolean>(false);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
@@ -67,10 +68,22 @@ export function BottomNav() {
     };
   }, []);
 
-  // Hide completely when not authenticated or on standalone admin console
-  if (!hasMounted || !isAuthenticated || pathname?.startsWith("/admin")) return null;
+  // Hide on standalone admin console (dock remains permanently visible across all app views)
+  if (!hasMounted || pathname?.startsWith("/admin")) return null;
 
   const handleNavClick = (e: React.MouseEvent, href: string) => {
+    if (!isAuthenticated) {
+      if (href === "/practice" || href === "/stats") {
+        e.preventDefault();
+        window.dispatchEvent(
+          new CustomEvent("open-auth-modal", { detail: { tab: "login" } })
+        );
+        if (pathname !== "/play" && pathname !== "/") {
+          router.push("/play");
+        }
+        return;
+      }
+    }
     if (href === "/practice" && !isPro) {
       if (pathname === "/play" || pathname === "/" || pathname === "/practice") {
         e.preventDefault();

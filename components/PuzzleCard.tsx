@@ -32,7 +32,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
-import { Chessboard } from "react-chessboard";
+import { Chessboard, defaultArrowOptions } from "react-chessboard";
 
 export interface PuzzleData {
   id: string;
@@ -1010,6 +1010,67 @@ export function PuzzleCard({
     }, 180);
   }, [isExiting, onNextPuzzle]);
 
+  // User drawn arrows state (synced with react-chessboard options.arrows)
+  const [touchArrows, setTouchArrows] = useState<Array<{ startSquare: string; endSquare: string; color: string }>>([]);
+  const touchArrowStartRef = useRef<{ square: string; x: number; y: number } | null>(null);
+  const touchArrowCurrentRef = useRef<string | null>(null);
+
+  // Clear drawn arrows on puzzle change or retry
+  useEffect(() => {
+    setTouchArrows([]);
+  }, [fen, puzzle?.id]);
+
+  const handleBoardTouchStart = (e: React.TouchEvent) => {
+    const target = e.target as HTMLElement | null;
+    const isPiece = Boolean(target?.closest("[data-piece]") || target?.closest(".piece"));
+    if (e.touches.length === 2 || (!isPiece && e.touches.length === 1)) {
+      const touch = e.touches[0];
+      const elem = document.elementFromPoint(touch.clientX, touch.clientY);
+      const square = elem?.closest("[data-square]")?.getAttribute("data-square");
+      if (square) {
+        touchArrowStartRef.current = { square, x: touch.clientX, y: touch.clientY };
+        touchArrowCurrentRef.current = square;
+      }
+    }
+  };
+
+  const handleBoardTouchMove = (e: React.TouchEvent) => {
+    if (!touchArrowStartRef.current) return;
+    const touch = e.touches[0];
+    const elem = document.elementFromPoint(touch.clientX, touch.clientY);
+    const square = elem?.closest("[data-square]")?.getAttribute("data-square");
+    if (square && square !== touchArrowStartRef.current.square) {
+      touchArrowCurrentRef.current = square;
+    }
+  };
+
+  const handleBoardTouchEnd = () => {
+    if (touchArrowStartRef.current && touchArrowCurrentRef.current) {
+      const start = touchArrowStartRef.current.square;
+      const end = touchArrowCurrentRef.current;
+      if (start && end && start !== end) {
+        setTouchArrows((prev) => {
+          const exists = prev.findIndex(
+            (a) => a.startSquare === start && a.endSquare === end
+          );
+          if (exists >= 0) {
+            return prev.filter((_, idx) => idx !== exists);
+          }
+          return [
+            ...prev,
+            {
+              startSquare: start,
+              endSquare: end,
+              color: "#c29b78",
+            },
+          ];
+        });
+      }
+    }
+    touchArrowStartRef.current = null;
+    touchArrowCurrentRef.current = null;
+  };
+
   // Touch handlers for mobile swipe
   const handleTouchStart = (e: React.TouchEvent) => {
     if (isExiting) return;
@@ -1022,7 +1083,13 @@ export function PuzzleCard({
       return;
     }
 
-    // 2. Ignore if touch started on a chess piece while puzzle is actively being played
+    // 2. Ignore if touch started anywhere on or inside the chessboard container (piece moves, square clicks, line drawing)
+    if (target?.closest("[data-testid='chessboard-container']")) {
+      touchStartRef.current = null;
+      return;
+    }
+
+    // 3. Ignore if touch started on a chess piece while puzzle is actively being played
     if (
       status === "playing" &&
       (target?.closest("[data-piece]") ||
@@ -1108,8 +1175,13 @@ export function PuzzleCard({
   // Mouse Drag (for desktop & simulator preview)
   const handleMouseDown = (e: React.MouseEvent) => {
     if (isExiting) return;
+    // Strictly require primary left-click for reel swipe (ignore right-click arrow drawing and middle clicks)
+    if (e.button !== 0) return;
+
     const target = e.target as HTMLElement | null;
     if (target?.closest("button, a, input, select, [role='button'], [data-interactive]")) return;
+    // Chessboard NEVER triggers reel swipe (moving pieces, clicking squares, drawing lines/arrows)
+    if (target?.closest("[data-testid='chessboard-container']")) return;
     if (status === "playing" && (target?.closest("[data-piece]") || target?.closest(".piece"))) return;
 
     isMouseDownRef.current = true;
@@ -1173,6 +1245,8 @@ export function PuzzleCard({
   // Wheel / Trackpad Scroll to advance / retry
   const handleWheel = (e: React.WheelEvent) => {
     if (isExiting) return;
+    const target = e.target as HTMLElement | null;
+    if (target?.closest("[data-testid='chessboard-container']")) return;
     const now = Date.now();
     if (now - lastWheelTimeRef.current < 500) return;
 
@@ -1303,6 +1377,10 @@ export function PuzzleCard({
       <div className="relative w-full aspect-square flex items-center justify-center my-0.5">
         <div
           data-testid="chessboard-container"
+          onTouchStart={handleBoardTouchStart}
+          onTouchMove={handleBoardTouchMove}
+          onTouchEnd={handleBoardTouchEnd}
+          onContextMenu={(e) => e.preventDefault()}
           className={`relative w-full h-full aspect-square overflow-hidden flex flex-col justify-between transition-all duration-300 touch-none ${
             isShaking ? "animate-board-shake" : ""
           }`}
@@ -1315,14 +1393,20 @@ export function PuzzleCard({
                 boardOrientation: boardOrientation,
                 allowDragging: status === "playing",
                 canDragPiece: () => status === "playing",
-                onPieceDrop: handlePieceDrop,
+                onPieceDrop: (args) => {
+                  setTouchArrows([]);
+                  return handlePieceDrop(args);
+                },
                 onPieceDrag: () => {
                   isPieceDragRef.current = true;
                 },
                 onPieceDragCancel: () => {
                   isPieceDragRef.current = false;
                 },
-                onSquareClick: handleSquareClick,
+                onSquareClick: (args) => {
+                  setTouchArrows([]);
+                  handleSquareClick(args);
+                },
                 squareStyles: highlightStyles,
                 animationDurationInMs: 250,
                 showNotation: false,
@@ -1331,6 +1415,21 @@ export function PuzzleCard({
                 lightSquareStyle: { backgroundColor: "#f0d9b5" },
                 dropSquareStyle: {
                   boxShadow: "inset 0 0 1px 3px rgba(194, 155, 120, 0.9)",
+                },
+                allowDrawingArrows: true,
+                clearArrowsOnClick: true,
+                clearArrowsOnPositionChange: true,
+                arrows: touchArrows,
+                arrowOptions: {
+                  ...defaultArrowOptions,
+                  color: "#c29b78",
+                  colors: {
+                    default: "#c29b78",
+                    shift: "#3b82f6",
+                    ctrl: "#10b981",
+                    alt: "#ef4444",
+                    meta: "#8b5cf6",
+                  },
                 },
               }}
             />

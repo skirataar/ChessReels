@@ -589,7 +589,7 @@ export function ProfileModal({
               >
                 <div>
                   <div className="text-xs font-semibold text-white group-hover:text-[#c29b78] transition-colors">
-                    About ChessReel &amp; Subscriptions
+                    About DoomChess &amp; Subscriptions
                   </div>
                   <div className="text-[10px] text-[#a3a3a3]">
                     Compare Free vs Premium plans
