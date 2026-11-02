@@ -22,7 +22,8 @@ export function UserAvatar({
     !hasError &&
     (avatar!.startsWith("http://") ||
       avatar!.startsWith("https://") ||
-      avatar!.startsWith("/"));
+      avatar!.startsWith("/") ||
+      avatar!.startsWith("data:image/"));
 
   if (isUrl) {
     return (

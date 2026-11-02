@@ -1,8 +1,11 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useStreak } from "@/lib/useStreak";
 import { UserAvatar } from "@/components/UserAvatar";
+import { AuthModal } from "@/components/AuthModal";
 import {
   Trophy,
   Flame,
@@ -13,6 +16,19 @@ import {
   Zap,
   TrendingUp,
   Award,
+  ArrowLeft,
+  Crown,
+  LogOut,
+  UserPlus,
+  RotateCcw,
+  Volume2,
+  VolumeX,
+  Camera,
+  Upload,
+  Image as ImageIcon,
+  Sparkles,
+  Check,
+  X,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -22,13 +38,16 @@ import {
   Tooltip,
   Cell,
 } from "recharts";
+import { sounds } from "@/lib/audio";
+import { CURATED_AVATARS, compressImageFile, persistAvatar } from "@/lib/avatarUpload";
 
 interface DayData {
   day: string;
   solved: number;
 }
 
-export default function StatsPage() {
+export default function ProfileStatsPage() {
+  const router = useRouter();
   const {
     dailyStreak,
     combo,
@@ -38,9 +57,18 @@ export default function StatsPage() {
   } = useStreak();
 
   const [currentElo, setCurrentElo] = useState<number>(800);
-  const [userName, setUserName] = useState<string>("Guest Player");
+  const [userName, setUserName] = useState<string>("Guest Tactician");
+  const [userHandle, setUserHandle] = useState<string>("");
   const [userAvatar, setUserAvatar] = useState<string | undefined>(undefined);
+  const [isPro, setIsPro] = useState<boolean>(false);
   const [isMounted, setIsMounted] = useState<boolean>(false);
+  const [isAuthOpen, setIsAuthOpen] = useState<boolean>(false);
+  const [userAccount, setUserAccount] = useState<any>(null);
+  const [isMuted, setIsMuted] = useState<boolean>(false);
+  const [isDpPickerOpen, setIsDpPickerOpen] = useState<boolean>(false);
+  const [isUploadingDp, setIsUploadingDp] = useState<boolean>(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [weeklyData, setWeeklyData] = useState<DayData[]>([
     { day: "Mon", solved: 0 },
@@ -52,8 +80,7 @@ export default function StatsPage() {
     { day: "Sun", solved: 0 },
   ]);
 
-  useEffect(() => {
-    setIsMounted(true);
+  const syncAccount = () => {
     try {
       const savedElo = localStorage.getItem("chess_reel_elo");
       if (savedElo) {
@@ -61,21 +88,45 @@ export default function StatsPage() {
         if (!isNaN(parsed) && parsed > 0) setCurrentElo(parsed);
       }
 
+      const plan = localStorage.getItem("chess_reel_plan");
+      const customDp = localStorage.getItem("chess_reel_custom_dp");
       const savedAccount = localStorage.getItem("chess_reel_account");
+
       if (savedAccount) {
         const parsed = JSON.parse(savedAccount);
+        setUserAccount(parsed);
         if (parsed.displayName || parsed.username) {
           setUserName(parsed.displayName || parsed.username);
         }
+        if (parsed.username) {
+          setUserHandle(`@${parsed.username}`);
+        }
         if (parsed.avatar) {
           setUserAvatar(parsed.avatar);
+        } else if (customDp) {
+          setUserAvatar(customDp);
         }
         if (parsed.elo) {
           setCurrentElo(parsed.elo);
         }
+        if (parsed.plan === "premium" || plan === "premium") {
+          setIsPro(true);
+        }
+      } else {
+        router.replace("/");
+        return;
       }
 
-      // Generate 7-day activity data on client mount
+      setIsMuted(sounds.getIsMuted());
+    } catch {}
+  };
+
+  useEffect(() => {
+    setIsMounted(true);
+    syncAccount();
+
+    // Generate 7-day activity data on client mount
+    try {
       const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
       const todayIndex = new Date().getDay();
       const result: DayData[] = [];
@@ -98,16 +149,75 @@ export default function StatsPage() {
 
       setWeeklyData(result);
     } catch {}
+
+    window.addEventListener("storage", syncAccount);
+    window.addEventListener("plan-updated", syncAccount);
+    window.addEventListener("account-updated", syncAccount);
+    return () => {
+      window.removeEventListener("storage", syncAccount);
+      window.removeEventListener("plan-updated", syncAccount);
+      window.removeEventListener("account-updated", syncAccount);
+    };
   }, [totalSolved]);
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setIsUploadingDp(true);
+      const compressedDataUrl = await compressImageFile(file, 256);
+      setUserAvatar(compressedDataUrl);
+      await persistAvatar(compressedDataUrl, userAccount?.id);
+      setToastMessage("Display picture updated!");
+      setTimeout(() => setToastMessage(null), 3000);
+      setIsDpPickerOpen(false);
+    } catch (err: any) {
+      console.error("Failed to upload photo:", err);
+      setToastMessage(err.message || "Failed to process photo.");
+      setTimeout(() => setToastMessage(null), 3000);
+    } finally {
+      setIsUploadingDp(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleSelectPreset = async (url: string) => {
+    try {
+      setUserAvatar(url);
+      await persistAvatar(url, userAccount?.id);
+      setToastMessage("Display picture updated!");
+      setTimeout(() => setToastMessage(null), 3000);
+      setIsDpPickerOpen(false);
+    } catch (err) {
+      console.error("Failed to set avatar preset:", err);
+    }
+  };
+
+  const handleSignOut = () => {
+    try {
+      localStorage.removeItem("chess_reel_account");
+      localStorage.removeItem("chess_reel_plan");
+      localStorage.removeItem("chess_reel_custom_dp");
+      localStorage.removeItem("chess_reel_preview_guest");
+      document.cookie = "chess_reel_session=; path=/; max-age=0";
+      document.cookie = "chess_reel_oauth_user=; path=/; max-age=0";
+      window.dispatchEvent(new Event("account-updated"));
+      window.dispatchEvent(new Event("plan-updated"));
+    } catch {}
+    router.push("/");
+  };
+
+  const handleToggleMute = () => {
+    const next = sounds.toggleMute();
+    setIsMuted(next);
+  };
 
   const totalAttempts = totalSolved + totalFailed;
   const accuracy =
     totalAttempts > 0 ? Math.round((totalSolved / totalAttempts) * 100) : 0;
 
-  // Estimated practice time (avg 45s per puzzle)
   const totalMinutes = Math.max(1, Math.round((totalAttempts * 45) / 60));
 
-  // Determine skill tier name
   const getSkillTier = (elo: number) => {
     if (elo >= 2200) return "Grandmaster Potential";
     if (elo >= 1800) return "Tactical Expert";
@@ -117,45 +227,210 @@ export default function StatsPage() {
   };
 
   return (
-    <div className="bg-[#151413] text-[#f5f5f5] min-h-screen flex flex-col w-full selection:bg-[#c29b78] selection:text-[#151413] px-4 py-5 max-w-md mx-auto">
-      {/* 1. Header & User Profile Section */}
-      <section className="flex items-center justify-between bg-[#22201e] border border-white/10 rounded-3xl p-4 shadow-xl mb-4">
-        <div className="flex items-center gap-3">
-          <div className="w-14 h-14 rounded-2xl bg-[#151413] border border-[#c29b78]/30 flex items-center justify-center overflow-hidden shadow-inner shrink-0">
-            <UserAvatar avatar={userAvatar} fallback="♟" className="w-8 h-8 text-[#c29b78]" />
-          </div>
+    <div className="bg-[#151413] text-[#f5f5f5] min-h-screen flex flex-col w-full selection:bg-[#c29b78] selection:text-[#151413] px-4 py-5 max-w-md mx-auto pb-24">
+      {/* 1. Header with Back Button and Pro Badge */}
+      <header className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2.5">
+          <Link
+            href="/play"
+            className="p-2 rounded-xl bg-[#22201e] hover:bg-[#2d2a28] text-[#a3a3a3] hover:text-[#f5f5f5] border border-white/5 transition-all cursor-pointer"
+            aria-label="Back to Reels"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </Link>
           <div>
-            <div className="flex items-center gap-1.5">
-              <h1 className="text-base font-black tracking-tight text-[#f5f5f5]">
-                {userName}
-              </h1>
-              <Award className="w-4 h-4 text-[#c29b78]" />
-            </div>
-            <p className="text-xs text-[#c29b78] font-semibold">
-              {getSkillTier(currentElo)}
-            </p>
-            <p className="text-[10px] text-[#a3a3a3]">
-              {totalAttempts} total puzzles attempted
+            <h1 className="text-base font-black tracking-tight text-[#f5f5f5]">
+              Profile &amp; Stats
+            </h1>
+            <p className="text-[11px] text-[#a3a3a3]">
+              Personal progress &amp; tactical analytics
             </p>
           </div>
         </div>
 
-        {/* Big Elo Badge */}
-        <div className="flex flex-col items-end">
-          <span className="text-[10px] font-bold text-[#a3a3a3] uppercase tracking-wider">
-            Rating
-          </span>
-          <span className="text-xl font-black font-mono text-[#c29b78]">
-            {currentElo}
-          </span>
-          <span className="text-[9px] text-[#10b981] font-semibold flex items-center gap-0.5">
-            <TrendingUp className="w-2.5 h-2.5" />
-            Active
-          </span>
+        <span
+          className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${
+            isPro
+              ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
+              : "bg-white/5 text-[#a3a3a3] border-white/10"
+          }`}
+        >
+          {isPro ? "👑 PRO ACTIVE" : "FREE TIER"}
+        </span>
+      </header>
+
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed top-18 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-[#22201e]/95 border border-[#c29b78]/40 text-[#c29b78] text-xs font-bold shadow-2xl backdrop-blur-md animate-in fade-in zoom-in-95 duration-150 flex items-center gap-1.5">
+          <CheckCircle2 className="w-4 h-4 text-[#10b981]" />
+          <span>{toastMessage}</span>
         </div>
+      )}
+
+      {/* Hidden File Input for Custom Display Picture Upload */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        accept="image/*"
+        onChange={handlePhotoUpload}
+        className="hidden"
+        data-testid="avatar-file-input"
+      />
+
+      {/* 2. Combined Identity Card */}
+      <section className="bg-[#22201e] border border-white/10 rounded-3xl p-4 shadow-xl mb-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div
+              className="relative group cursor-pointer"
+              onClick={() => setIsDpPickerOpen((prev) => !prev)}
+              title="Tap to change display picture"
+              data-testid="stats-avatar-container"
+            >
+              <div className="w-14 h-14 rounded-2xl bg-[#151413] border-2 border-[#c29b78]/40 group-hover:border-[#c29b78] flex items-center justify-center overflow-hidden shadow-inner shrink-0 transition-colors">
+                <UserAvatar avatar={userAvatar} fallback="♟" className="w-8 h-8 text-[#c29b78]" />
+              </div>
+              <div
+                data-testid="change-dp-badge"
+                className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-[#c29b78] text-[#151413] flex items-center justify-center shadow-md group-hover:scale-110 transition-transform"
+              >
+                <Camera className="w-3 h-3 stroke-[2.5]" />
+              </div>
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <h2 className="text-base font-black tracking-tight text-[#f5f5f5]">
+                  {userName}
+                </h2>
+                <Award className="w-4 h-4 text-[#c29b78]" />
+              </div>
+              {userHandle && (
+                <div className="text-[11px] text-[#a3a3a3] font-mono">
+                  {userHandle}
+                </div>
+              )}
+              <p className="text-xs text-[#c29b78] font-semibold mt-0.5">
+                {getSkillTier(currentElo)}
+              </p>
+            </div>
+          </div>
+
+          {/* Sign Out or Sign In Action */}
+          {userAccount ? (
+            <button
+              onClick={handleSignOut}
+              title="Sign out of account"
+              className="p-2 rounded-xl bg-[#151413] hover:bg-[#2d2a28] text-[#a3a3a3] hover:text-red-400 border border-white/5 transition-colors cursor-pointer"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          ) : (
+            <button
+              onClick={() => setIsAuthOpen(true)}
+              className="px-3 py-1.5 rounded-xl bg-[#c29b78] hover:bg-[#d4b08f] text-[#151413] font-black text-xs transition-all cursor-pointer shadow-md shadow-[#c29b78]/25 flex items-center gap-1.5 active:scale-95"
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              <span>Sign In</span>
+            </button>
+          )}
+        </div>
+
+        {/* Display Picture Picker & Upload Drawer */}
+        {isDpPickerOpen && (
+          <div
+            data-testid="dp-picker-panel"
+            className="mt-3.5 pt-3.5 border-t border-white/10 animate-in fade-in slide-in-from-top-2 duration-200"
+          >
+            <div className="flex items-center justify-between mb-2.5">
+              <div className="flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-[#c29b78]" />
+                <span className="text-xs font-bold text-[#f5f5f5]">
+                  Select or Upload Display Picture
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsDpPickerOpen(false)}
+                className="text-[#a3a3a3] hover:text-white p-1 cursor-pointer"
+                aria-label="Close DP picker"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Custom File Upload Button */}
+            <button
+              type="button"
+              disabled={isUploadingDp}
+              onClick={() => fileInputRef.current?.click()}
+              data-testid="upload-custom-dp-btn"
+              className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-[#c29b78] to-[#d4b08f] hover:brightness-105 active:scale-98 text-[#151413] font-black text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md shadow-[#c29b78]/25 mb-3"
+            >
+              <Upload className="w-4 h-4 stroke-[2.5]" />
+              <span>
+                {isUploadingDp
+                  ? "Compressing & Uploading..."
+                  : "Upload Custom Photo from Phone / PC"}
+              </span>
+            </button>
+
+            {/* Curated Modern Chess Photography Presets */}
+            <div>
+              <span className="text-[10px] uppercase font-bold text-[#a3a3a3] tracking-wider block mb-2">
+                Or Select Premium Chess Photography
+              </span>
+              <div className="grid grid-cols-4 gap-2">
+                {CURATED_AVATARS.map((preset) => {
+                  const isSelected = userAvatar === preset.url;
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      data-testid={`avatar-preset-${preset.id}`}
+                      onClick={() => handleSelectPreset(preset.url)}
+                      className={`relative aspect-square rounded-xl overflow-hidden border-2 transition-all cursor-pointer group ${
+                        isSelected
+                          ? "border-[#c29b78] ring-2 ring-[#c29b78]/40 scale-102"
+                          : "border-white/10 hover:border-[#c29b78]/60"
+                      }`}
+                      title={preset.name}
+                    >
+                      <img
+                        src={preset.url}
+                        alt={preset.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                      />
+                      {isSelected && (
+                        <div className="absolute top-1 right-1 w-4 h-4 rounded-full bg-[#c29b78] text-[#151413] flex items-center justify-center shadow-md">
+                          <Check className="w-2.5 h-2.5 stroke-[3]" />
+                        </div>
+                      )}
+                      <span className="absolute bottom-0 inset-x-0 bg-black/75 text-[9px] font-bold text-white py-0.5 truncate px-1 text-center">
+                        {preset.name}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Guest prompt if not signed in */}
+        {!userAccount && (
+          <div className="mt-3 pt-3 border-t border-white/5 flex items-center justify-between text-xs text-[#a3a3a3]">
+            <span>Save your rating &amp; streaks permanently</span>
+            <button
+              onClick={() => setIsAuthOpen(true)}
+              className="text-[#c29b78] font-bold hover:underline cursor-pointer"
+            >
+              Create Account →
+            </button>
+          </div>
+        )}
       </section>
 
-      {/* 2. Large Streak & 7-Day Activity Card */}
+      {/* 3. Daily Streak & 7-Day Activity Card */}
       <section className="bg-[#22201e] border border-white/10 rounded-3xl p-4 shadow-xl mb-4 flex flex-col gap-3">
         <div className="flex items-center justify-between border-b border-white/5 pb-3">
           <div className="flex items-center gap-2">
@@ -163,7 +438,7 @@ export default function StatsPage() {
               <Flame className="w-5 h-5 fill-[#c29b78]" />
             </div>
             <div>
-              <h2 className="text-sm font-black text-[#f5f5f5]">Daily Streak</h2>
+              <h3 className="text-sm font-black text-[#f5f5f5]">Daily Streak</h3>
               <p className="text-[10px] text-[#a3a3a3]">Consecutive days trained</p>
             </div>
           </div>
@@ -245,7 +520,7 @@ export default function StatsPage() {
         </div>
       </section>
 
-      {/* 3. Metric Cards Grid: Rating, Total Solved, Time Spent, Accuracy */}
+      {/* 4. Metric Cards Grid: Rating, Total Solved, Time Spent, Accuracy */}
       <section className="grid grid-cols-2 gap-3 mb-4">
         {/* Rating Card */}
         <div className="bg-[#22201e] border border-white/10 rounded-2xl p-3.5 shadow-lg flex flex-col justify-between">
@@ -258,8 +533,9 @@ export default function StatsPage() {
           <div className="text-2xl font-black font-mono text-[#f5f5f5]">
             {currentElo}
           </div>
-          <span className="text-[10px] text-[#c29b78] mt-1 font-semibold">
-            {currentElo >= 1200 ? "Top 35%" : "Calibrated"}
+          <span className="text-[10px] text-[#c29b78] mt-1 font-semibold flex items-center gap-1">
+            <TrendingUp className="w-3 h-3 text-[#10b981]" />
+            <span>Active Elo</span>
           </span>
         </div>
 
@@ -311,6 +587,46 @@ export default function StatsPage() {
           </span>
         </div>
       </section>
+
+      {/* 5. Preferences & Settings */}
+      <section className="bg-[#22201e] border border-white/10 rounded-3xl p-4 shadow-xl">
+        <h3 className="text-xs font-bold uppercase tracking-wider text-[#a3a3a3] mb-3">
+          App Preferences
+        </h3>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-[#151413] text-[#c29b78] border border-white/5">
+              {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+            </div>
+            <div>
+              <div className="text-xs font-bold text-white">Piece Sound Effects</div>
+              <div className="text-[11px] text-[#a3a3a3]">Audio feedback on moves</div>
+            </div>
+          </div>
+          <button
+            onClick={handleToggleMute}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+              isMuted
+                ? "bg-[#151413] text-[#a3a3a3] border-white/10"
+                : "bg-[#c29b78]/20 text-[#c29b78] border-[#c29b78]/40"
+            }`}
+          >
+            {isMuted ? "Muted" : "Active"}
+          </button>
+        </div>
+      </section>
+
+      {/* Auth Modal for Sign in / Account creation */}
+      <AuthModal
+        isOpen={isAuthOpen}
+        onClose={() => setIsAuthOpen(false)}
+        guestId="guest_stats_user"
+        initialTab="login"
+        onAccountSuccess={(acc) => {
+          setUserAccount(acc);
+          syncAccount();
+        }}
+      />
     </div>
   );
 }

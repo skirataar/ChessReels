@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { hashPassword } from "@/lib/auth";
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { guestId, username, displayName, avatar, skillLevel } = body;
+    const { guestId, username, password, email, displayName, avatar, skillLevel } = body;
 
     if (!username || typeof username !== "string") {
       return NextResponse.json(
@@ -26,6 +27,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Password validation for manual account creation
+    if (!password || typeof password !== "string" || password.length < 6) {
+      return NextResponse.json(
+        { error: "Password must be at least 6 characters long." },
+        { status: 400 }
+      );
+    }
+
     // Check if username is already taken
     const existing = await prisma.user.findUnique({
       where: { username: cleanUsername },
@@ -38,9 +47,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Secure password hashing
+    const passwordHash = hashPassword(password);
+
     // Calculate initial Elo baseline based on user self-selected skill level
     const initialSkill = skillLevel === "beginner" ? "beginner" : skillLevel === "advanced" ? "advanced" : "intermediate";
-    const baseElo = initialSkill === "beginner" ? 600 : initialSkill === "advanced" ? 1600 : 1200;
+    const baseElo = initialSkill === "beginner" ? 600 : initialSkill === "advanced" ? 1100 : 850;
 
     let user;
 
@@ -56,6 +68,7 @@ export async function POST(request: NextRequest) {
           data: {
             username: cleanUsername,
             displayName: displayName?.trim() || username.trim(),
+            email: email?.trim().toLowerCase() || undefined,
             avatar: avatar || "♟",
             skillTier: initialSkill,
             elo: baseElo,
@@ -64,6 +77,8 @@ export async function POST(request: NextRequest) {
             bestStreak: 0,
             isCalibrated: false,
             calibrationStep: 0,
+            passwordHash,
+            plan: "free",
           },
         });
       }
@@ -75,6 +90,7 @@ export async function POST(request: NextRequest) {
         data: {
           username: cleanUsername,
           displayName: displayName?.trim() || username.trim(),
+          email: email?.trim().toLowerCase() || undefined,
           avatar: avatar || "♟",
           skillTier: initialSkill,
           elo: baseElo,
@@ -83,25 +99,40 @@ export async function POST(request: NextRequest) {
           bestStreak: 0,
           isCalibrated: false,
           calibrationStep: 0,
+          passwordHash,
+          plan: "free",
         },
       });
     }
 
-    return NextResponse.json({
+    const safeUser = {
+      id: user.id,
+      username: user.username,
+      displayName: user.displayName,
+      avatar: user.avatar,
+      elo: user.elo,
+      peakElo: user.peakElo,
+      streak: user.streak,
+      bestStreak: user.bestStreak,
+      isCalibrated: user.isCalibrated,
+      calibrationStep: user.calibrationStep,
+      plan: user.plan || "free",
+    };
+
+    const response = NextResponse.json({
       success: true,
-      user: {
-        id: user.id,
-        username: user.username,
-        displayName: user.displayName,
-        avatar: user.avatar,
-        elo: user.elo,
-        peakElo: user.peakElo,
-        streak: user.streak,
-        bestStreak: user.bestStreak,
-        isCalibrated: user.isCalibrated,
-        calibrationStep: user.calibrationStep,
-      },
+      user: safeUser,
     });
+
+    response.cookies.set("chess_reel_session", user.id, {
+      httpOnly: false,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 30, // 30 days
+      path: "/",
+    });
+
+    return response;
   } catch (error) {
     console.error("Account creation failed:", error);
     return NextResponse.json(
@@ -139,6 +170,7 @@ export async function GET(request: NextRequest) {
         bestStreak: true,
         isCalibrated: true,
         calibrationStep: true,
+        plan: true,
         createdAt: true,
       },
     });
@@ -152,6 +184,47 @@ export async function GET(request: NextRequest) {
     console.error("Failed to fetch user:", error);
     return NextResponse.json(
       { error: "Internal server error." },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { userId, avatar, displayName } = body;
+
+    if (!userId) {
+      return NextResponse.json(
+        { error: "userId is required." },
+        { status: 400 }
+      );
+    }
+
+    const dataToUpdate: Record<string, any> = {};
+    if (avatar !== undefined) dataToUpdate.avatar = avatar;
+    if (displayName !== undefined && typeof displayName === "string") {
+      dataToUpdate.displayName = displayName.trim();
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: dataToUpdate,
+      select: {
+        id: true,
+        username: true,
+        displayName: true,
+        avatar: true,
+        elo: true,
+        plan: true,
+      },
+    });
+
+    return NextResponse.json({ success: true, user: updatedUser });
+  } catch (error) {
+    console.error("Failed to update user profile:", error);
+    return NextResponse.json(
+      { error: "Failed to update profile." },
       { status: 500 }
     );
   }

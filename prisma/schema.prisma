@@ -21,6 +21,8 @@ model User {
   bestStreak      Int          @default(0)
   isCalibrated    Boolean      @default(false)
   calibrationStep Int          @default(0)
+  passwordHash    String?
+  plan            String?      @default("free")
   createdAt       DateTime     @default(now())
 
   // Friendships
@@ -53,6 +55,7 @@ model Puzzle {
   themes          String
   gameUrl         String
   openingTags     String?
+  likes           Int      @default(0)
 
   @@index([rating])
   @@index([themes])
@@ -67,5 +70,15 @@ model PuzzleHistory {
 
   @@unique([userId, puzzleId])
   @@index([userId])
+}
+
+model PuzzleLike {
+  id        String   @id @default(uuid())
+  puzzleId  String
+  userId    String
+  createdAt DateTime @default(now())
+
+  @@unique([puzzleId, userId])
+  @@index([puzzleId])
 }
 

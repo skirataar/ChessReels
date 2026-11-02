@@ -1,36 +1,32 @@
 import { test, expect } from "@playwright/test";
 
 test.describe("Landing Page, Skill Gauging, Google Auth & Calibration", () => {
-  test("1. Landing page displays account-level Elo guarantee, Google CTA & skill tiers", async ({
+  test("1. Landing page displays 2-tier subscription model (Free vs Premium Pro) & Google CTA", async ({
     page,
   }) => {
-    // Fresh visitor with no account
+    // Clear storage to act as fresh visitor
+    await page.goto("/play");
+    await page.evaluate(() => localStorage.clear());
     await page.goto("/");
 
     // Verify Landing Page hero headline
     await expect(
-      page.getByRole("heading", { name: /master tactics in 30s reels/i })
+      page.getByRole("heading", { name: /master chess tactics in 30s reels/i })
     ).toBeVisible({ timeout: 10_000 });
 
-    // Verify Account-Level Elo Guarantee is clearly explained
-    await expect(
-      page.getByText(/account-level elo guarantee/i)
-    ).toBeVisible();
-    await expect(
-      page.getByText(/saved permanently in the cloud/i)
-    ).toBeVisible();
+    // Verify 2 subscription tiers are present
+    await expect(page.getByText(/free tier/i).first()).toBeVisible();
+    await expect(page.getByText(/ad-supported/i).first()).toBeVisible();
+    await expect(page.getByText(/premium pro/i).first()).toBeVisible();
+    await expect(page.getByText(/most popular/i)).toBeVisible();
 
     // Verify Continue with Google CTA is prominent
     const googleBtn = page.getByRole("button", { name: /continue with google/i }).first();
     await expect(googleBtn).toBeVisible();
 
-    // Verify Authentic 4x4 board teaser is present
-    await expect(page.getByText("Mate in 2")).toBeVisible();
-    await expect(page.getByText(/royal fork/i)).toBeVisible();
-
-    // Click "Play guest puzzle without saving" to enter the reel
-    const previewBtn = page.getByText(/play guest puzzle without saving/i);
-    await previewBtn.click();
+    // Click "Play Free with Ads" to enter the reel
+    const playFreeBtn = page.getByRole("button", { name: /play free with ads/i });
+    await playFreeBtn.click();
 
     // Verify successfully entered the reels feed
     const boardContainer = page.locator('[data-testid="chessboard-container"]');
@@ -40,10 +36,12 @@ test.describe("Landing Page, Skill Gauging, Google Auth & Calibration", () => {
   test("2. New account gauges Elo from selected skill level (e.g. Advanced -> 1600) and starts placement test", async ({
     page,
   }) => {
+    await page.goto("/play");
+    await page.evaluate(() => localStorage.clear());
     await page.goto("/");
 
-    // Click "Get Started Free" from landing page
-    const createBtn = page.getByRole("button", { name: /get started free/i });
+    // Click "Create Account" from landing page
+    const createBtn = page.getByRole("button", { name: /create account/i });
     await createBtn.click();
 
     // Verify Auth Modal opened with Skill Level selection
@@ -54,17 +52,18 @@ test.describe("Landing Page, Skill Gauging, Google Auth & Calibration", () => {
     const advancedOption = page.getByRole("button", { name: /advanced 1500\+ elo/i });
     await advancedOption.click();
 
-    // Fill username and submit
+    // Fill username, display name, password and submit
     const uniqueUsername = `adv_${Date.now().toString(36)}`;
     await page.fill("#reg-username", uniqueUsername);
     await page.fill("#reg-display", "Grandmaster Mind");
+    await page.fill("#reg-password", "StrongPass123!");
 
-    const submitBtn = page.getByRole("button", { name: /start 6-puzzle placement/i });
+    const submitBtn = page.getByRole("button", { name: /create account & start placement/i });
     await submitBtn.click();
 
     // Verify Account created and calibrated at 1600 baseline Elo (not guest Elo 800)
     const placementBanner = page.getByText(/placement test • puzzle 1 of 6/i);
-    await expect(placementBanner).toBeVisible({ timeout: 8000 });
+    await expect(placementBanner).toBeVisible({ timeout: 10000 });
 
     const eloBadge = page.getByText(/est: 1600 elo/i);
     await expect(eloBadge).toBeVisible();

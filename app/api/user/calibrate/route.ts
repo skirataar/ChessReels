@@ -25,7 +25,8 @@ export async function POST(request: NextRequest) {
     }
 
     if (isFinished || (typeof step === "number" && step >= 6)) {
-      const settledElo = Math.max(400, Math.min(2600, typeof finalElo === "number" ? finalElo : user.elo));
+      // Balanced placement test ceiling: 1450 max (players can climb higher in ranked play)
+      const settledElo = Math.max(400, Math.min(1450, typeof finalElo === "number" ? finalElo : user.elo));
 
       const updated = await prisma.user.update({
         where: { id: userId },

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { ensureDemoUsers } from "@/lib/seedDemoUsers";
 
 export async function GET(request: NextRequest) {
   try {
@@ -13,8 +12,6 @@ export async function GET(request: NextRequest) {
         { status: 400 }
       );
     }
-
-    await ensureDemoUsers();
 
     // Find friendships where user is initiator or recipient
     const friendships = await prisma.friendship.findMany({

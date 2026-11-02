@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "admin": "tsx scripts/admin-console.ts",
     "lint": "eslint"
   },
   "dependencies": {

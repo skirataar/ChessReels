@@ -104,4 +104,86 @@ test.describe("Phase 5: Premium UI/UX & Navigation Overhaul", () => {
     await expect(page.getByText("80%", { exact: true })).toBeVisible();
     await expect(page.getByText(/time spent/i)).toBeVisible();
   });
+
+  test("5. Community Like and Share feature functions with real-time toggle and toast", async ({ page }) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem("chess_reel_preview_guest", "true");
+    });
+    await page.goto("/play", { waitUntil: "networkidle" });
+
+    // Like button is visible
+    const likeBtn = page.getByRole("button", { name: /like puzzle/i });
+    await expect(likeBtn).toBeVisible({ timeout: 10000 });
+
+    // Initial count
+    const initialText = await likeBtn.innerText();
+    const initialCount = parseInt(initialText.trim(), 10) || 0;
+
+    // Click Like
+    await likeBtn.click();
+
+    // Toast appears
+    await expect(page.getByText(/added to liked puzzles/i)).toBeVisible({ timeout: 5000 });
+
+    // Count increments by 1
+    const newText = await likeBtn.innerText();
+    const newCount = parseInt(newText.trim(), 10) || 0;
+    expect(newCount).toBe(initialCount + 1);
+
+    // Click again to unlike
+    await likeBtn.click();
+    const revertedText = await likeBtn.innerText();
+    const revertedCount = parseInt(revertedText.trim(), 10) || 0;
+    expect(revertedCount).toBe(initialCount);
+
+    // Share button is present and triggers copy toast
+    const shareBtn = page.getByRole("button", { name: "Share puzzle card" });
+    await expect(shareBtn).toBeVisible();
+    await shareBtn.click();
+    await expect(page.getByText(/copied to clipboard/i)).toBeVisible();
+  });
+
+  test("6. Reels Vertical Swipe Gesture navigates to next puzzle without tapping next button", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem("chess_reel_preview_guest", "true");
+    });
+    await page.goto("/play", { waitUntil: "networkidle" });
+    await page.waitForTimeout(1000);
+
+    const swipeCue = page.locator('[data-testid="swipe-cue"]');
+    await expect(swipeCue).toBeVisible({ timeout: 10000 });
+    await expect(swipeCue).toContainText(/swipe/i);
+
+    const initialBadge = await page.locator("text=/#\\w+/").first().innerText();
+
+    // 1. Keyboard shortcut: ArrowDown advances to the next reel
+    await page.keyboard.press("ArrowDown");
+    await expect(async () => {
+      const secondBadge = await page.locator("text=/#\\w+/").first().innerText();
+      expect(secondBadge).not.toBe(initialBadge);
+    }).toPass({ timeout: 6000 });
+
+    const secondBadge = await page.locator("text=/#\\w+/").first().innerText();
+
+    // 2. Drag / Swipe upward on the mission brief card
+    const missionCard = page.locator("text=/#\\w+/").first();
+    const box = await missionCard.boundingBox();
+    expect(box).not.toBeNull();
+    if (box) {
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(box.x + box.width / 2, box.y - 120, { steps: 10 });
+      await page.mouse.up();
+    }
+
+    // Wait for the new puzzle to slide into view
+    await expect(async () => {
+      const thirdBadge = await page.locator("text=/#\\w+/").first().innerText();
+      expect(thirdBadge).not.toBe(secondBadge);
+    }).toPass({ timeout: 6000 });
+  });
 });
+
+

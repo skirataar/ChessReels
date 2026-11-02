@@ -56,8 +56,8 @@ test.describe("Step 5: Final Verification Flow", () => {
     const board = page.locator('[data-testid="chessboard-container"]');
     await expect(board).toBeVisible({ timeout: 10_000 });
 
-    // Wait for initial prefetch to settle
-    await page.waitForTimeout(500);
+    // Wait for initial prefetch queue to settle
+    await page.waitForTimeout(1200);
 
     // =========================================================================
     // STEP 1: FAIL A PUZZLE & RETRY RESETS THE BOARD

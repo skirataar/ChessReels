@@ -158,3 +158,23 @@ Use this interactive checklist to test gameplay mechanics, edge cases, mobile UX
 - [x] **Grey 50% Opacity Move Dots**: Replaced indigo dots with subtle grey indicator dots at 50% opacity (`rgba(148, 163, 184, 0.5)`).
 - [x] **Brilliant Move Indicator**: Removed as requested to avoid distracting popups on every move.
 - [x] **Batch Prefetch Optimization**: Upgraded `/api/puzzle/random?count=5` to fetch full 5-puzzle buffer in 1 database roundtrip.
+- [x] **Swipe Snap-Back Fix**: Resolved bottom-of-screen swipe drag leaving the viewport scrolled down; card now snaps crisply back to center with spring physics and zero scroll drift.
+- [x] **Multi-Step Puzzle Progress Preservation (QOL)**: When a mistake occurs on step $x+1$ of a multi-move puzzle, retrying restores the board directly to step $x+1$ with all previous $x$ moves and opponent counter-moves preserved, eliminating tedious move repetition. Also provides an optional "Restart" button to begin from step 1 if desired.
+- [x] **Mobile Hydration Mismatch Fix**: Resolved Next.js client-server mismatch on mobile devices by synchronizing DOM structures across client mounts with `hasMounted` guards and `suppressHydrationWarning` on dynamic HUD elements, eliminating the Turbopack recoverable error popup on phones.
+- [x] **Puzzle Tagline Inside Board Utility Box**: Centered tactical tag (e.g. `✨ Tactical Alert • Loose Piece`) directly inside the black header bar above the chessboard, leaving piece color exclusively in the bottom tactical bar.
+- [x] **Preserved Vertical Breathing Space**: Kept clean vertical breathing room above the board utility bar (`h-2.5 sm:h-3.5`).
+- [x] **Custom Display Picture (DP) & Studio Photo Avatars**:
+  - Replaced corny emoji avatars across the platform (`Profile & Stats`, `ProfileModal`, `AuthModal`).
+  - Implemented custom photo upload (`<input type="file" accept="image/*">`) with automatic client-side 256x256 square compression (~25KB JPEG).
+  - Provided 4 aesthetic high-res chess photography presets: Grandmaster, Obsidian Knight, Golden Queen, Cyber King.
+  - Full persistence across `localStorage` and PostgreSQL via `PATCH /api/user/account`.
+- [x] **Clean Silent Retry Flow**:
+  - Removed step number labels from buttons (clean `"Retry"` instead of `"Retry Step X"`).
+  - Completely removed the floating pill toast notification (`Saved progress! Retrying Step X`) so users retry smoothly without any disruptive dropdown popups.
+- [x] **Strict Authentication & Minimalist Animated Landing Page**:
+  - **No Guest Access on Logout or Fresh Visits**: Unauthenticated visitors cannot enter gameplay or stats without logging in.
+  - **Complete Logout Session Purge**: Signing out clears `chess_reel_account`, `chess_reel_plan`, `chess_reel_custom_dp`, `chess_reel_preview_guest`, session cookies, and redirects immediately to `/`.
+  - **Animated Chess Hero (`AnimatedChessHero.tsx`)**: 3D perspective floating tactical chessboard with smooth knight leap, landing ripple shockwave, golden Queen with sparkles, floating ambient dust motes, and radiant gold aura.
+  - **Focused 2-Action Landing Page (`LandingPage.tsx`)**: Removed all pricing tables, feature checklists, and guest preview buttons. Features brand name `ChessReel` directly above two primary buttons: `Continue with Google` and `Log In` (with subtle `Create Account` link).
+  - **Bottom Dock Protection**: Hidden for unauthenticated visitors so the landing page remains 100% immersive.
+  - **E2E Test Coverage**: Verified with 5 comprehensive tests in `e2e/landing-and-no-guest.spec.ts`.
