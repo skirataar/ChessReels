@@ -25,7 +25,7 @@ import { QuotaPaywallModal } from "@/components/QuotaPaywallModal";
 import { popNextPuzzle, prefetchPuzzles } from "@/lib/puzzleCache";
 import { useStreak } from "@/lib/useStreak";
 import { useTierQuota } from "@/lib/useTierQuota";
-import { RefreshCw, WifiOff, UserPlus, BarChart2, Trophy, Zap, Flame, Crown } from "lucide-react";
+import { RefreshCw, WifiOff, UserPlus, BarChart2, Trophy, Zap, Flame, Crown, Sparkles } from "lucide-react";
 
 const GUEST_ID_KEY = "chess_reel_guest_id";
 const ELO_STORAGE_KEY = "chess_reel_elo";
@@ -327,7 +327,7 @@ export function PlayView({
   // Fetch next puzzle: checks local buffer queue first, falls back to API.
   const fetchNextPuzzle = useCallback(async () => {
     // If free user has exhausted their quota window, block advance and show paywall (placement test exempt)
-    if (!canPlay && !isPro && !isCalibrating && initialFetchDoneRef.current) {
+    if (!canPlay && !isPro && !isCalibrating) {
       setPaywallReason("quota");
       setIsQuotaModalOpen(true);
       return;
@@ -378,14 +378,45 @@ export function PlayView({
   useEffect(() => {
     if (!initialFetchDoneRef.current) {
       initialFetchDoneRef.current = true;
+      if (!canPlay && !isPro && !isCalibrating) {
+        // Free user paywalled on mount/refresh: show previous solved puzzle and do not advance
+        const lastSolvedRaw =
+          typeof window !== "undefined"
+            ? window.localStorage.getItem("chess_reel_last_solved_puzzle")
+            : null;
+        if (lastSolvedRaw) {
+          try {
+            const parsed = JSON.parse(lastSolvedRaw);
+            setCurrentPuzzle(parsed);
+          } catch {
+            setCurrentPuzzle(FALLBACK_PUZZLES[0]);
+          }
+        } else {
+          setCurrentPuzzle(FALLBACK_PUZZLES[0]);
+        }
+        setPuzzleStatus("solved");
+        setPaywallReason("quota");
+        setIsQuotaModalOpen(true);
+        return;
+      }
+
       fetchNextPuzzle();
       prefetchPuzzles(currentEloRef.current, 5, userAccount?.id || guestId).catch(() => {});
     }
-  }, [fetchNextPuzzle, userAccount?.id, guestId]);
+  }, [fetchNextPuzzle, userAccount?.id, guestId, canPlay, isPro, isCalibrating]);
 
   // Handle Elo update and placement test logic
-  const handleEloUpdate = (newElo: number, change: number) => {
-    recordPuzzlePlay(change > 0 ? "win" : "loss");
+  const handleEloUpdate = (newElo: number, change: number, isWin?: boolean) => {
+    const won = isWin !== undefined ? isWin : change > 0;
+    recordPuzzlePlay(won ? "win" : "loss");
+
+    if (won && currentPuzzle) {
+      try {
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem("chess_reel_last_solved_puzzle", JSON.stringify(currentPuzzle));
+        }
+      } catch {}
+    }
 
     // 1. Placement Calibration Mode (Quota and Ads do NOT count during placement!)
     if (userAccount && !userAccount.isCalibrated) {
@@ -680,9 +711,46 @@ export function PlayView({
               className="flex items-center gap-1 font-bold text-xs text-amber-400"
               title={`Daily Streak: ${dailyStreak} ${dailyStreak === 1 ? "day" : "days"}`}
             >
-              <span className="text-xs leading-none">🔥</span>
+              <span className="sr-only">🔥</span>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                className="w-3.5 h-3.5 shrink-0"
+                aria-hidden="true"
+              >
+                <path
+                  d="M12 2C10.5 4.5 9 6.8 9 9.5C9 10.2 9.15 10.87 9.42 11.48C8.5 10.82 8 9.73 8 8.5C5.5 10.5 4 13.5 4 16.5C4 20.09 7.13 23 11 23C16 23 20 19.42 20 15C20 10.5 16.5 6 12 2Z"
+                  fill="url(#headerFireGrad)"
+                />
+                <path
+                  d="M11.5 13C10.8 14 10.2 15.2 10.2 16.5C10.2 18.4 11.8 20 13.8 20C14.9 20 15.9 19.5 16.5 18.7C16.3 16.6 14.7 15 13.3 13.8C12.7 13.3 12 12.9 11.5 13Z"
+                  fill="#fef08a"
+                  opacity="0.95"
+                />
+                <defs>
+                  <linearGradient id="headerFireGrad" x1="12" y1="2" x2="12" y2="23" gradientUnits="userSpaceOnUse">
+                    <stop offset="0%" stopColor="#fef08a" />
+                    <stop offset="40%" stopColor="#f59e0b" />
+                    <stop offset="100%" stopColor="#d97706" />
+                  </linearGradient>
+                </defs>
+              </svg>
               <span suppressHydrationWarning>{dailyStreak}</span>
             </div>
+
+            {/* Flush Solve Combo */}
+            {hasMounted && combo >= 2 && (
+              <div
+                data-testid="header-combo-indicator"
+                suppressHydrationWarning
+                className="flex items-center gap-1 font-bold text-xs text-emerald-400 animate-in fade-in zoom-in-95 duration-200"
+                title={`Solve Combo: ${combo} in a row without mistake!`}
+              >
+                <Zap className="w-3.5 h-3.5 text-emerald-400 fill-emerald-400 animate-pulse" />
+                <span suppressHydrationWarning className="font-mono tracking-tight font-black">{combo}x</span>
+              </div>
+            )}
 
             {/* Flush Free Tier Quota, Calibration, or PRO Indicator */}
             {!hasMounted ? (
@@ -815,6 +883,46 @@ export function PlayView({
           </div>
         ) : (
           <div className="w-full flex-1 flex flex-col items-center justify-between">
+            {/* Free Tier Quota Exhausted Banner with Refill Countdown & Upgrade CTA */}
+            {hasMounted && !canPlay && !isPro && !isCalibrating && (
+              <div className="w-full max-w-sm mx-auto px-3 mt-1.5 mb-1 animate-in fade-in slide-in-from-top-1 duration-200">
+                <div
+                  data-testid="quota-depleted-banner"
+                  onClick={() => {
+                    setPaywallReason("quota");
+                    setIsQuotaModalOpen(true);
+                  }}
+                  className="p-2.5 rounded-xl bg-gradient-to-r from-[#22201e] via-[#2a241d] to-[#22201e] border border-amber-500/40 shadow-lg flex items-center justify-between gap-2 cursor-pointer hover:border-amber-500/70 transition-all active:scale-98"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-amber-400 text-sm shrink-0">⚡</span>
+                    <div className="flex flex-col min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-black text-white">Daily Limit Reached</span>
+                        <span className="text-[10px] text-amber-400 font-mono font-bold">
+                          (0/{windowLimit})
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-zinc-400 truncate font-mono">
+                        Refill in {Math.floor(resetsInMs / 3600000)}h {Math.floor((resetsInMs % 3600000) / 60000)}m • Solved puzzle shown
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPaywallReason("quota");
+                      setIsQuotaModalOpen(true);
+                    }}
+                    className="px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-amber-400 to-[#c29b78] hover:from-amber-300 hover:to-[#dfba94] text-zinc-950 text-[10px] font-black uppercase tracking-wider shrink-0 flex items-center gap-1 shadow-sm cursor-pointer"
+                  >
+                    <Crown className="w-3 h-3 text-zinc-950" />
+                    <span>Pro</span>
+                  </button>
+                </div>
+              </div>
+            )}
             <PuzzleCard
               key={currentPuzzle.id}
               puzzle={currentPuzzle}
@@ -822,6 +930,8 @@ export function PlayView({
               currentElo={currentElo}
               guestId={userAccount?.id || guestId}
               streak={dailyStreak}
+              combo={combo}
+              canPlay={canPlay}
               lastEloChange={lastEloChange}
               isCalibration={isCalibrating}
               calibrationStep={currentCalibrationStep}

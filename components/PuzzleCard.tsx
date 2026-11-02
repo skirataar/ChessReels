@@ -57,14 +57,16 @@ export interface PuzzleCardProps {
   currentElo: number;
   guestId?: string;
   streak?: number;
+  combo?: number;
   lastEloChange: number | null;
   isCalibration?: boolean;
   calibrationStep?: number;
   mode?: "ranked" | "practice";
   isPro?: boolean;
+  canPlay?: boolean;
   onModeChange?: (mode: "ranked" | "practice") => void;
   onStatusChange: (status: PuzzleStatus) => void;
-  onEloUpdate: (newElo: number, change: number) => void;
+  onEloUpdate: (newElo: number, change: number, isWin?: boolean) => void;
   onNextPuzzle: () => void;
   onOpenStats?: () => void;
 }
@@ -147,11 +149,13 @@ export function PuzzleCard({
   currentElo,
   guestId,
   streak = 0,
+  combo = 0,
   lastEloChange,
   isCalibration = false,
   calibrationStep = 1,
   mode = "ranked",
   isPro = false,
+  canPlay = true,
   onModeChange,
   onStatusChange,
   onEloUpdate,
@@ -301,7 +305,7 @@ export function PuzzleCard({
       }).catch(() => {});
 
       if (isCalibration) {
-        onEloUpdate(currentElo, result === "win" ? 1 : -1);
+        onEloUpdate(currentElo, result === "win" ? 1 : -1, result === "win");
         return;
       }
 
@@ -321,11 +325,19 @@ export function PuzzleCard({
         if (response.ok) {
           const data = await response.json();
           if (typeof data.newElo === "number") {
-            onEloUpdate(data.newElo, data.eloChange ?? 0);
+            onEloUpdate(data.newElo, data.eloChange ?? 0, result === "win");
+          } else {
+            const delta = result === "win" ? 10 : -10;
+            onEloUpdate(currentElo + delta, delta, result === "win");
           }
+        } else {
+          const delta = result === "win" ? 10 : -10;
+          onEloUpdate(currentElo + delta, delta, result === "win");
         }
       } catch (err) {
         console.error("Failed to update Elo:", err);
+        const delta = result === "win" ? 10 : -10;
+        onEloUpdate(currentElo + delta, delta, result === "win");
       }
     },
     [puzzle, currentElo, guestId, isCalibration, onEloUpdate]
@@ -538,8 +550,16 @@ export function PuzzleCard({
       // Audio/canvas fallback
     }
 
-    // 2. If user chooses to review the board, do not auto-advance
-    if (isReviewing) {
+    // 2. If user chooses to review the board, or if user is paywalled (out of free quota), do not auto-advance
+    if (isReviewing || (canPlay === false && !isPro)) {
+      if (canPlay === false && !isPro && !isReviewing) {
+        setIsReviewing(true);
+      }
+      setAutoNextCountdown(null);
+      if (autoNextTimerRef.current) {
+        clearTimeout(autoNextTimerRef.current);
+        autoNextTimerRef.current = null;
+      }
       return;
     }
 
@@ -567,7 +587,7 @@ export function PuzzleCard({
         clearTimeout(autoNextTimerRef.current);
       }
     };
-  }, [status, isReviewing, onNextPuzzle]);
+  }, [status, isReviewing, canPlay, isPro, onNextPuzzle]);
 
   // Keyboard shortcut to advance when solved (Space, Enter, or ArrowRight)
   useEffect(() => {
@@ -1473,6 +1493,15 @@ export function PuzzleCard({
                     <span className="px-2.5 py-1 rounded-full bg-[#c29b78]/20 border border-[#c29b78]/40 text-[#c29b78] text-xs font-black flex items-center gap-1">
                       <Flame className="w-3.5 h-3.5 fill-[#c29b78]" />
                       <span>{streak} Streak!</span>
+                    </span>
+                  )}
+                  {combo > 1 && (
+                    <span
+                      data-testid="celebration-combo-badge"
+                      className="px-2.5 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-xs font-black flex items-center gap-1 animate-in zoom-in-95 duration-200"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 fill-emerald-400" />
+                      <span>{combo}x Combo!</span>
                     </span>
                   )}
                 </div>

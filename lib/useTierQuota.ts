@@ -11,6 +11,54 @@ interface LocalTierSession {
   puzzlesSinceLastAd: number;
 }
 
+function getInitialTierState(effectivePro: boolean) {
+  if (effectivePro) {
+    return {
+      puzzlesRemaining: 999999,
+      canPlay: true,
+      resetsInMs: 0,
+      puzzlesSinceLastAd: 0,
+    };
+  }
+  let activeConfig = DEFAULT_TIER_CONFIG;
+  if (typeof window !== "undefined") {
+    try {
+      const rawCfg = window.localStorage.getItem("chess_reel_tier_config");
+      if (rawCfg) activeConfig = { ...DEFAULT_TIER_CONFIG, ...JSON.parse(rawCfg) };
+    } catch {}
+  }
+  if (typeof window !== "undefined") {
+    try {
+      const raw = window.localStorage.getItem(TIER_STORAGE_KEY);
+      if (raw) {
+        const parsed: LocalTierSession = JSON.parse(raw);
+        const now = Date.now();
+        const windowMs = activeConfig.freeWindowHours * 3600 * 1000;
+        const validTimestamps = (parsed.solveTimestamps || []).filter((t) => now - t < windowMs);
+        const remaining = Math.max(0, activeConfig.freePuzzleLimit - validTimestamps.length);
+        const canPlay = remaining > 0;
+        let resetsInMs = 0;
+        if (remaining === 0 && validTimestamps.length > 0) {
+          const oldestTime = Math.min(...validTimestamps);
+          resetsInMs = Math.max(0, oldestTime + windowMs - now);
+        }
+        return {
+          puzzlesRemaining: remaining,
+          canPlay,
+          resetsInMs,
+          puzzlesSinceLastAd: parsed.puzzlesSinceLastAd || 0,
+        };
+      }
+    } catch {}
+  }
+  return {
+    puzzlesRemaining: activeConfig.freePuzzleLimit,
+    canPlay: true,
+    resetsInMs: 0,
+    puzzlesSinceLastAd: 0,
+  };
+}
+
 export function useTierQuota(
   userId: string,
   userPlan?: string | null
@@ -28,10 +76,10 @@ export function useTierQuota(
     }
     return false;
   });
-  const [puzzlesRemaining, setPuzzlesRemaining] = useState<number>(DEFAULT_TIER_CONFIG.freePuzzleLimit);
-  const [puzzlesSinceLastAd, setPuzzlesSinceLastAd] = useState<number>(0);
-  const [canPlay, setCanPlay] = useState<boolean>(true);
-  const [resetsInMs, setResetsInMs] = useState<number>(0);
+  const [puzzlesRemaining, setPuzzlesRemaining] = useState<number>(() => getInitialTierState(isPro).puzzlesRemaining);
+  const [puzzlesSinceLastAd, setPuzzlesSinceLastAd] = useState<number>(() => getInitialTierState(isPro).puzzlesSinceLastAd);
+  const [canPlay, setCanPlay] = useState<boolean>(() => getInitialTierState(isPro).canPlay);
+  const [resetsInMs, setResetsInMs] = useState<number>(() => getInitialTierState(isPro).resetsInMs);
   const [isAdOpen, setIsAdOpen] = useState<boolean>(false);
   const [isQuotaModalOpen, setIsQuotaModalOpen] = useState<boolean>(false);
 
@@ -65,6 +113,11 @@ export function useTierQuota(
       .then((data) => {
         if (data?.config) {
           setConfig(data.config);
+          try {
+            if (typeof window !== "undefined") {
+              window.localStorage.setItem("chess_reel_tier_config", JSON.stringify(data.config));
+            }
+          } catch {}
         }
       })
       .catch(() => {});
@@ -102,18 +155,28 @@ export function useTierQuota(
   // Load and clean stored local session
   useEffect(() => {
     if (typeof window === "undefined") return;
-    try {
-      const raw = window.localStorage.getItem(TIER_STORAGE_KEY);
-      if (raw) {
-        const parsed: LocalTierSession = JSON.parse(raw);
-        setPuzzlesSinceLastAd(parsed.puzzlesSinceLastAd || 0);
-        recalculateQuota(parsed.solveTimestamps || [], config, isPro);
-      } else {
+    const syncSession = () => {
+      try {
+        const raw = window.localStorage.getItem(TIER_STORAGE_KEY);
+        if (raw) {
+          const parsed: LocalTierSession = JSON.parse(raw);
+          setPuzzlesSinceLastAd(parsed.puzzlesSinceLastAd || 0);
+          recalculateQuota(parsed.solveTimestamps || [], config, isPro);
+        } else {
+          recalculateQuota([], config, isPro);
+        }
+      } catch {
         recalculateQuota([], config, isPro);
       }
-    } catch {
-      recalculateQuota([], config, isPro);
-    }
+    };
+
+    syncSession();
+    window.addEventListener("tier-session-updated", syncSession);
+    window.addEventListener("storage", syncSession);
+    return () => {
+      window.removeEventListener("tier-session-updated", syncSession);
+      window.removeEventListener("storage", syncSession);
+    };
   }, [config, isPro, recalculateQuota]);
 
   // Sync authoritative quota from backend
@@ -132,9 +195,37 @@ export function useTierQuota(
             setCanPlay(true);
             setResetsInMs(0);
           } else {
-            setPuzzlesRemaining(data.quota.puzzlesRemaining);
-            setCanPlay(data.quota.canPlay);
-            setResetsInMs(data.quota.resetsInMs);
+            // Check local session timestamps to prevent server desync from clearing local paywall
+            let localValidCount = 0;
+            let localOldestTime = 0;
+            const now = Date.now();
+            const limit = data.config?.freePuzzleLimit || data.quota.windowLimit || DEFAULT_TIER_CONFIG.freePuzzleLimit;
+            const hours = data.config?.freeWindowHours || data.quota.windowHours || DEFAULT_TIER_CONFIG.freeWindowHours;
+            const windowMs = hours * 3600 * 1000;
+            try {
+              if (typeof window !== "undefined") {
+                const raw = window.localStorage.getItem(TIER_STORAGE_KEY);
+                if (raw) {
+                  const parsed: LocalTierSession = JSON.parse(raw);
+                  const valids = (parsed.solveTimestamps || []).filter((t) => now - t < windowMs);
+                  localValidCount = valids.length;
+                  if (valids.length > 0) localOldestTime = Math.min(...valids);
+                }
+              }
+            } catch {}
+
+            const effectiveUsed = Math.max(data.quota.usedInWindow || 0, localValidCount);
+            const remaining = Math.max(0, limit - effectiveUsed);
+            const effectiveCanPlay = remaining > 0;
+
+            let resets = data.quota.resetsInMs || 0;
+            if (!effectiveCanPlay && localOldestTime > 0) {
+              resets = Math.max(resets, localOldestTime + windowMs - now);
+            }
+
+            setPuzzlesRemaining(remaining);
+            setCanPlay(effectiveCanPlay);
+            setResetsInMs(resets);
           }
         }
       }
@@ -200,6 +291,7 @@ export function useTierQuota(
             puzzlesSinceLastAd: nextAdCount,
           };
           window.localStorage.setItem(TIER_STORAGE_KEY, JSON.stringify(sessionData));
+          window.dispatchEvent(new Event("tier-session-updated"));
         }
       } catch {}
 
