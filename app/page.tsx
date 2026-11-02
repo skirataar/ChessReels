@@ -291,8 +291,8 @@ function SmotheredMateVignette() {
                   isKingSquare && isCheckmated
                     ? undefined
                     : isDark
-                    ? "#b58863"
-                    : "#f0d9b5",
+                    ? "#161311"
+                    : "#26221f",
               }}
             >
               {/* 1. Black King at square 0 - Topples to the left when exit smothered! */}
