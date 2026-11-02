@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
             isCalibrated: false,
             calibrationStep: 0,
             passwordHash,
-            plan: "free",
+            plan: guestUser.plan === "premium" || guestUser.plan === "pro" ? "premium" : "free",
           },
         });
       }

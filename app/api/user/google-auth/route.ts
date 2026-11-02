@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      return NextResponse.json({
+      const response = NextResponse.json({
         success: true,
         isNewUser: false,
         user: {
@@ -75,33 +75,54 @@ export async function POST(request: NextRequest) {
           calibrationStep: user.calibrationStep,
         },
       });
+
+      response.cookies.set("chess_reel_session", user.id, {
+        path: "/",
+        httpOnly: false,
+        sameSite: "lax",
+        maxAge: 60 * 60 * 24 * 30, // 30 days
+      });
+
+      response.cookies.set("chess_reel_pending_google", "", {
+        path: "/",
+        maxAge: 0,
+      });
+
+      return response;
     }
 
     // 2. New user registration via Google:
-    // Skill baseline calculation (Beginner: 600, Intermediate: 1200, Advanced: 1600)
+    // Determine initial Elo (custom calibrated startingElo if supplied, else skill baseline)
     const initialSkill =
       skillLevel === "beginner"
         ? "beginner"
         : skillLevel === "advanced"
         ? "advanced"
         : "intermediate";
-    const baseElo =
+    const fallbackBaseElo =
       initialSkill === "beginner" ? 600 : initialSkill === "advanced" ? 1600 : 1200;
 
-    // Generate unique username from email prefix or name
-    let baseUsername = (name || cleanEmail.split("@")[0])
+    const baseElo =
+      typeof body.elo === "number"
+        ? Math.max(400, Math.min(2600, body.elo))
+        : typeof body.startingElo === "number"
+        ? Math.max(400, Math.min(2600, body.startingElo))
+        : fallbackBaseElo;
+
+    // Generate unique username from custom input, name, or email prefix
+    let preferredUsername = (body.username || name || cleanEmail.split("@")[0])
       .toLowerCase()
       .replace(/[^a-z0-9_]/g, "")
       .slice(0, 15);
 
-    if (baseUsername.length < 3) {
-      baseUsername = `player_${Math.floor(1000 + Math.random() * 9000)}`;
+    if (preferredUsername.length < 3) {
+      preferredUsername = `player_${Math.floor(1000 + Math.random() * 9000)}`;
     }
 
-    let finalUsername = baseUsername;
+    let finalUsername = preferredUsername;
     let counter = 1;
     while (await prisma.user.findUnique({ where: { username: finalUsername } })) {
-      finalUsername = `${baseUsername.slice(0, 14)}_${counter}`;
+      finalUsername = `${preferredUsername.slice(0, 11)}_${counter}`;
       counter++;
     }
 
@@ -131,11 +152,25 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       isNewUser: true,
       user: newUser,
     });
+
+    response.cookies.set("chess_reel_session", newUser.id, {
+      path: "/",
+      httpOnly: false,
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 30, // 30 days
+    });
+
+    response.cookies.set("chess_reel_pending_google", "", {
+      path: "/",
+      maxAge: 0,
+    });
+
+    return response;
   } catch (error) {
     console.error("Google authentication failed:", error);
     return NextResponse.json(

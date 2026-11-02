@@ -236,9 +236,8 @@ export function QuotaPaywallModal({
         <div className="p-6 pt-3 space-y-2">
           <button
             data-testid="paywall-upgrade-pro-btn"
-            onClick={() => {
-              onUpgradeToPro(selectedPlan);
-              onClose();
+            onClick={async () => {
+              await onUpgradeToPro(selectedPlan);
             }}
             className="w-full py-3.5 rounded-xl bg-gradient-to-r from-amber-400 to-[#c29b78] hover:from-amber-300 hover:to-[#dfba94] text-zinc-950 font-black text-sm transition-all shadow-lg shadow-amber-500/25 flex items-center justify-center gap-2 cursor-pointer active:scale-98"
           >

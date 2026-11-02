@@ -493,6 +493,14 @@ export default function RootPage() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Pending Google authenticated user (when new user signs in with Google, they go through onboarding calibration)
+  const [pendingGoogleUser, setPendingGoogleUser] = useState<{
+    googleId: string;
+    email: string;
+    name: string;
+    avatar: string;
+  } | null>(null);
+
   // Auto-redirect if already signed in, and inspect URL params for OAuth redirects
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -503,6 +511,27 @@ export default function RootPage() {
       const prefillParam = searchParams.get("prefill");
       const errorParam = searchParams.get("error");
       const oauthError = searchParams.get("oauth_error");
+      const googleOnboarding = searchParams.get("google_onboarding");
+
+      // Check if arriving from Google OAuth for fresh user onboarding calibration
+      if (googleOnboarding === "1" || (stepParam === "step-elo" && !window.localStorage.getItem("chess_reel_account"))) {
+        setStep("step-elo");
+        const cookieMatch = document.cookie.match(/chess_reel_pending_google=([^;]+)/);
+        if (cookieMatch && cookieMatch[1]) {
+          try {
+            const raw = decodeURIComponent(cookieMatch[1]);
+            const parsed = JSON.parse(raw);
+            setPendingGoogleUser(parsed);
+            if (parsed.name) setName(parsed.name);
+            if (parsed.email) {
+              setEmail(parsed.email);
+              setUsername(parsed.email.split("@")[0].toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 15));
+            }
+          } catch {}
+        }
+        window.history.replaceState({}, document.title, window.location.pathname);
+        return;
+      }
 
       if (stepParam === "auth" || modeParam === "signin") {
         setStep("auth");
@@ -520,6 +549,34 @@ export default function RootPage() {
       if (oauthError) {
         setAuthError(`Authentication notification: ${oauthError.replace(/_/g, " ")}`);
         window.history.replaceState({}, document.title, window.location.pathname);
+      }
+
+      // Check for Google OAuth callback user cookie & redirect to play
+      const oauthCookieMatch = document.cookie.match(/chess_reel_oauth_user=([^;]+)/);
+      if (oauthCookieMatch && oauthCookieMatch[1]) {
+        try {
+          let raw = oauthCookieMatch[1];
+          try {
+            raw = decodeURIComponent(raw);
+          } catch {}
+          const oauthUser = JSON.parse(raw);
+          if (oauthUser && oauthUser.id) {
+            window.localStorage.setItem("chess_reel_account", JSON.stringify(oauthUser));
+            if (oauthUser.elo) {
+              window.localStorage.setItem("chess_reel_elo", String(oauthUser.elo));
+              window.localStorage.setItem("chess_reel_user_elo", String(oauthUser.elo));
+            }
+            if (oauthUser.plan) {
+              window.localStorage.setItem("chess_reel_plan", oauthUser.plan);
+            }
+            window.localStorage.removeItem("chess_reel_tier_session");
+            window.localStorage.removeItem("chess_reel_tier_session_guest");
+            window.localStorage.removeItem("chess_reel_last_solved_puzzle");
+            document.cookie = "chess_reel_oauth_user=; path=/; max-age=0";
+            router.replace("/play");
+            return;
+          }
+        } catch {}
       }
 
       const hasAccount = window.localStorage.getItem("chess_reel_account");
@@ -576,12 +633,64 @@ export default function RootPage() {
     } catch {}
   };
 
+  // Finalize new account creation for user who authenticated via Google and completed onboarding calibration
+  const handleCompleteGoogleOnboarding = async () => {
+    if (!pendingGoogleUser) return;
+    setIsSubmitting(true);
+    setAuthError(null);
+    saveCalibrationToStorage();
+
+    try {
+      const res = await fetch("/api/user/google-auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          googleId: pendingGoogleUser.googleId,
+          email: pendingGoogleUser.email,
+          name: pendingGoogleUser.name,
+          username: username.trim() || undefined,
+          avatar: pendingGoogleUser.avatar,
+          elo: startingElo,
+          startingElo,
+          targetElo,
+          theme: selectedTheme.id,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setAuthError(data.error || "Could not complete registration.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (data.user) {
+        window.localStorage.setItem("chess_reel_account", JSON.stringify(data.user));
+        window.localStorage.setItem("chess_reel_elo", String(data.user.elo || startingElo));
+        window.localStorage.setItem("chess_reel_plan", data.user.plan || "free");
+        window.localStorage.removeItem("chess_reel_tier_session");
+        window.localStorage.removeItem("chess_reel_tier_session_guest");
+        window.localStorage.removeItem("chess_reel_last_solved_puzzle");
+        document.cookie = "chess_reel_pending_google=; path=/; max-age=0";
+        document.cookie = `chess_reel_session=${encodeURIComponent(data.user.id)}; path=/; max-age=${60 * 60 * 24 * 30}`;
+        window.dispatchEvent(new Event("account-updated"));
+        window.dispatchEvent(new Event("tier-session-updated"));
+        router.push("/play");
+      }
+    } catch {
+      setAuthError("Network error. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   // Trigger Google OAuth: mode can be 'signup' (new accounts from onboarding) or 'signin' (existing accounts)
   const handleGoogleAuth = (mode: "signup" | "signin" = authMode) => {
     saveCalibrationToStorage();
     const returnUrl = encodeURIComponent("/play");
     const skillLevel = skill.skillLevel;
-    window.location.href = `/api/auth/google?mode=${mode}&skillLevel=${skillLevel}&returnUrl=${returnUrl}`;
+    const eloParam = `&startingElo=${startingElo}&targetElo=${targetElo}&theme=${encodeURIComponent(selectedTheme.id)}`;
+    window.location.href = `/api/auth/google?mode=${mode}&skillLevel=${skillLevel}${eloParam}&returnUrl=${returnUrl}`;
   };
 
   // Handle direct guest access
@@ -663,6 +772,18 @@ export default function RootPage() {
         if (data.user) {
           window.localStorage.setItem("chess_reel_account", JSON.stringify(data.user));
           window.localStorage.setItem("chess_reel_elo", String(data.user.elo || startingElo));
+          if (data.user.plan) {
+            window.localStorage.setItem("chess_reel_plan", data.user.plan);
+            window.dispatchEvent(new Event("plan-updated"));
+          } else {
+            window.localStorage.removeItem("chess_reel_plan");
+          }
+          // Clear any stale guest session or old solved puzzle to prevent cross-account bleeding
+          window.localStorage.removeItem("chess_reel_tier_session");
+          window.localStorage.removeItem("chess_reel_tier_session_guest");
+          window.localStorage.removeItem("chess_reel_last_solved_puzzle");
+          window.dispatchEvent(new Event("tier-session-updated"));
+
           document.cookie = `chess_reel_session=${encodeURIComponent(data.user.id)}; path=/; max-age=${60 * 60 * 24 * 30}`;
           window.dispatchEvent(new Event("account-updated"));
           router.push("/play");
@@ -710,7 +831,15 @@ export default function RootPage() {
           if (data.user.plan) {
             window.localStorage.setItem("chess_reel_plan", data.user.plan);
             window.dispatchEvent(new Event("plan-updated"));
+          } else {
+            window.localStorage.removeItem("chess_reel_plan");
           }
+          // Clear any stale guest session or old solved puzzle to prevent cross-account bleeding
+          window.localStorage.removeItem("chess_reel_tier_session");
+          window.localStorage.removeItem("chess_reel_tier_session_guest");
+          window.localStorage.removeItem("chess_reel_last_solved_puzzle");
+          window.dispatchEvent(new Event("tier-session-updated"));
+
           document.cookie = `chess_reel_session=${encodeURIComponent(data.user.id)}; path=/; max-age=${60 * 60 * 24 * 30}`;
           window.dispatchEvent(new Event("account-updated"));
           router.push("/play");
@@ -827,6 +956,18 @@ export default function RootPage() {
                 className="w-full h-full flex flex-col justify-between"
               >
                 <div>
+                  {pendingGoogleUser && (
+                    <div className="mb-3 px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/10 flex items-center gap-2 self-start animate-in fade-in duration-200">
+                      {pendingGoogleUser.avatar && pendingGoogleUser.avatar.startsWith("http") ? (
+                        <img src={pendingGoogleUser.avatar} alt="Google Avatar" className="w-4 h-4 rounded-full object-cover" />
+                      ) : (
+                        <GoogleLogo className="w-3.5 h-3.5" />
+                      )}
+                      <span className="text-[11px] text-stone-300 font-medium">
+                        Calibrating for <strong className="text-white">{pendingGoogleUser.name || pendingGoogleUser.email}</strong>
+                      </span>
+                    </div>
+                  )}
                   <h2 className="text-xl font-semibold tracking-tight text-[#f5f2eb]">
                     Where are you starting from?
                   </h2>
@@ -1156,128 +1297,75 @@ export default function RootPage() {
                 className="w-full h-full flex flex-col justify-between"
               >
                 <div className="overflow-y-auto pr-1 flex-1 min-h-0 space-y-2.5">
-                  <div>
-                    <h2 className="text-xl font-semibold tracking-tight text-[#f5f2eb]">
-                      {authMode === "signup" ? "Save your board and start swiping." : "Welcome back."}
-                    </h2>
-
-                    {/* Summary Pill */}
-                    {authMode === "signup" && (
-                      <div className="mt-2.5 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/[0.04] border border-white/[0.08] text-[11px] text-stone-300">
-                        <span className="text-stone-400 font-mono">{startingElo}</span>
-                        <span className="text-[#c29b78]">→</span>
-                        <span className="text-[#c29b78] font-semibold font-mono">{targetElo} Elo</span>
-                        <span className="text-stone-600">•</span>
-                        <span className="text-stone-300">{selectedTheme.name}</span>
+                  {pendingGoogleUser ? (
+                    <div className="space-y-4">
+                      <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold">
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Google Account Connected</span>
                       </div>
-                    )}
 
-                    {/* Google OAuth Button */}
-                    <div className="mt-4">
-                      <button
-                        onClick={() => handleGoogleAuth(authMode)}
-                        type="button"
-                        className="w-full h-11 rounded-2xl bg-[#12100e] hover:bg-[#1a1714] border border-white/[0.1] hover:border-white/20 text-[#f5f2eb] font-medium text-xs sm:text-sm transition-all duration-150 active:scale-[0.98] flex items-center justify-center gap-3 cursor-pointer"
-                      >
-                        <GoogleLogo />
-                        <span>Continue with Google</span>
-                      </button>
-                    </div>
+                      <div>
+                        <h2 className="text-xl font-semibold tracking-tight text-[#f5f2eb]">
+                          Ready to swipe, {pendingGoogleUser.name?.split(" ")[0] || "Tactician"}!
+                        </h2>
+                        <p className="text-xs text-[#78716c] mt-1">
+                          Your board calibration is locked in. Let&apos;s finalize your tactical profile.
+                        </p>
+                      </div>
 
-                    {/* Minimal Hairline Divider */}
-                    <div className="flex items-center gap-3 my-3">
-                      <div className="flex-1 h-px bg-white/[0.08]" />
-                      <span className="text-[11px] uppercase tracking-wider text-[#78716c]">or</span>
-                      <div className="flex-1 h-px bg-white/[0.08]" />
-                    </div>
-
-                    {/* Credentials Form */}
-                    <form onSubmit={handleCredentialsSubmit} noValidate className="space-y-2">
-                      {authMode === "signup" ? (
-                        <>
-                          <div>
-                            <input
-                              type="text"
-                              value={name}
-                              onChange={(e) => setName(e.target.value)}
-                              placeholder="Name"
-                              autoComplete="name"
-                              className="w-full h-10 px-3.5 rounded-xl bg-white/[0.03] border border-white/10 focus:border-[#c29b78] text-xs sm:text-sm text-[#f5f2eb] placeholder:text-stone-600 outline-none transition-colors"
+                      {/* Profile Summary Card */}
+                      <div className="p-4 rounded-2xl bg-[#12100e] border border-white/[0.08] space-y-3">
+                        <div className="flex items-center gap-3">
+                          {pendingGoogleUser.avatar && pendingGoogleUser.avatar.startsWith("http") ? (
+                            <img
+                              src={pendingGoogleUser.avatar}
+                              alt={pendingGoogleUser.name}
+                              className="w-12 h-12 rounded-xl object-cover border border-white/10"
                             />
+                          ) : (
+                            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#c29b78] to-[#967355] flex items-center justify-center text-zinc-950 font-bold text-lg">
+                              {pendingGoogleUser.name?.charAt(0) || "♟"}
+                            </div>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <div className="text-sm font-bold text-[#f5f2eb] truncate">
+                              {pendingGoogleUser.name}
+                            </div>
+                            <div className="text-xs text-stone-400 truncate font-mono">
+                              {pendingGoogleUser.email}
+                            </div>
                           </div>
+                        </div>
 
-                          <div>
-                            <input
-                              type="email"
-                              value={email}
-                              onChange={(e) => setEmail(e.target.value)}
-                              placeholder="Email"
-                              autoCapitalize="none"
-                              autoComplete="email"
-                              className="w-full h-10 px-3.5 rounded-xl bg-white/[0.03] border border-white/10 focus:border-[#c29b78] text-xs sm:text-sm text-[#f5f2eb] placeholder:text-stone-600 outline-none transition-colors"
-                            />
+                        {/* Calibration summary pill */}
+                        <div className="flex items-center justify-between p-2.5 rounded-xl bg-white/[0.03] border border-white/5 text-xs">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-stone-400">Starting:</span>
+                            <span className="font-mono font-bold text-[#c29b78]">{startingElo} Elo</span>
                           </div>
+                          <div className="text-stone-500">•</div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-stone-400">Target:</span>
+                            <span className="font-mono font-bold text-stone-200">{targetElo}</span>
+                          </div>
+                          <div className="text-stone-500">•</div>
+                          <div className="text-stone-300 font-medium">{selectedTheme.name}</div>
+                        </div>
 
-                          <div>
-                            <input
-                              type="text"
-                              value={username}
-                              onChange={(e) => setUsername(e.target.value)}
-                              placeholder="Username"
-                              autoCapitalize="none"
-                              autoComplete="username"
-                              className="w-full h-10 px-3.5 rounded-xl bg-white/[0.03] border border-white/10 focus:border-[#c29b78] text-xs sm:text-sm text-[#f5f2eb] placeholder:text-stone-600 outline-none transition-colors"
-                            />
-                          </div>
-
-                          <div>
-                            <input
-                              type="password"
-                              value={password}
-                              onChange={(e) => setPassword(e.target.value)}
-                              placeholder="Password"
-                              autoComplete="new-password"
-                              className="w-full h-10 px-3.5 rounded-xl bg-white/[0.03] border border-white/10 focus:border-[#c29b78] text-xs sm:text-sm text-[#f5f2eb] placeholder:text-stone-600 outline-none transition-colors"
-                            />
-                          </div>
-
-                          <div>
-                            <input
-                              type="password"
-                              value={confirmPassword}
-                              onChange={(e) => setConfirmPassword(e.target.value)}
-                              placeholder="Confirm Pass"
-                              autoComplete="new-password"
-                              className="w-full h-10 px-3.5 rounded-xl bg-white/[0.03] border border-white/10 focus:border-[#c29b78] text-xs sm:text-sm text-[#f5f2eb] placeholder:text-stone-600 outline-none transition-colors"
-                            />
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <div>
-                            <input
-                              type="text"
-                              value={username}
-                              onChange={(e) => setUsername(e.target.value)}
-                              placeholder="Username or email"
-                              autoCapitalize="none"
-                              autoComplete="username"
-                              className="w-full h-10 px-3.5 rounded-xl bg-white/[0.03] border border-white/10 focus:border-[#c29b78] text-xs sm:text-sm text-[#f5f2eb] placeholder:text-stone-600 outline-none transition-colors"
-                            />
-                          </div>
-
-                          <div>
-                            <input
-                              type="password"
-                              value={password}
-                              onChange={(e) => setPassword(e.target.value)}
-                              placeholder="Password"
-                              autoComplete="current-password"
-                              className="w-full h-10 px-3.5 rounded-xl bg-white/[0.03] border border-white/10 focus:border-[#c29b78] text-xs sm:text-sm text-[#f5f2eb] placeholder:text-stone-600 outline-none transition-colors"
-                            />
-                          </div>
-                        </>
-                      )}
+                        {/* Tactics Username Input */}
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-medium text-stone-400">
+                            Tactics Username
+                          </label>
+                          <input
+                            type="text"
+                            value={username}
+                            onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 15))}
+                            placeholder={pendingGoogleUser.name?.toLowerCase().replace(/[^a-z0-9]/g, "") || "username"}
+                            className="w-full h-10 px-3.5 rounded-xl bg-white/[0.03] border border-white/10 focus:border-[#c29b78] text-xs sm:text-sm text-[#f5f2eb] font-mono outline-none transition-colors"
+                          />
+                        </div>
+                      </div>
 
                       {authError && (
                         <div className="text-xs text-rose-400 bg-rose-950/30 border border-rose-800/40 rounded-lg p-2.5">
@@ -1286,22 +1374,184 @@ export default function RootPage() {
                       )}
 
                       <button
-                        type="submit"
+                        type="button"
                         disabled={isSubmitting}
-                        className="w-full h-11 rounded-2xl bg-[#c29b78] hover:bg-[#d4b08f] text-[#0a0908] font-semibold text-xs sm:text-sm tracking-wide transition-all duration-150 active:scale-[0.98] shadow-lg shadow-[#c29b78]/20 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-1"
+                        onClick={handleCompleteGoogleOnboarding}
+                        className="w-full h-12 rounded-full bg-[#c29b78] hover:bg-[#d4b08f] text-[#0a0908] font-bold text-sm tracking-wide transition-all duration-150 active:scale-[0.98] shadow-lg shadow-[#c29b78]/20 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                       >
                         {isSubmitting ? (
                           <div className="w-4 h-4 border-2 border-stone-900 border-t-transparent rounded-full animate-spin" />
                         ) : (
-                          <span>{authMode === "signup" ? "Create Account" : "Sign In"}</span>
+                          <>
+                            <span>Complete Setup & Start Playing ({startingElo} Elo)</span>
+                            <ArrowRight className="w-4 h-4 stroke-[2.5]" />
+                          </>
                         )}
                       </button>
-                    </form>
-                  </div>
+
+                      <div className="text-center pt-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPendingGoogleUser(null);
+                            document.cookie = "chess_reel_pending_google=; path=/; max-age=0";
+                            setAuthMode("signup");
+                          }}
+                          className="text-[11px] text-[#78716c] hover:text-[#f5f2eb] transition-colors cursor-pointer"
+                        >
+                          Sign up with password instead
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <h2 className="text-xl font-semibold tracking-tight text-[#f5f2eb]">
+                        {authMode === "signup" ? "Save your board and start swiping." : "Welcome back."}
+                      </h2>
+
+                      {/* Summary Pill */}
+                      {authMode === "signup" && (
+                        <div className="mt-2.5 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/[0.04] border border-white/[0.08] text-[11px] text-stone-300">
+                          <span className="text-stone-400 font-mono">{startingElo}</span>
+                          <span className="text-[#c29b78]">→</span>
+                          <span className="text-[#c29b78] font-semibold font-mono">{targetElo} Elo</span>
+                          <span className="text-stone-600">•</span>
+                          <span className="text-stone-300">{selectedTheme.name}</span>
+                        </div>
+                      )}
+
+                      {/* Google OAuth Button */}
+                      <div className="mt-4">
+                        <button
+                          onClick={() => handleGoogleAuth(authMode)}
+                          type="button"
+                          className="w-full h-11 rounded-2xl bg-[#12100e] hover:bg-[#1a1714] border border-white/[0.1] hover:border-white/20 text-[#f5f2eb] font-medium text-xs sm:text-sm transition-all duration-150 active:scale-[0.98] flex items-center justify-center gap-3 cursor-pointer"
+                        >
+                          <GoogleLogo />
+                          <span>Continue with Google</span>
+                        </button>
+                      </div>
+
+                      {/* Minimal Hairline Divider */}
+                      <div className="flex items-center gap-3 my-3">
+                        <div className="flex-1 h-px bg-white/[0.08]" />
+                        <span className="text-[11px] uppercase tracking-wider text-[#78716c]">or</span>
+                        <div className="flex-1 h-px bg-white/[0.08]" />
+                      </div>
+
+                      {/* Credentials Form */}
+                      <form onSubmit={handleCredentialsSubmit} noValidate className="space-y-2">
+                        {authMode === "signup" ? (
+                          <>
+                            <div>
+                              <input
+                                type="text"
+                                value={name}
+                                onChange={(e) => setName(e.target.value)}
+                                placeholder="Name"
+                                autoComplete="name"
+                                className="w-full h-10 px-3.5 rounded-xl bg-white/[0.03] border border-white/10 focus:border-[#c29b78] text-xs sm:text-sm text-[#f5f2eb] placeholder:text-stone-600 outline-none transition-colors"
+                              />
+                            </div>
+
+                            <div>
+                              <input
+                                type="email"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                placeholder="Email"
+                                autoCapitalize="none"
+                                autoComplete="email"
+                                className="w-full h-10 px-3.5 rounded-xl bg-white/[0.03] border border-white/10 focus:border-[#c29b78] text-xs sm:text-sm text-[#f5f2eb] placeholder:text-stone-600 outline-none transition-colors"
+                              />
+                            </div>
+
+                            <div>
+                              <input
+                                type="text"
+                                value={username}
+                                onChange={(e) => setUsername(e.target.value)}
+                                placeholder="Username"
+                                autoCapitalize="none"
+                                autoComplete="username"
+                                className="w-full h-10 px-3.5 rounded-xl bg-white/[0.03] border border-white/10 focus:border-[#c29b78] text-xs sm:text-sm text-[#f5f2eb] placeholder:text-stone-600 outline-none transition-colors"
+                              />
+                            </div>
+
+                            <div>
+                              <input
+                                type="password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                placeholder="Password"
+                                autoComplete="new-password"
+                                className="w-full h-10 px-3.5 rounded-xl bg-white/[0.03] border border-white/10 focus:border-[#c29b78] text-xs sm:text-sm text-[#f5f2eb] placeholder:text-stone-600 outline-none transition-colors"
+                              />
+                            </div>
+
+                            <div>
+                              <input
+                                type="password"
+                                value={confirmPassword}
+                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                placeholder="Confirm Pass"
+                                autoComplete="new-password"
+                                className="w-full h-10 px-3.5 rounded-xl bg-white/[0.03] border border-white/10 focus:border-[#c29b78] text-xs sm:text-sm text-[#f5f2eb] placeholder:text-stone-600 outline-none transition-colors"
+                              />
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div>
+                              <input
+                                type="text"
+                                value={username}
+                                onChange={(e) => setUsername(e.target.value)}
+                                placeholder="Username or email"
+                                autoCapitalize="none"
+                                autoComplete="username"
+                                className="w-full h-10 px-3.5 rounded-xl bg-white/[0.03] border border-white/10 focus:border-[#c29b78] text-xs sm:text-sm text-[#f5f2eb] placeholder:text-stone-600 outline-none transition-colors"
+                              />
+                            </div>
+
+                            <div>
+                              <input
+                                type="password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                placeholder="Password"
+                                autoComplete="current-password"
+                                className="w-full h-10 px-3.5 rounded-xl bg-white/[0.03] border border-white/10 focus:border-[#c29b78] text-xs sm:text-sm text-[#f5f2eb] placeholder:text-stone-600 outline-none transition-colors"
+                              />
+                            </div>
+                          </>
+                        )}
+
+                        {authError && (
+                          <div className="text-xs text-rose-400 bg-rose-950/30 border border-rose-800/40 rounded-lg p-2.5">
+                            {authError}
+                          </div>
+                        )}
+
+                        <button
+                          type="submit"
+                          disabled={isSubmitting}
+                          className="w-full h-11 rounded-2xl bg-[#c29b78] hover:bg-[#d4b08f] text-[#0a0908] font-semibold text-xs sm:text-sm tracking-wide transition-all duration-150 active:scale-[0.98] shadow-lg shadow-[#c29b78]/20 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-1"
+                        >
+                          {isSubmitting ? (
+                            <div className="w-4 h-4 border-2 border-stone-900 border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <span>{authMode === "signup" ? "Create Account" : "Sign In"}</span>
+                          )}
+                        </button>
+                      </form>
+                    </div>
+                  )}
                 </div>
 
                 {/* Bottom Mode Switch & Guest Bypass */}
-                <div className="w-full pt-3 pb-2 text-center space-y-2 shrink-0">
+                {!pendingGoogleUser && (
+                  <div className="w-full pt-3 pb-2 text-center space-y-2 shrink-0">
                   <div>
                     <button
                       type="button"
@@ -1333,6 +1583,7 @@ export default function RootPage() {
                     </button>
                   </div>
                 </div>
+              )}
               </motion.div>
             )}
           </AnimatePresence>

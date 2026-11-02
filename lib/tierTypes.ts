@@ -7,9 +7,15 @@ export interface TierConfig {
 }
 
 export const DEFAULT_TIER_CONFIG: TierConfig = {
-  freePuzzleLimit: 4,
+  freePuzzleLimit: 5,
   freeWindowHours: 4,
   adFrequencyPuzzles: 2,
   proMonthlyPrice: 200, // 200rs/month
   annualDiscountPercent: 5, // 5% save on annual plans
 };
+
+export function isProPlan(plan?: string | null): boolean {
+  if (!plan) return false;
+  const clean = plan.toLowerCase().trim();
+  return clean === "premium" || clean === "pro";
+}

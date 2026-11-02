@@ -94,8 +94,29 @@ export function PlayView({
   initialShowLanding?: boolean;
 } = {}) {
   const router = useRouter();
-  const [guestId, setGuestId] = useState<string>("guest-user");
-  const [currentElo, setCurrentElo] = useState<number>(800);
+  const [guestId, setGuestId] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = window.localStorage.getItem(GUEST_ID_KEY);
+        if (saved) return saved;
+      } catch {}
+    }
+    return "guest-user";
+  });
+  const [currentElo, setCurrentElo] = useState<number>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const savedElo = window.localStorage.getItem(ELO_STORAGE_KEY);
+        if (savedElo) return parseInt(savedElo, 10);
+        const raw = window.localStorage.getItem(ACCOUNT_STORAGE_KEY);
+        if (raw) {
+          const acc = JSON.parse(raw);
+          if (acc?.elo) return acc.elo;
+        }
+      } catch {}
+    }
+    return 800;
+  });
   const [lastEloChange, setLastEloChange] = useState<number | null>(null);
   const [currentPuzzle, setCurrentPuzzle] = useState<PuzzleData | null>(
     FALLBACK_PUZZLES[0]
@@ -105,7 +126,17 @@ export function PlayView({
   const [activeTab, setActiveTab] = useState<"reels" | "rank" | "profile">("reels");
 
   // Account, Friends & Placement Calibration States
-  const [userAccount, setUserAccount] = useState<UserAccount | null>(null);
+  const [userAccount, setUserAccount] = useState<UserAccount | null>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const raw = window.localStorage.getItem(ACCOUNT_STORAGE_KEY);
+        return raw ? JSON.parse(raw) : null;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  });
   const [showLanding, setShowLanding] = useState<boolean>(initialShowLanding);
   const [authModalTab, setAuthModalTab] = useState<"register" | "login">("register");
   const [authModalGoogle, setAuthModalGoogle] = useState<boolean>(false);
@@ -392,18 +423,22 @@ export function PlayView({
   // Initial puzzle fetch on mount
   const initialFetchDoneRef = useRef(false);
   useEffect(() => {
-    if (!initialFetchDoneRef.current) {
-      initialFetchDoneRef.current = true;
-      if (!canPlay && !isPro && !isCalibrating) {
-        // Free user paywalled on mount/refresh: show previous solved puzzle and do not advance
+    if (canPlay || isPro || isCalibrating) {
+      if (!initialFetchDoneRef.current) {
+        initialFetchDoneRef.current = true;
+        fetchNextPuzzle();
+        prefetchPuzzles(currentEloRef.current, 5, userAccount?.id || guestId).catch(() => {});
+      }
+    } else {
+      // Free user paywalled on mount/refresh: show previous solved puzzle and do not advance
+      if (!initialFetchDoneRef.current) {
         const lastSolvedRaw =
           typeof window !== "undefined"
             ? window.localStorage.getItem("chess_reel_last_solved_puzzle")
             : null;
         if (lastSolvedRaw) {
           try {
-            const parsed = JSON.parse(lastSolvedRaw);
-            setCurrentPuzzle(parsed);
+            setCurrentPuzzle(JSON.parse(lastSolvedRaw));
           } catch {
             setCurrentPuzzle(FALLBACK_PUZZLES[0]);
           }
@@ -413,11 +448,7 @@ export function PlayView({
         setPuzzleStatus("solved");
         setPaywallReason("quota");
         setIsQuotaModalOpen(true);
-        return;
       }
-
-      fetchNextPuzzle();
-      prefetchPuzzles(currentEloRef.current, 5, userAccount?.id || guestId).catch(() => {});
     }
   }, [fetchNextPuzzle, userAccount?.id, guestId, canPlay, isPro, isCalibrating]);
 
@@ -476,6 +507,12 @@ export function PlayView({
           if (typeof window !== "undefined") {
             window.localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(updatedAcc));
             window.localStorage.setItem(ELO_STORAGE_KEY, nextElo.toString());
+            // Ensure fresh quota for calibrated user: clean 5 puzzles as configured by admin
+            window.localStorage.removeItem(`chess_reel_tier_session_${userAccount.id}`);
+            window.localStorage.removeItem("chess_reel_tier_session_guest");
+            window.localStorage.removeItem("chess_reel_tier_session");
+            window.localStorage.removeItem("chess_reel_last_solved_puzzle");
+            window.dispatchEvent(new Event("tier-session-updated"));
           }
         } catch {}
       } else {
@@ -583,16 +620,26 @@ export function PlayView({
         if (user.plan) {
           window.localStorage.setItem("chess_reel_plan", user.plan);
           window.dispatchEvent(new Event("plan-updated"));
+        } else {
+          window.localStorage.removeItem("chess_reel_plan");
         }
+        // Clean any stale guest session or old solved puzzle to prevent cross-account bleeding
+        window.localStorage.removeItem("chess_reel_tier_session");
+        window.localStorage.removeItem("chess_reel_tier_session_guest");
+        window.localStorage.removeItem("chess_reel_last_solved_puzzle");
         window.dispatchEvent(new Event("account-updated"));
+        window.dispatchEvent(new Event("tier-session-updated"));
       }
     } catch {}
 
+    setIsQuotaModalOpen(false);
+    setPuzzleStatus("playing");
     fetchNextPuzzle();
   };
 
   // Sign out handler
   const handleSignOut = () => {
+    const oldUserId = userAccount?.id;
     setUserAccount(null);
     setShowLanding(true);
     setIsStatsModalOpen(false);
@@ -602,10 +649,17 @@ export function PlayView({
         window.localStorage.removeItem("chess_reel_preview_guest");
         window.localStorage.removeItem("chess_reel_plan");
         window.localStorage.removeItem("chess_reel_custom_dp");
+        window.localStorage.removeItem("chess_reel_tier_session");
+        window.localStorage.removeItem("chess_reel_tier_session_guest");
+        if (oldUserId) {
+          window.localStorage.removeItem(`chess_reel_tier_session_${oldUserId}`);
+        }
+        window.localStorage.removeItem("chess_reel_last_solved_puzzle");
         document.cookie = "chess_reel_session=; path=/; max-age=0";
         document.cookie = "chess_reel_oauth_user=; path=/; max-age=0";
         window.dispatchEvent(new Event("account-updated"));
         window.dispatchEvent(new Event("plan-updated"));
+        window.dispatchEvent(new Event("tier-session-updated"));
       }
     } catch {}
     setActiveTab("reels");
@@ -1050,7 +1104,7 @@ export function PlayView({
         proPrice={proPrice}
       />
 
-      {/* 5. Free Tier Quota Paywall Modal (4 puzzles per 4h window) */}
+      {/* 5. Free Tier Quota Paywall Modal (5 puzzles per 4h window) */}
       <QuotaPaywallModal
         isOpen={isQuotaModalOpen}
         onClose={() => {
@@ -1072,9 +1126,17 @@ export function PlayView({
                 setCurrentPuzzle(FALLBACK_PUZZLES[0]);
               }
             }
+          } else {
+            setPuzzleStatus("playing");
+            fetchNextPuzzle();
           }
         }}
-        onUpgradeToPro={upgradeToPro}
+        onUpgradeToPro={async () => {
+          await upgradeToPro();
+          setIsQuotaModalOpen(false);
+          setPuzzleStatus("playing");
+          fetchNextPuzzle();
+        }}
         resetsInMs={resetsInMs}
         limit={windowLimit}
         windowHours={windowHours}

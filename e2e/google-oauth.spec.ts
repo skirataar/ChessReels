@@ -99,28 +99,75 @@ test.describe("Google OAuth 2.0 Authentication Flow", () => {
     expect(parsed.elo).toBe(1200);
   });
 
-  test("4. AuthModal displays Continue with Google (OAuth) action button and skill selector", async ({ page }) => {
+  test("4. Google sign-in with a new account routes user to onboarding calibration, preserving calibrated Elo", async ({ page }) => {
+    // 1. Visit landing page and click "Sign In"
     await page.goto("/");
+    const signInBtn = page.getByRole("button", { name: /sign in/i });
+    await expect(signInBtn).toBeVisible();
+    await signInBtn.click();
 
-    // Click "Continue with Google" directly on landing page
-    const continueGoogleBtn = page.getByRole("button", { name: /continue with google/i }).first();
+    // 2. On auth step, verify "Continue with Google" is visible
+    const continueGoogleBtn = page.getByRole("button", { name: /continue with google/i });
     await expect(continueGoogleBtn).toBeVisible();
-    await continueGoogleBtn.click();
 
-    // Verify Google OAuth prompt modal appears
-    await expect(page.getByText(/sign in with google to chess reel/i)).toBeVisible();
+    // 3. Simulate callback for a new Google user attempting sign-in (mode: 'signin')
+    const uniqueSuffix = `newuser_${Date.now()}`;
+    const statePayload = {
+      mode: "signin",
+      guestId: `guest_${uniqueSuffix}`,
+      returnUrl: "/play",
+    };
+    const encodedState = Buffer.from(JSON.stringify(statePayload)).toString("base64url");
 
-    // Verify OAuth action button is present
-    const oauthBtn = page.getByRole("button", { name: /continue with google \(oauth\)/i });
-    await expect(oauthBtn).toBeVisible();
+    await page.goto(`/api/auth/google/callback?code=test_mock_code_${uniqueSuffix}&state=${encodedState}`);
 
-    // Verify Skill Baseline selection is present
-    await expect(page.getByText(/select your skill baseline/i)).toBeVisible();
-    await expect(page.getByRole("button", { name: /beginner 600 elo/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /intermediate 1200 elo/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /advanced 1600 elo/i })).toBeVisible();
+    // 4. Verify user is redirected to onboarding calibration (step-elo), NOT directly to placements with 600 Elo!
+    await expect(page).toHaveURL(/\/?.*step=step-elo/);
+    await expect(page.getByText(/where are you starting from\?/i)).toBeVisible();
+    await expect(page.getByText(new RegExp(`calibrating for.*mock user ${uniqueSuffix}`, "i"))).toBeVisible();
 
-    // Verify Quick Test Sign-In fallback is also accessible
-    await expect(page.getByRole("button", { name: /confirm & continue/i })).toBeVisible();
+    // 5. User adjusts slider to 1500 Elo
+    const slider = page.locator('input[type="range"]');
+    await slider.fill("1500");
+    await expect(page.getByText("1500")).toBeVisible();
+
+    // 6. Proceed to Step 2 (Target Rating)
+    const nextBtn1 = page.getByRole("button", { name: /continue/i });
+    await nextBtn1.click();
+    await expect(page.getByText(/set your target rating\./i)).toBeVisible();
+
+    // 7. Proceed to Step 3 (Board Theme)
+    const nextBtn2 = page.getByRole("button", { name: /continue/i });
+    await nextBtn2.click();
+    await expect(page.getByText(/choose your board\./i)).toBeVisible();
+
+    // 8. Proceed to Step 4 (Ready to swipe / Finalize Google Account)
+    const nextBtn3 = page.getByRole("button", { name: /continue/i });
+    await nextBtn3.click();
+
+    await expect(page.getByText(/ready to swipe/i)).toBeVisible();
+    await expect(page.getByText(/google account connected/i)).toBeVisible();
+    await expect(page.getByText("1500 Elo").first()).toBeVisible();
+
+    // 9. Click "Complete Setup & Start Playing (1500 Elo)"
+    const completeBtn = page.getByRole("button", { name: /complete setup & start playing \(1500 elo\)/i });
+    await expect(completeBtn).toBeVisible();
+    await completeBtn.click();
+
+    // 10. Verify browser reaches /play with calibrated 1500 Elo
+    await page.waitForURL(/\/play/, { timeout: 10000 });
+    const placementBanner = page.getByText(/placement test • puzzle 1 of 6/i);
+    await expect(placementBanner).toBeVisible({ timeout: 12000 });
+
+    const eloBadge = page.getByText(/est: 1500 elo/i);
+    await expect(eloBadge).toBeVisible();
+
+    // Verify localStorage has 1500 Elo account saved
+    const savedAccount = await page.evaluate(() => {
+      return window.localStorage.getItem("chess_reel_account");
+    });
+    expect(savedAccount).not.toBeNull();
+    const parsed = JSON.parse(savedAccount!);
+    expect(parsed.elo).toBe(1500);
   });
 });

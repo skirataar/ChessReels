@@ -5,6 +5,9 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const mode = searchParams.get("mode") || "signup"; // "signup" or "signin"
   const skillLevel = searchParams.get("skillLevel") || "intermediate";
+  const startingElo = searchParams.get("startingElo") ? parseInt(searchParams.get("startingElo")!, 10) : null;
+  const targetElo = searchParams.get("targetElo") ? parseInt(searchParams.get("targetElo")!, 10) : null;
+  const theme = searchParams.get("theme") || "";
   const guestId = searchParams.get("guestId") || "";
   const returnUrl = searchParams.get("returnUrl") || "/play";
 
@@ -18,6 +21,9 @@ export async function GET(request: NextRequest) {
     nonce: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2),
     mode,
     skillLevel,
+    startingElo,
+    targetElo,
+    theme,
     guestId,
     returnUrl,
     origin: appUrl,

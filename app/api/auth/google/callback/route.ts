@@ -12,6 +12,9 @@ export async function GET(request: NextRequest) {
   let stateData: {
     mode?: string;
     skillLevel?: string;
+    startingElo?: number;
+    targetElo?: number;
+    theme?: string;
     guestId?: string;
     returnUrl?: string;
     origin?: string;
@@ -151,19 +154,48 @@ export async function GET(request: NextRequest) {
         });
       }
     } else {
-      // New user: Compute initial Elo based on selected skill level
+      // New user attempting to sign in: they have no account, so send through onboarding
+      if (mode === "signin") {
+        const onboardingUrl = buildPublicRedirectUrl("/", request, originBase);
+        onboardingUrl.searchParams.set("step", "step-elo");
+        onboardingUrl.searchParams.set("google_onboarding", "1");
+
+        const response = NextResponse.redirect(onboardingUrl);
+
+        // Save Google identity in cookie so onboarding flow can finalize the account
+        response.cookies.set(
+          "chess_reel_pending_google",
+          JSON.stringify({
+            googleId,
+            email,
+            name,
+            avatar,
+          }),
+          {
+            path: "/",
+            httpOnly: false,
+            secure: process.env.NODE_ENV === "production" || originBase.startsWith("https"),
+            sameSite: "lax",
+            maxAge: 60 * 15, // 15 minutes
+          }
+        );
+
+        response.cookies.set("oauth_state", "", {
+          path: "/",
+          maxAge: 0,
+        });
+
+        return response;
+      }
+
+      // New user registering from onboarding: use calibrated starting Elo
+      const baseElo = stateData.startingElo || (skillLevel === "beginner" ? 600 : skillLevel === "advanced" ? 1600 : 1200);
       const initialSkill =
-        skillLevel === "beginner"
+        baseElo < 1000
           ? "beginner"
-          : skillLevel === "advanced"
+          : baseElo > 1500
           ? "advanced"
           : "intermediate";
-      const baseElo =
-        initialSkill === "beginner"
-          ? 600
-          : initialSkill === "advanced"
-          ? 1600
-          : 1200;
 
       let baseUsername = (name || email.split("@")[0])
         .toLowerCase()
@@ -228,6 +260,20 @@ export async function GET(request: NextRequest) {
         maxAge: 60 * 5, // 5 minutes
       }
     );
+
+    // Set permanent session cookie
+    response.cookies.set("chess_reel_session", user.id, {
+      path: "/",
+      httpOnly: false,
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 30, // 30 days
+    });
+
+    // Clear pending google cookie if any
+    response.cookies.set("chess_reel_pending_google", "", {
+      path: "/",
+      maxAge: 0,
+    });
 
     // Clear oauth_state cookie
     response.cookies.set("oauth_state", "", {

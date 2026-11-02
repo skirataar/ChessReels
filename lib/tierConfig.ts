@@ -1,8 +1,8 @@
 import prisma from "./prisma";
-import { TierConfig, DEFAULT_TIER_CONFIG } from "./tierTypes";
+import { TierConfig, DEFAULT_TIER_CONFIG, isProPlan } from "./tierTypes";
 
 export type { TierConfig };
-export { DEFAULT_TIER_CONFIG };
+export { DEFAULT_TIER_CONFIG, isProPlan };
 
 let cachedConfig: TierConfig | null = null;
 let lastFetchTime = 0;
@@ -167,8 +167,21 @@ export async function checkUserQuota(
 ): Promise<UserQuotaStatus> {
   const config = await getTierConfig();
 
+  let effectivePro = isProPlan(userPlan);
+  if (!effectivePro && userId && !userId.startsWith("guest-")) {
+    try {
+      const dbUser = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { plan: true },
+      });
+      if (isProPlan(dbUser?.plan)) {
+        effectivePro = true;
+      }
+    } catch {}
+  }
+
   // Pro users have completely unlimited puzzles and zero ads
-  if (userPlan === "premium") {
+  if (effectivePro) {
     return {
       isPro: true,
       canPlay: true,
