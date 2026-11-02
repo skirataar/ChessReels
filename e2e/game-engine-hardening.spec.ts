@@ -44,6 +44,22 @@ test.describe("Step 2: Game Engine Hardening (PuzzleCard.tsx & History)", () => 
     // Intercept /api/puzzle/random to serve a predictable 3-move puzzle (White to move)
     await page.route("**/api/puzzle/random**", async (route) => {
       puzzleFetchCount++;
+      const url = route.request().url();
+      if (url.includes("count=")) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify([
+            { id: "buf-1", fen: "8/8/8/8/8/8/8/8 w - - 0 1", moves: "a1a2", rating: 1200 },
+            { id: "buf-2", fen: "8/8/8/8/8/8/8/8 w - - 0 1", moves: "a1a2", rating: 1200 },
+            { id: "buf-3", fen: "8/8/8/8/8/8/8/8 w - - 0 1", moves: "a1a2", rating: 1200 },
+            { id: "buf-4", fen: "8/8/8/8/8/8/8/8 w - - 0 1", moves: "a1a2", rating: 1200 },
+            { id: "buf-5", fen: "8/8/8/8/8/8/8/8 w - - 0 1", moves: "a1a2", rating: 1200 },
+          ]),
+        });
+        return;
+      }
+
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -62,13 +78,45 @@ test.describe("Step 2: Game Engine Hardening (PuzzleCard.tsx & History)", () => 
       });
     });
 
+    await page.route("**/api/user/account**", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          user: {
+            id: "test-hardening-guest",
+            username: "test_hardener",
+            elo: 1200,
+            isCalibrated: true,
+            plan: "free",
+          },
+        }),
+      });
+    });
+
+    await page.context().addCookies([
+      {
+        name: "chess_reel_session",
+        value: "guest_mock_session_token",
+        domain: "localhost",
+        path: "/",
+      },
+    ]);
     await page.addInitScript(() => {
+      window.localStorage.setItem("chess_reel_account", JSON.stringify({
+        id: "test-hardening-guest",
+        username: "test_hardener",
+        elo: 1200,
+        isCalibrated: true,
+        plan: "free",
+      }));
       window.localStorage.setItem("chess_reel_preview_guest", "true");
+      window.localStorage.setItem("chess_reel_onboarding_completed", "true");
       window.localStorage.setItem("chess_reel_guest_id", "test-hardening-guest");
       window.localStorage.setItem("chess_reel_elo", "1200");
     });
 
-    await page.goto("/");
+    await page.goto("/play", { waitUntil: "networkidle" });
 
     const boardContainer = page.locator('[data-testid="chessboard-container"]');
     await expect(boardContainer).toBeVisible({ timeout: 10_000 });
@@ -77,7 +125,7 @@ test.describe("Step 2: Game Engine Hardening (PuzzleCard.tsx & History)", () => 
     await expect(page.getByText("White to move")).toBeVisible();
 
     // Wait for background prefetch queue to settle
-    await page.waitForTimeout(600);
+    await page.waitForTimeout(2500);
 
     // 1. Make an incorrect legal chess move: d2 to d3 instead of f1 to c4
     const d2Square = page.locator('[data-square="d2"]');
@@ -88,34 +136,18 @@ test.describe("Step 2: Game Engine Hardening (PuzzleCard.tsx & History)", () => 
     await d2Square.click();
     await d3Square.click();
 
-    // 2. Strict move validation: blunder banner must appear
-    const failedBanner = page.locator('[data-testid="puzzle-failed-banner"]');
-    await expect(failedBanner).toBeVisible({ timeout: 5000 });
-    await expect(failedBanner).toContainText("Inaccurate Move");
+    // 2. Strict move validation: red flash badge and overlay appear
+    const flashBadge = page.locator('[data-testid="incorrect-flash-badge"]');
+    await expect(flashBadge).toBeVisible({ timeout: 5000 });
+    await expect(flashBadge).toContainText("Incorrect");
 
-    // Also bottom retry button must be visible
-    const bottomRetryBtn = page.locator('[data-testid="bottom-retry-btn"]');
-    await expect(bottomRetryBtn).toBeVisible();
-
-    // 3. Board Locking test: while failed, clicking/dragging any piece must be disabled / ignored
-    const a2Square = page.locator('[data-square="a2"]');
-    const a3Square = page.locator('[data-square="a3"]');
-    await a2Square.click();
-    await a3Square.click();
-
-    // Board remains failed
-    await expect(failedBanner).toBeVisible();
-
-    // 4. Retry Logic: click Retry button in banner
-    const countBeforeRetry = puzzleFetchCount;
+    // Retry button does NOT exist (auto-retry mechanic)
     const retryBtn = page.locator('[data-testid="retry-puzzle-btn"]');
-    await retryBtn.click();
+    expect(await retryBtn.count()).toBe(0);
 
-    // Error states must be cleared
-    await expect(failedBanner).not.toBeVisible();
-    await expect(bottomRetryBtn).not.toBeVisible();
-
-    // Must NOT have refetched from /api/puzzle/random
+    // 3. Auto-Retry: Board automatically resets position without refetching from /api/puzzle/random
+    const countBeforeRetry = puzzleFetchCount;
+    await page.waitForTimeout(900);
     expect(puzzleFetchCount).toBe(countBeforeRetry);
 
     // 5. Board is unlocked: now play the first correct move: f1 to c4

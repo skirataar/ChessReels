@@ -81,24 +81,17 @@ test.describe("QOL Step Preservation on Retry", () => {
     await h2Square.click();
     await h3Square.click();
 
-    // 3. Failure banner appears cleanly
-    const failedBanner = page.locator('[data-testid="puzzle-failed-banner"]');
-    await expect(failedBanner).toBeVisible({ timeout: 5000 });
-    await expect(failedBanner).toContainText("Inaccurate Move");
+    // 3. Failure flash badge appears cleanly
+    const flashBadge = page.locator('[data-testid="incorrect-flash-badge"]');
+    await expect(flashBadge).toBeVisible({ timeout: 5000 });
+    await expect(flashBadge).toContainText("Incorrect");
 
-    // Retry button displays clean "Retry" without mentioning step numbers
+    // Retry button does NOT exist (auto-retry mechanic)
     const retryBtn = page.locator('[data-testid="retry-puzzle-btn"]');
-    await expect(retryBtn).toHaveText(/Retry$/);
+    expect(await retryBtn.count()).toBe(0);
 
-    // Also restart button is visible
-    const restartBtn = page.locator('[data-testid="restart-puzzle-btn"]');
-    await expect(restartBtn).toBeVisible();
-
-    // 4. Click "Retry"
-    await retryBtn.click({ force: true });
-
-    // Error banner should disappear and NO "Saved progress" toast pill dropdown should appear
-    await expect(failedBanner).not.toBeVisible();
+    // 4. Auto-retry automatically preserves step 1 progress without clicking anything!
+    await page.waitForTimeout(900);
     await expect(page.locator("text=Saved progress")).toHaveCount(0);
 
     // 5. CRITICAL VERIFICATION:
@@ -170,15 +163,15 @@ test.describe("QOL Step Preservation on Retry", () => {
     await page.locator('[data-square="h2"]').click();
     await page.locator('[data-square="h3"]').click();
 
-    const failedBanner = page.locator('[data-testid="puzzle-failed-banner"]');
-    await expect(failedBanner).toBeVisible({ timeout: 5000 });
+    const flashBadge = page.locator('[data-testid="incorrect-flash-badge"]');
+    await expect(flashBadge).toBeVisible({ timeout: 5000 });
 
-    // Click "Restart"
-    const restartBtn = page.locator('[data-testid="restart-puzzle-btn"]');
-    await restartBtn.click({ force: true });
+    // Click "Reset" button in toolbar
+    const resetBtn = page.locator('[data-testid="reset-puzzle-btn"]');
+    await resetBtn.click({ force: true });
 
     // Should reset all the way back to Step 1 of 2
     await expect(page.getByText(/Step 1 of 2/i)).toBeVisible();
-    await expect(failedBanner).not.toBeVisible();
+    await expect(flashBadge).not.toBeVisible();
   });
 });

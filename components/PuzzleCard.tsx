@@ -182,6 +182,8 @@ export function PuzzleCard({
   );
   const [mistakeFeedback, setMistakeFeedback] = useState<string | null>(null);
   const [isShaking, setIsShaking] = useState<boolean>(false);
+  const [isFlashingRed, setIsFlashingRed] = useState<boolean>(false);
+  const [retryCount, setRetryCount] = useState<number>(0);
   const [autoNextCountdown, setAutoNextCountdown] = useState<number | null>(
     null
   );
@@ -231,6 +233,7 @@ export function PuzzleCard({
   const [hintActive, setHintActive] = useState<boolean>(false);
   const [hintUsed, setHintUsed] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const isHintGlowing = retryCount >= 3 && !hintUsed && status === "playing";
 
   const formatLikes = (num: number): string => {
     if (num >= 1000) {
@@ -364,6 +367,8 @@ export function PuzzleCard({
     setIsReviewing(false);
     setMistakeFeedback(null);
     setIsShaking(false);
+    setIsFlashingRed(false);
+    setRetryCount(0);
     setSelectedSquare(null);
     setHighlightStyles({});
     setHintActive(false);
@@ -440,6 +445,7 @@ export function PuzzleCard({
       setIsReviewing(false);
       setMistakeFeedback(null);
       setIsShaking(false);
+      setIsFlashingRed(false);
       setSelectedSquare(null);
       setHighlightStyles({});
       setHintActive(false);
@@ -714,29 +720,36 @@ export function PuzzleCard({
         sounds.playError();
         haptics.error();
 
-        // Lock board by transitioning to 'failed'
-        onStatusChange("failed");
-
         // Penalize Elo once per puzzle and record in PuzzleHistory
         if (!hasPenalizedRef.current) {
           hasPenalizedRef.current = true;
           sendEloResult("loss");
         }
 
-        // Visual feedback & shake
-        setMistakeFeedback("Incorrect move. Click Retry to try again!");
+        // QOL: Increment retries count for this puzzle
+        setRetryCount((prev) => prev + 1);
+
+        // Flash red saying incorrect & shake board
+        setIsFlashingRed(true);
         setIsShaking(true);
+        setMistakeFeedback("Incorrect");
 
         if (mistakeTimerRef.current) clearTimeout(mistakeTimerRef.current);
         mistakeTimerRef.current = setTimeout(() => {
           setIsShaking(false);
-        }, 1500);
+          setIsFlashingRed(false);
+          setMistakeFeedback(null);
+        }, 850);
 
-        // Clear square selection
+        // Clear square selection & highlights
         setSelectedSquare(null);
         setHighlightStyles({});
 
-        return false; // Piece snaps back and board is locked
+        // Auto-retry: piece snaps back to previous state and board remains interactive!
+        setFen(game.fen());
+        onStatusChange("playing");
+
+        return false;
       }
 
       // 3. CORRECT MOVE!
@@ -744,6 +757,8 @@ export function PuzzleCard({
       sounds.playMove();
       haptics.success();
       setMistakeFeedback(null);
+      setIsFlashingRed(false);
+      setIsShaking(false);
       setSelectedSquare(null);
       setHighlightStyles({});
       setHintActive(false);
@@ -1630,71 +1645,40 @@ export function PuzzleCard({
             )}
           </AnimatePresence>
 
-          {/* Failed Board Badge */}
+          {/* Red Flash Overlay across Board on Mistake */}
           <AnimatePresence>
-            {status === "failed" && (
+            {isFlashingRed && (
               <motion.div
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.8, opacity: 0 }}
-                transition={{ type: "spring", stiffness: 350, damping: 25 }}
-                className="absolute top-3 right-3 z-10 flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#ef4444]/30 border border-[#ef4444]/50 backdrop-blur-md text-[#ef4444] text-xs font-bold shadow-lg"
+                key="incorrect-flash-overlay"
+                data-testid="incorrect-flash-overlay"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15 }}
+                className="absolute inset-0 z-30 pointer-events-none bg-rose-600/25 border-2 border-rose-500 shadow-[inset_0_0_35px_rgba(244,63,94,0.45)]"
+              />
+            )}
+          </AnimatePresence>
+
+          {/* Floating 'Incorrect' Pill Badge */}
+          <AnimatePresence>
+            {isFlashingRed && (
+              <motion.div
+                key="incorrect-badge"
+                data-testid="incorrect-flash-badge"
+                initial={{ scale: 0.85, opacity: 0, y: -6 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.85, opacity: 0, y: -6 }}
+                transition={{ type: "spring", stiffness: 450, damping: 25 }}
+                className="absolute top-3 inset-x-0 mx-auto w-fit z-40 flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-rose-600/90 border border-rose-400 backdrop-blur-md text-white text-xs font-black shadow-xl shadow-rose-950/70 pointer-events-none tracking-wide"
               >
-                <AlertCircle className="w-3.5 h-3.5" />
+                <AlertCircle className="w-3.5 h-3.5 text-white stroke-[2.5]" />
                 <span>Incorrect</span>
               </motion.div>
             )}
           </AnimatePresence>
         </div>
       </div>
-
-      {/* Blunder State Banner */}
-      <AnimatePresence>
-        {(status === "failed" || mistakeFeedback) && (
-          <div className="w-full px-3 sm:px-4">
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              transition={{ type: "spring", stiffness: 350, damping: 25 }}
-              data-testid="puzzle-failed-banner"
-              className="w-full bg-[#ef4444]/15 border border-[#ef4444]/40 rounded-xl p-2.5 my-1.5 shadow-lg flex items-center justify-between gap-2"
-            >
-              <div className="flex items-center gap-2 min-w-0">
-                <AlertCircle className="w-4 h-4 text-[#ef4444] shrink-0" />
-                <div className="min-w-0">
-                  <div className="text-xs font-bold text-[#ef4444]">
-                    Inaccurate Move
-                  </div>
-                  <div className="text-[11px] text-[#f5f5f5]/80 truncate">
-                    Try another line to solve the tactic!
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-1.5 shrink-0">
-                {currentMoveIndex > solutionStartIndex && (
-                  <button
-                    onClick={() => handleRetry(true)}
-                    data-testid="restart-puzzle-btn"
-                    title="Restart from beginning"
-                    className="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white/70 hover:text-white text-[10px] font-semibold flex items-center gap-1 cursor-pointer transition-colors"
-                  >
-                    <span>Restart</span>
-                  </button>
-                )}
-                <button
-                  onClick={() => handleRetry(false)}
-                  data-testid="retry-puzzle-btn"
-                  className="px-2.5 py-1 rounded-lg bg-[#ef4444]/30 hover:bg-[#ef4444]/50 text-white text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Retry</span>
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
 
       {/* 3. Streamlined Mission Brief & Rating Badge */}
       <div className="w-full px-3 sm:px-4 mt-2">
@@ -1728,12 +1712,12 @@ export function PuzzleCard({
         <div className="w-full flex items-center justify-between gap-1.5">
           {/* Left: Solver Actions (Reset, Hint, Skip) */}
           <div className="flex items-center gap-1.5">
-            {/* Undo / Reset Button */}
+            {/* Reset Button */}
             <button
-              onClick={() => handleRetry(status === "failed" ? false : true)}
-              data-testid={status === "failed" ? "bottom-retry-btn" : "reset-puzzle-btn"}
+              onClick={() => handleRetry(true)}
+              data-testid="reset-puzzle-btn"
               aria-label="Reset puzzle"
-              title={status === "failed" ? "Retry" : "Reset puzzle"}
+              title="Reset puzzle"
               className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#22201e] hover:bg-[#2d2a28] border border-white/10 flex items-center justify-center text-[#f5f5f5] hover:text-[#c29b78] shadow-md active:scale-90 transition-all cursor-pointer"
             >
               <RotateCcw className="w-4 h-4" />
@@ -1744,16 +1728,26 @@ export function PuzzleCard({
               onClick={handleTriggerHint}
               disabled={status !== "playing"}
               aria-label="Hint"
-              title="Highlight tactical move"
-              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full border border-white/10 flex items-center justify-center shadow-md active:scale-90 transition-all cursor-pointer ${
-                hintUsed
-                  ? "bg-[#22201e]/60 text-[#a3a3a3]"
-                  : "bg-[#22201e] hover:bg-[#2d2a28] text-[#c29b78]"
+              data-testid="hint-btn"
+              title={isHintGlowing ? "Need help? Click for a hint!" : "Highlight tactical move"}
+              className={`relative w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all cursor-pointer active:scale-90 ${
+                isHintGlowing
+                  ? "bg-[#c29b78]/25 border-2 border-[#c29b78] text-[#c29b78] shadow-[0_0_20px_rgba(194,155,120,0.85)] animate-pulse"
+                  : hintUsed
+                  ? "bg-[#22201e]/60 border border-white/10 text-[#a3a3a3]"
+                  : "bg-[#22201e] hover:bg-[#2d2a28] border border-white/10 text-[#c29b78] shadow-md"
               }`}
             >
+              {isHintGlowing && (
+                <span className="absolute -inset-1 rounded-full bg-[#c29b78]/35 animate-ping pointer-events-none" />
+              )}
               <Lightbulb
-                className={`w-4 h-4 ${
-                  hintUsed ? "text-[#a3a3a3]" : "text-[#c29b78] fill-[#c29b78]/20"
+                className={`w-4 h-4 transition-colors ${
+                  isHintGlowing
+                    ? "text-[#c29b78] fill-[#c29b78] drop-shadow-[0_0_8px_rgba(194,155,120,0.9)]"
+                    : hintUsed
+                    ? "text-[#a3a3a3]"
+                    : "text-[#c29b78] fill-[#c29b78]/20"
                 }`}
               />
             </button>
