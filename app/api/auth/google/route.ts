@@ -3,6 +3,7 @@ import { getPublicBaseUrl, buildPublicRedirectUrl } from "@/lib/authUrl";
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
+  const mode = searchParams.get("mode") || "signup"; // "signup" or "signin"
   const skillLevel = searchParams.get("skillLevel") || "intermediate";
   const guestId = searchParams.get("guestId") || "";
   const returnUrl = searchParams.get("returnUrl") || "/play";
@@ -12,9 +13,10 @@ export async function GET(request: NextRequest) {
   const appUrl = getPublicBaseUrl(request);
   const redirectUri = `${appUrl}/api/auth/google/callback`;
 
-  // Encode state payload to maintain skill baseline, guest mapping, and initiating origin across OAuth redirect
+  // Encode state payload to maintain mode, skill baseline, guest mapping, and initiating origin across OAuth redirect
   const statePayload = {
     nonce: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2),
+    mode,
     skillLevel,
     guestId,
     returnUrl,

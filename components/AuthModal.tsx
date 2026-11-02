@@ -80,7 +80,9 @@ export function AuthModal({
 }: AuthModalProps) {
   const [tab, setTab] = useState<"register" | "login">(initialTab);
   const [username, setUsername] = useState<string>("");
+  const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
+  const [confirmPassword, setConfirmPassword] = useState<string>("");
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [displayName, setDisplayName] = useState<string>("");
   const [selectedAvatar, setSelectedAvatar] = useState<string>(CURATED_AVATARS[0].url);
@@ -115,6 +117,7 @@ export function AuthModal({
     e.preventDefault();
     setErrorMsg(null);
     const cleanUser = username.trim().toLowerCase();
+    const cleanEmail = email.trim().toLowerCase();
 
     if (!cleanUser) {
       setErrorMsg("Please choose a username.");
@@ -126,8 +129,21 @@ export function AuthModal({
       return;
     }
 
+    if (cleanEmail) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(cleanEmail)) {
+        setErrorMsg("Please enter a valid email address.");
+        return;
+      }
+    }
+
     if (!password || password.length < 6) {
       setErrorMsg("Password must be at least 6 characters long.");
+      return;
+    }
+
+    if (confirmPassword && password !== confirmPassword) {
+      setErrorMsg("Passwords do not match.");
       return;
     }
 
@@ -139,6 +155,7 @@ export function AuthModal({
         body: JSON.stringify({
           guestId,
           username: cleanUser,
+          email: cleanEmail || undefined,
           password,
           displayName: displayName.trim() || undefined,
           avatar: selectedAvatar,
@@ -592,6 +609,46 @@ export function AuthModal({
                     )}
                   </div>
 
+                  {/* Name (Display Name) Input */}
+                  <div>
+                    <label
+                      htmlFor="reg-display"
+                      className="text-[11px] font-bold uppercase tracking-wider text-[#a3a3a3] block mb-1"
+                    >
+                      Name
+                    </label>
+                    <input
+                      id="reg-display"
+                      type="text"
+                      placeholder="e.g. Master Alexander"
+                      value={displayName}
+                      onChange={(e) => setDisplayName(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-[#22201e] border border-white/10 text-white text-xs placeholder:text-neutral-500 focus:outline-none focus:border-[#c29b78] transition-colors"
+                      maxLength={30}
+                      autoComplete="name"
+                    />
+                  </div>
+
+                  {/* Email Input */}
+                  <div>
+                    <label
+                      htmlFor="reg-email"
+                      className="text-[11px] font-bold uppercase tracking-wider text-[#a3a3a3] block mb-1"
+                    >
+                      Email (validate email)
+                    </label>
+                    <input
+                      id="reg-email"
+                      type="email"
+                      placeholder="e.g. alexander@example.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-[#22201e] border border-white/10 text-white text-xs placeholder:text-neutral-500 focus:outline-none focus:border-[#c29b78] transition-colors"
+                      autoCapitalize="none"
+                      autoComplete="email"
+                    />
+                  </div>
+
                   {/* Username Input */}
                   <div>
                     <label
@@ -608,6 +665,7 @@ export function AuthModal({
                       onChange={(e) => setUsername(e.target.value)}
                       className="w-full px-3 py-2 rounded-xl bg-[#22201e] border border-white/10 text-white text-xs placeholder:text-neutral-500 focus:outline-none focus:border-[#c29b78] transition-colors"
                       maxLength={20}
+                      autoCapitalize="none"
                       autoComplete="username"
                       required
                     />
@@ -647,23 +705,27 @@ export function AuthModal({
                     </div>
                   </div>
 
-                  {/* Display Name Input */}
+                  {/* Confirm Password Input */}
                   <div>
                     <label
-                      htmlFor="reg-display"
+                      htmlFor="reg-confirm-password"
                       className="text-[11px] font-bold uppercase tracking-wider text-[#a3a3a3] block mb-1"
                     >
-                      Display Name (Optional)
+                      Confirm Pass *
                     </label>
-                    <input
-                      id="reg-display"
-                      type="text"
-                      placeholder="e.g. Master Alexander"
-                      value={displayName}
-                      onChange={(e) => setDisplayName(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-[#22201e] border border-white/10 text-white text-xs placeholder:text-neutral-500 focus:outline-none focus:border-[#c29b78] transition-colors"
-                      maxLength={30}
-                    />
+                    <div className="relative">
+                      <input
+                        id="reg-confirm-password"
+                        type={showPassword ? "text" : "password"}
+                        placeholder="••••••••"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        className="w-full pl-8 pr-3 py-2 rounded-xl bg-[#22201e] border border-white/10 text-white text-xs placeholder:text-neutral-500 focus:outline-none focus:border-[#c29b78] transition-colors"
+                        minLength={6}
+                        autoComplete="new-password"
+                      />
+                      <Lock className="w-3.5 h-3.5 text-[#a3a3a3] absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
                   </div>
 
                   {/* Account Security Notice */}

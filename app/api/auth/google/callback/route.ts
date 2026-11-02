@@ -10,6 +10,7 @@ export async function GET(request: NextRequest) {
 
   // 1. Decode state payload first to restore original initiating origin
   let stateData: {
+    mode?: string;
     skillLevel?: string;
     guestId?: string;
     returnUrl?: string;
@@ -27,6 +28,7 @@ export async function GET(request: NextRequest) {
 
   const originBase = stateData.origin || getPublicBaseUrl(request);
   const redirectUri = stateData.redirectUri || `${originBase}/api/auth/google/callback`;
+  const mode = stateData.mode || "signup";
   const skillLevel = stateData.skillLevel || "intermediate";
   const returnTarget = stateData.returnUrl || "/play";
 
@@ -127,7 +129,17 @@ export async function GET(request: NextRequest) {
     });
 
     if (user) {
-      // Existing user: Link googleId if missing
+      // If user was attempting to register during onboarding, but an account already exists:
+      if (mode === "signup") {
+        const loginUrl = buildPublicRedirectUrl("/", request, originBase);
+        loginUrl.searchParams.set("step", "auth");
+        loginUrl.searchParams.set("mode", "signin");
+        loginUrl.searchParams.set("prefill", user.email || user.username || "");
+        loginUrl.searchParams.set("error", "account_exists");
+        return NextResponse.redirect(loginUrl);
+      }
+
+      // Existing user in signin mode: Link googleId if missing
       if (!user.googleId || !user.avatar || user.avatar === "♟") {
         user = await prisma.user.update({
           where: { id: user.id },

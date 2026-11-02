@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ArrowRight, Check } from "lucide-react";
+import { ChevronLeft, ArrowRight, Check, LogIn } from "lucide-react";
 import { BOARD_THEMES, BoardTheme, setStoredBoardTheme, getStoredBoardTheme } from "@/lib/boardThemes";
 
 // --- Types ---
@@ -485,18 +485,47 @@ export default function RootPage() {
 
   // Auth form state
   const [authMode, setAuthMode] = useState<"signup" | "signin">("signup");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [authError, setAuthError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Auto-redirect if already signed in
+  // Auto-redirect if already signed in, and inspect URL params for OAuth redirects
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
+      const searchParams = new URLSearchParams(window.location.search);
+      const stepParam = searchParams.get("step");
+      const modeParam = searchParams.get("mode");
+      const prefillParam = searchParams.get("prefill");
+      const errorParam = searchParams.get("error");
+      const oauthError = searchParams.get("oauth_error");
+
+      if (stepParam === "auth" || modeParam === "signin") {
+        setStep("auth");
+        setAuthMode("signin");
+        if (prefillParam) {
+          setUsername(prefillParam);
+        }
+        if (errorParam === "account_exists") {
+          setAuthError("An account with this Google email already exists. Please sign in below.");
+        }
+        window.history.replaceState({}, document.title, window.location.pathname);
+        return;
+      }
+
+      if (oauthError) {
+        setAuthError(`Authentication notification: ${oauthError.replace(/_/g, " ")}`);
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+
       const hasAccount = window.localStorage.getItem("chess_reel_account");
       if (hasAccount) {
         router.replace("/play");
+        return;
       }
     } catch {}
   }, [router]);
@@ -547,12 +576,12 @@ export default function RootPage() {
     } catch {}
   };
 
-  // Trigger Google OAuth with calibrated skill level
-  const handleGoogleAuth = () => {
+  // Trigger Google OAuth: mode can be 'signup' (new accounts from onboarding) or 'signin' (existing accounts)
+  const handleGoogleAuth = (mode: "signup" | "signin" = authMode) => {
     saveCalibrationToStorage();
     const returnUrl = encodeURIComponent("/play");
     const skillLevel = skill.skillLevel;
-    window.location.href = `/api/auth/google?skillLevel=${skillLevel}&returnUrl=${returnUrl}`;
+    window.location.href = `/api/auth/google?mode=${mode}&skillLevel=${skillLevel}&returnUrl=${returnUrl}`;
   };
 
   // Handle direct guest access
@@ -580,25 +609,45 @@ export default function RootPage() {
     e.preventDefault();
     setAuthError(null);
 
-    const cleanUser = username.trim().toLowerCase();
-    if (!cleanUser) {
-      setAuthError("Please enter a username or email.");
-      return;
-    }
-    if (!password || password.length < 6) {
-      setAuthError("Password must be at least 6 characters.");
-      return;
-    }
+    if (authMode === "signup") {
+      if (!name.trim()) {
+        setAuthError("Please enter your name.");
+        return;
+      }
 
-    setIsSubmitting(true);
-    saveCalibrationToStorage();
+      const cleanEmail = email.trim().toLowerCase();
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!cleanEmail || !emailRegex.test(cleanEmail)) {
+        setAuthError("Please enter a valid email address.");
+        return;
+      }
 
-    try {
-      if (authMode === "signup") {
+      const cleanUser = username.trim().toLowerCase();
+      if (!cleanUser || !/^[a-z0-9_]{3,20}$/.test(cleanUser)) {
+        setAuthError("Username must be 3-20 characters long (letters, numbers, underscores).");
+        return;
+      }
+
+      if (!password || password.length < 6) {
+        setAuthError("Password must be at least 6 characters.");
+        return;
+      }
+
+      if (password !== confirmPassword) {
+        setAuthError("Passwords do not match.");
+        return;
+      }
+
+      setIsSubmitting(true);
+      saveCalibrationToStorage();
+
+      try {
         const res = await fetch("/api/user/account", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            displayName: name.trim(),
+            email: cleanEmail,
             username: cleanUser,
             password,
             skillLevel: skill.skillLevel,
@@ -618,7 +667,26 @@ export default function RootPage() {
           window.dispatchEvent(new Event("account-updated"));
           router.push("/play");
         }
-      } else {
+      } catch {
+        setAuthError("Network error. Please try again.");
+      } finally {
+        setIsSubmitting(false);
+      }
+    } else {
+      const cleanUser = username.trim().toLowerCase();
+      if (!cleanUser) {
+        setAuthError("Please enter your username or email.");
+        return;
+      }
+      if (!password) {
+        setAuthError("Please enter your password.");
+        return;
+      }
+
+      setIsSubmitting(true);
+      saveCalibrationToStorage();
+
+      try {
         const res = await fetch("/api/user/login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -647,11 +715,11 @@ export default function RootPage() {
           window.dispatchEvent(new Event("account-updated"));
           router.push("/play");
         }
+      } catch {
+        setAuthError("Network error. Please try again.");
+      } finally {
+        setIsSubmitting(false);
       }
-    } catch {
-      setAuthError("Network error. Please try again.");
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -729,18 +797,18 @@ export default function RootPage() {
                     <ArrowRight className="w-4 h-4 stroke-[2]" />
                   </button>
 
-                  <div className="pt-2 text-center">
-                    <button
-                      onClick={() => {
-                        setAuthMode("signin");
-                        goTo("auth", 1);
-                      }}
-                      type="button"
-                      className="text-xs text-[#78716c] hover:text-[#c29b78] transition-colors cursor-pointer"
-                    >
-                      Already have an account? <span className="underline underline-offset-4">Sign in</span>
-                    </button>
-                  </div>
+                  <button
+                    onClick={() => {
+                      setAuthMode("signin");
+                      setAuthError(null);
+                      goTo("auth", 1);
+                    }}
+                    type="button"
+                    className="w-full h-12 rounded-full bg-[#12100e] hover:bg-[#1a1714] border border-white/[0.08] hover:border-white/20 text-[#f5f2eb] font-medium text-sm transition-all duration-150 active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <LogIn className="w-4 h-4 stroke-[2]" />
+                    <span>Sign In</span>
+                  </button>
                 </div>
               </motion.div>
             )}
@@ -1087,84 +1155,149 @@ export default function RootPage() {
                 exit="exit"
                 className="w-full h-full flex flex-col justify-between"
               >
-                <div>
-                  <h2 className="text-xl font-semibold tracking-tight text-[#f5f2eb]">
-                    {authMode === "signup" ? "Save your board and start swiping." : "Welcome back."}
-                  </h2>
+                <div className="overflow-y-auto pr-1 flex-1 min-h-0 space-y-2.5">
+                  <div>
+                    <h2 className="text-xl font-semibold tracking-tight text-[#f5f2eb]">
+                      {authMode === "signup" ? "Save your board and start swiping." : "Welcome back."}
+                    </h2>
 
-                  {/* Summary Pill */}
-                  {authMode === "signup" && (
-                    <div className="mt-2.5 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/[0.04] border border-white/[0.08] text-[11px] text-stone-300">
-                      <span className="text-stone-400 font-mono">{startingElo}</span>
-                      <span className="text-[#c29b78]">→</span>
-                      <span className="text-[#c29b78] font-semibold font-mono">{targetElo} Elo</span>
-                      <span className="text-stone-600">•</span>
-                      <span className="text-stone-300">{selectedTheme.name}</span>
-                    </div>
-                  )}
-
-                  {/* Google OAuth Button */}
-                  <div className="mt-5">
-                    <button
-                      onClick={handleGoogleAuth}
-                      type="button"
-                      className="w-full h-11 rounded-2xl bg-[#12100e] hover:bg-[#1a1714] border border-white/[0.1] hover:border-white/20 text-[#f5f2eb] font-medium text-xs sm:text-sm transition-all duration-150 active:scale-[0.98] flex items-center justify-center gap-3 cursor-pointer"
-                    >
-                      <GoogleLogo />
-                      <span>Continue with Google</span>
-                    </button>
-                  </div>
-
-                  {/* Minimal Hairline Divider */}
-                  <div className="flex items-center gap-3 my-4">
-                    <div className="flex-1 h-px bg-white/[0.08]" />
-                    <span className="text-[11px] uppercase tracking-wider text-[#78716c]">or</span>
-                    <div className="flex-1 h-px bg-white/[0.08]" />
-                  </div>
-
-                  {/* Credentials Form */}
-                  <form onSubmit={handleCredentialsSubmit} className="space-y-2.5">
-                    <div>
-                      <input
-                        type="text"
-                        value={username}
-                        onChange={(e) => setUsername(e.target.value)}
-                        placeholder="Username or email"
-                        autoCapitalize="none"
-                        autoComplete="username"
-                        className="w-full h-11 px-3.5 rounded-xl bg-white/[0.03] border border-white/10 focus:border-[#c29b78] text-xs sm:text-sm text-[#f5f2eb] placeholder:text-stone-600 outline-none transition-colors"
-                      />
-                    </div>
-
-                    <div>
-                      <input
-                        type="password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        placeholder="Password (min. 6 characters)"
-                        autoComplete={authMode === "signup" ? "new-password" : "current-password"}
-                        className="w-full h-11 px-3.5 rounded-xl bg-white/[0.03] border border-white/10 focus:border-[#c29b78] text-xs sm:text-sm text-[#f5f2eb] placeholder:text-stone-600 outline-none transition-colors"
-                      />
-                    </div>
-
-                    {authError && (
-                      <div className="text-xs text-rose-400 bg-rose-950/30 border border-rose-800/40 rounded-lg p-2.5">
-                        {authError}
+                    {/* Summary Pill */}
+                    {authMode === "signup" && (
+                      <div className="mt-2.5 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/[0.04] border border-white/[0.08] text-[11px] text-stone-300">
+                        <span className="text-stone-400 font-mono">{startingElo}</span>
+                        <span className="text-[#c29b78]">→</span>
+                        <span className="text-[#c29b78] font-semibold font-mono">{targetElo} Elo</span>
+                        <span className="text-stone-600">•</span>
+                        <span className="text-stone-300">{selectedTheme.name}</span>
                       </div>
                     )}
 
-                    <button
-                      type="submit"
-                      disabled={isSubmitting}
-                      className="w-full h-11 rounded-2xl bg-[#c29b78] hover:bg-[#d4b08f] text-[#0a0908] font-semibold text-xs sm:text-sm tracking-wide transition-all duration-150 active:scale-[0.98] shadow-lg shadow-[#c29b78]/20 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-1"
-                    >
-                      {isSubmitting ? (
-                        <div className="w-4 h-4 border-2 border-stone-900 border-t-transparent rounded-full animate-spin" />
+                    {/* Google OAuth Button */}
+                    <div className="mt-4">
+                      <button
+                        onClick={() => handleGoogleAuth(authMode)}
+                        type="button"
+                        className="w-full h-11 rounded-2xl bg-[#12100e] hover:bg-[#1a1714] border border-white/[0.1] hover:border-white/20 text-[#f5f2eb] font-medium text-xs sm:text-sm transition-all duration-150 active:scale-[0.98] flex items-center justify-center gap-3 cursor-pointer"
+                      >
+                        <GoogleLogo />
+                        <span>Continue with Google</span>
+                      </button>
+                    </div>
+
+                    {/* Minimal Hairline Divider */}
+                    <div className="flex items-center gap-3 my-3">
+                      <div className="flex-1 h-px bg-white/[0.08]" />
+                      <span className="text-[11px] uppercase tracking-wider text-[#78716c]">or</span>
+                      <div className="flex-1 h-px bg-white/[0.08]" />
+                    </div>
+
+                    {/* Credentials Form */}
+                    <form onSubmit={handleCredentialsSubmit} noValidate className="space-y-2">
+                      {authMode === "signup" ? (
+                        <>
+                          <div>
+                            <input
+                              type="text"
+                              value={name}
+                              onChange={(e) => setName(e.target.value)}
+                              placeholder="Name"
+                              autoComplete="name"
+                              className="w-full h-10 px-3.5 rounded-xl bg-white/[0.03] border border-white/10 focus:border-[#c29b78] text-xs sm:text-sm text-[#f5f2eb] placeholder:text-stone-600 outline-none transition-colors"
+                            />
+                          </div>
+
+                          <div>
+                            <input
+                              type="email"
+                              value={email}
+                              onChange={(e) => setEmail(e.target.value)}
+                              placeholder="Email"
+                              autoCapitalize="none"
+                              autoComplete="email"
+                              className="w-full h-10 px-3.5 rounded-xl bg-white/[0.03] border border-white/10 focus:border-[#c29b78] text-xs sm:text-sm text-[#f5f2eb] placeholder:text-stone-600 outline-none transition-colors"
+                            />
+                          </div>
+
+                          <div>
+                            <input
+                              type="text"
+                              value={username}
+                              onChange={(e) => setUsername(e.target.value)}
+                              placeholder="Username"
+                              autoCapitalize="none"
+                              autoComplete="username"
+                              className="w-full h-10 px-3.5 rounded-xl bg-white/[0.03] border border-white/10 focus:border-[#c29b78] text-xs sm:text-sm text-[#f5f2eb] placeholder:text-stone-600 outline-none transition-colors"
+                            />
+                          </div>
+
+                          <div>
+                            <input
+                              type="password"
+                              value={password}
+                              onChange={(e) => setPassword(e.target.value)}
+                              placeholder="Password"
+                              autoComplete="new-password"
+                              className="w-full h-10 px-3.5 rounded-xl bg-white/[0.03] border border-white/10 focus:border-[#c29b78] text-xs sm:text-sm text-[#f5f2eb] placeholder:text-stone-600 outline-none transition-colors"
+                            />
+                          </div>
+
+                          <div>
+                            <input
+                              type="password"
+                              value={confirmPassword}
+                              onChange={(e) => setConfirmPassword(e.target.value)}
+                              placeholder="Confirm Pass"
+                              autoComplete="new-password"
+                              className="w-full h-10 px-3.5 rounded-xl bg-white/[0.03] border border-white/10 focus:border-[#c29b78] text-xs sm:text-sm text-[#f5f2eb] placeholder:text-stone-600 outline-none transition-colors"
+                            />
+                          </div>
+                        </>
                       ) : (
-                        <span>{authMode === "signup" ? "Create Account" : "Sign In"}</span>
+                        <>
+                          <div>
+                            <input
+                              type="text"
+                              value={username}
+                              onChange={(e) => setUsername(e.target.value)}
+                              placeholder="Username or email"
+                              autoCapitalize="none"
+                              autoComplete="username"
+                              className="w-full h-10 px-3.5 rounded-xl bg-white/[0.03] border border-white/10 focus:border-[#c29b78] text-xs sm:text-sm text-[#f5f2eb] placeholder:text-stone-600 outline-none transition-colors"
+                            />
+                          </div>
+
+                          <div>
+                            <input
+                              type="password"
+                              value={password}
+                              onChange={(e) => setPassword(e.target.value)}
+                              placeholder="Password"
+                              autoComplete="current-password"
+                              className="w-full h-10 px-3.5 rounded-xl bg-white/[0.03] border border-white/10 focus:border-[#c29b78] text-xs sm:text-sm text-[#f5f2eb] placeholder:text-stone-600 outline-none transition-colors"
+                            />
+                          </div>
+                        </>
                       )}
-                    </button>
-                  </form>
+
+                      {authError && (
+                        <div className="text-xs text-rose-400 bg-rose-950/30 border border-rose-800/40 rounded-lg p-2.5">
+                          {authError}
+                        </div>
+                      )}
+
+                      <button
+                        type="submit"
+                        disabled={isSubmitting}
+                        className="w-full h-11 rounded-2xl bg-[#c29b78] hover:bg-[#d4b08f] text-[#0a0908] font-semibold text-xs sm:text-sm tracking-wide transition-all duration-150 active:scale-[0.98] shadow-lg shadow-[#c29b78]/20 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-1"
+                      >
+                        {isSubmitting ? (
+                          <div className="w-4 h-4 border-2 border-stone-900 border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <span>{authMode === "signup" ? "Create Account" : "Sign In"}</span>
+                        )}
+                      </button>
+                    </form>
+                  </div>
                 </div>
 
                 {/* Bottom Mode Switch & Guest Bypass */}
@@ -1173,8 +1306,12 @@ export default function RootPage() {
                     <button
                       type="button"
                       onClick={() => {
-                        setAuthMode(authMode === "signup" ? "signin" : "signup");
-                        setAuthError(null);
+                        if (authMode === "signin") {
+                          goTo("step-elo", 1);
+                        } else {
+                          setAuthMode("signin");
+                          setAuthError(null);
+                        }
                       }}
                       className="text-xs text-[#78716c] hover:text-[#c29b78] transition-colors cursor-pointer"
                     >

@@ -27,6 +27,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Email validation and uniqueness
+    let cleanEmail: string | undefined;
+    if (email && typeof email === "string") {
+      cleanEmail = email.trim().toLowerCase();
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(cleanEmail)) {
+        return NextResponse.json(
+          { error: "Please enter a valid email address." },
+          { status: 400 }
+        );
+      }
+      const existingEmail = await prisma.user.findUnique({
+        where: { email: cleanEmail },
+      });
+      if (existingEmail && existingEmail.id !== guestId) {
+        return NextResponse.json(
+          { error: "An account with this email already exists. Please sign in." },
+          { status: 409 }
+        );
+      }
+    }
+
     // Password validation for manual account creation
     if (!password || typeof password !== "string" || password.length < 6) {
       return NextResponse.json(
@@ -40,7 +62,7 @@ export async function POST(request: NextRequest) {
       where: { username: cleanUsername },
     });
 
-    if (existing) {
+    if (existing && existing.id !== guestId) {
       return NextResponse.json(
         { error: "This username is already taken. Please choose another." },
         { status: 409 }
@@ -67,8 +89,8 @@ export async function POST(request: NextRequest) {
           where: { id: guestId },
           data: {
             username: cleanUsername,
-            displayName: displayName?.trim() || username.trim(),
-            email: email?.trim().toLowerCase() || undefined,
+            displayName: displayName?.trim() || cleanUsername,
+            email: cleanEmail || undefined,
             avatar: avatar || "♟",
             skillTier: initialSkill,
             elo: baseElo,
@@ -89,8 +111,8 @@ export async function POST(request: NextRequest) {
       user = await prisma.user.create({
         data: {
           username: cleanUsername,
-          displayName: displayName?.trim() || username.trim(),
-          email: email?.trim().toLowerCase() || undefined,
+          displayName: displayName?.trim() || cleanUsername,
+          email: cleanEmail || undefined,
           avatar: avatar || "♟",
           skillTier: initialSkill,
           elo: baseElo,
