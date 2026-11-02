@@ -283,7 +283,7 @@ function SmotheredMateVignette() {
               key={i}
               className={`w-full h-full flex items-center justify-center relative transition-colors duration-300 ${
                 isKingSquare && isCheckmated
-                  ? "bg-red-600/40 border-2 border-red-500 shadow-[inset_0_0_18px_rgba(239,68,68,0.85)]"
+                  ? "bg-red-600/70 border-2 border-red-500 shadow-[inset_0_0_24px_rgba(220,38,38,0.9)]"
                   : ""
               }`}
               style={{
@@ -291,23 +291,23 @@ function SmotheredMateVignette() {
                   isKingSquare && isCheckmated
                     ? undefined
                     : isDark
-                    ? "#161311"
-                    : "#26221f",
+                    ? "#b58863"
+                    : "#f0d9b5",
               }}
             >
-              {/* 1. Black King at square 0 - Topples over cleanly when smothered! */}
+              {/* 1. Black King at square 0 - Topples to the left when exit smothered! */}
               {isKingSquare && (
                 <motion.div
                   animate={
                     isCheckmated
                       ? {
-                          rotate: 84,
-                          y: 6,
+                          rotate: -80,
+                          y: 4,
                           x: 0,
                           scale: 0.88,
                           transition: {
                             type: "spring",
-                            stiffness: 280,
+                            stiffness: 260,
                             damping: 14,
                           },
                         }
@@ -325,7 +325,7 @@ function SmotheredMateVignette() {
                   <img
                     src="/Sprites/b_king.svg"
                     alt="Black King"
-                    className="w-12 h-12 object-contain select-none pointer-events-none drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)]"
+                    className="w-12 h-12 object-contain select-none pointer-events-none drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)] drop-shadow-[0_0_1px_rgba(255,255,255,0.4)]"
                   />
                 </motion.div>
               )}
@@ -335,27 +335,27 @@ function SmotheredMateVignette() {
                 <img
                   src="/Sprites/b_rook.svg"
                   alt="Black Rook"
-                  className="w-11 h-11 object-contain select-none pointer-events-none drop-shadow-[0_0_1.5px_rgba(255,255,255,0.35)] drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)]"
+                  className="w-11 h-11 object-contain select-none pointer-events-none drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)] drop-shadow-[0_0_1px_rgba(255,255,255,0.4)]"
                 />
               )}
               {isPawn1Square && (
                 <img
                   src="/Sprites/b_pawn.svg"
                   alt="Black Pawn"
-                  className="w-10 h-10 object-contain select-none pointer-events-none drop-shadow-[0_0_1.5px_rgba(255,255,255,0.4)] drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)]"
+                  className="w-10 h-10 object-contain select-none pointer-events-none drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)] drop-shadow-[0_0_1px_rgba(255,255,255,0.4)]"
                 />
               )}
               {isPawn2Square && (
                 <img
                   src="/Sprites/b_pawn.svg"
                   alt="Black Pawn"
-                  className="w-10 h-10 object-contain select-none pointer-events-none drop-shadow-[0_0_1.5px_rgba(255,255,255,0.4)] drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)]"
+                  className="w-10 h-10 object-contain select-none pointer-events-none drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)] drop-shadow-[0_0_1px_rgba(255,255,255,0.4)]"
                 />
               )}
 
               {/* 3. Target square golden impact ring */}
               {isTargetSquare && isCheckmated && (
-                <div className="absolute inset-0 rounded-lg border-2 border-[#c29b78]/60 bg-[#c29b78]/15 animate-pulse pointer-events-none" />
+                <div className="absolute inset-0 rounded-lg border-2 border-amber-400/80 bg-amber-400/20 animate-pulse pointer-events-none" />
               )}
 
               {/* 4. White Knight: leaps in authentic chess L-shape from square 13 (row 3, col 1) to square 6 (row 1, col 2) */}
@@ -384,11 +384,11 @@ function SmotheredMateVignette() {
                 >
                   <div className="relative">
                     {/* Glowing golden aura */}
-                    <div className="absolute inset-0 rounded-full bg-[#c29b78]/35 blur-md animate-pulse" />
+                    <div className="absolute inset-0 rounded-full bg-amber-400/35 blur-md animate-pulse" />
                     <img
                       src="/Sprites/w_knight.svg"
                       alt="White Knight"
-                      className="w-12 h-12 object-contain select-none pointer-events-none relative z-10 drop-shadow-[0_0_12px_rgba(194,155,120,0.9)]"
+                      className="w-12 h-12 object-contain select-none pointer-events-none relative z-10 drop-shadow-[0_0_12px_rgba(245,158,11,0.9)]"
                     />
                   </div>
                 </motion.div>
@@ -399,32 +399,31 @@ function SmotheredMateVignette() {
 
         {/* Authentic Chess Broadcast Tactical L-Arrow */}
         {animPhase === "idle" && (
-          <svg className="absolute inset-0 w-full h-full pointer-events-none z-15">
-            <defs>
-              <marker
-                id="chess-arrowhead"
-                viewBox="0 0 10 10"
-                refX="7"
-                refY="5"
-                markerWidth="6"
-                markerHeight="6"
-                orient="auto-start-reverse"
-              >
-                <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#c29b78" opacity="0.9" />
-              </marker>
-            </defs>
-            {/* Solid L-shaped arrow: 2 squares UP, 1 square RIGHT */}
-            <path
-              d="M 90 196 L 90 98 Q 90 90 98 90 L 138 90"
-              fill="none"
-              stroke="#c29b78"
-              strokeWidth="5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              opacity="0.8"
-              markerEnd="url(#chess-arrowhead)"
-              className="drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]"
-            />
+          <svg className="absolute inset-0 w-full h-full pointer-events-none z-15 overflow-visible">
+            <motion.g
+              animate={{ opacity: [0.82, 0.95, 0.82] }}
+              transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+              style={{
+                filter: "drop-shadow(0 2px 6px rgba(0,0,0,0.5)) drop-shadow(0 0 10px rgba(245,158,11,0.45))",
+              }}
+            >
+              {/* L-shaft: starts above Knight (square 13) -> 2 squares UP -> turns RIGHT to square 6 */}
+              <path
+                d="M 90 176 L 90 102 Q 90 90 102 90 L 133 90"
+                fill="none"
+                stroke="#f59e0b"
+                strokeWidth="10"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                opacity="0.88"
+              />
+              {/* Sharp Broadcast Arrowhead aligned with shaft into center of target square (150, 90) */}
+              <polygon
+                points="150,90 128,76 134,90 128,104"
+                fill="#f59e0b"
+                opacity="0.9"
+              />
+            </motion.g>
           </svg>
         )}
       </div>
