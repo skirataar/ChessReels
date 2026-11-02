@@ -284,6 +284,8 @@ function SmotheredMateVignette() {
               className={`w-full h-full flex items-center justify-center relative transition-colors duration-300 ${
                 isKingSquare && isCheckmated
                   ? "bg-red-600/70 border-2 border-red-500 shadow-[inset_0_0_24px_rgba(220,38,38,0.9)]"
+                  : isTargetSquare && isCheckmated
+                  ? "bg-amber-500/25 shadow-[inset_0_0_16px_rgba(245,158,11,0.35)]"
                   : ""
               }`}
               style={{
@@ -295,16 +297,16 @@ function SmotheredMateVignette() {
                     : "#26221f",
               }}
             >
-              {/* 1. Black King at square 0 - Topples to the left when exit smothered! */}
+              {/* 1. Black King at square 0 - Topples to the left without reducing scale! */}
               {isKingSquare && (
                 <motion.div
                   animate={
                     isCheckmated
                       ? {
                           rotate: -80,
-                          y: 4,
+                          y: 2,
                           x: 0,
-                          scale: 0.88,
+                          scale: 1,
                           transition: {
                             type: "spring",
                             stiffness: 260,
@@ -353,12 +355,7 @@ function SmotheredMateVignette() {
                 />
               )}
 
-              {/* 3. Target square golden impact ring */}
-              {isTargetSquare && isCheckmated && (
-                <div className="absolute inset-0 rounded-lg border-2 border-amber-400/80 bg-amber-400/20 animate-pulse pointer-events-none" />
-              )}
-
-              {/* 4. White Knight: leaps in authentic chess L-shape from square 13 (row 3, col 1) to square 6 (row 1, col 2) */}
+              {/* 3. White Knight: leaps in authentic chess L-shape from square 13 (row 3, col 1) to square 6 (row 1, col 2) */}
               {isKnightStartSquare && (
                 <motion.div
                   animate={
@@ -367,7 +364,7 @@ function SmotheredMateVignette() {
                       : {
                           x: [0, 0, 60],
                           y: [0, -120, -120],
-                          scale: [1, 1.3, 1],
+                          scale: [1, 1.25, 1],
                           rotate: [0, -6, 0],
                         }
                   }
@@ -382,22 +379,18 @@ function SmotheredMateVignette() {
                   }
                   className="relative z-20 flex items-center justify-center cursor-default"
                 >
-                  <div className="relative">
-                    {/* Glowing golden aura */}
-                    <div className="absolute inset-0 rounded-full bg-amber-400/35 blur-md animate-pulse" />
-                    <img
-                      src="/Sprites/w_knight.svg"
-                      alt="White Knight"
-                      className="w-12 h-12 object-contain select-none pointer-events-none relative z-10 drop-shadow-[0_0_12px_rgba(245,158,11,0.9)]"
-                    />
-                  </div>
+                  <img
+                    src="/Sprites/w_knight.svg"
+                    alt="White Knight"
+                    className="w-12 h-12 object-contain select-none pointer-events-none relative z-10 drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)]"
+                  />
                 </motion.div>
               )}
             </div>
           );
         })}
 
-        {/* Authentic Chess Broadcast Tactical L-Arrow */}
+        {/* Authentic Sharp Chess Broadcast Tactical L-Arrow (No Curves) */}
         {animPhase === "idle" && (
           <svg className="absolute inset-0 w-full h-full pointer-events-none z-15 overflow-visible">
             <motion.g
@@ -407,19 +400,19 @@ function SmotheredMateVignette() {
                 filter: "drop-shadow(0 2px 6px rgba(0,0,0,0.5)) drop-shadow(0 0 10px rgba(245,158,11,0.45))",
               }}
             >
-              {/* L-shaft: starts above Knight (square 13) -> 2 squares UP -> turns RIGHT to square 6 */}
+              {/* Crisp Right-Angle L-shaft: 2 squares UP -> sharp 90-deg turn -> 1 square RIGHT */}
               <path
-                d="M 90 176 L 90 102 Q 90 90 102 90 L 133 90"
+                d="M 90 180 L 90 90 L 132 90"
                 fill="none"
                 stroke="#f59e0b"
                 strokeWidth="10"
                 strokeLinecap="round"
-                strokeLinejoin="round"
+                strokeLinejoin="miter"
                 opacity="0.88"
               />
               {/* Sharp Broadcast Arrowhead aligned with shaft into center of target square (150, 90) */}
               <polygon
-                points="150,90 128,76 134,90 128,104"
+                points="150,90 128,76 133,90 128,104"
                 fill="#f59e0b"
                 opacity="0.9"
               />
