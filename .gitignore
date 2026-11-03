@@ -68,7 +68,8 @@ temp/
 tmp/
 scratch/
 
-# Temporary QA harness & testing pages
+# Testing suites & temporary QA harness (maintained on 'test' branch)
 app/temp-qa/
-e2e/temp-qa.spec.ts
+e2e/
+playwright.config.ts
 
