@@ -88,16 +88,19 @@ test.describe("Task 2: Deterministic Streak & 2-Day Streak Freeze System Unit Te
       perfectWeekCounter: 5,
     };
 
-    // On app load before solve: freeze protects streak
+    // On app load before solve: freeze protects streak (preserves streak at 10, enters icy frozen state)
     const onDailyLoad = resolveStreakOnLoad(state, "2026-11-03");
     expect(onDailyLoad.currentStreak).toBe(10);
-    expect(onDailyLoad.streakFreezes).toBe(1);
+    expect(onDailyLoad.streakFreezes).toBe(0);
+    expect(onDailyLoad.isFrozenState).toBe(true);
+    expect(onDailyLoad.perfectWeekCounter).toBe(0);
 
-    // On solve: consumes 1 freeze, preserves streak, increments to 11, resets perfectWeekCounter to 0
+    // On solve: thaws freeze, preserves streak, increments to 11, starts new week progress at 1
     const onSolve = resolveStreakOnSolve(state, "2026-11-03");
     expect(onSolve.currentStreak).toBe(11);
     expect(onSolve.streakFreezes).toBe(0);
-    expect(onSolve.perfectWeekCounter).toBe(0);
+    expect(onSolve.perfectWeekCounter).toBe(1);
+    expect(onSolve.isFrozenState).toBe(false);
     expect(onSolve.lastSolvedDate).toBe("2026-11-03");
   });
 
@@ -129,15 +132,19 @@ test.describe("Task 2: Deterministic Streak & 2-Day Streak Freeze System Unit Te
       perfectWeekCounter: 4,
     };
 
-    // On app load before solve: 2 freezes protect the streak
+    // On app load before solve: 2 freezes protect the streak (preserves streak at 12, enters icy frozen state)
     const onDailyLoad = resolveStreakOnLoad(state, "2026-11-04");
     expect(onDailyLoad.currentStreak).toBe(12);
+    expect(onDailyLoad.streakFreezes).toBe(0);
+    expect(onDailyLoad.isFrozenState).toBe(true);
+    expect(onDailyLoad.perfectWeekCounter).toBe(0);
 
-    // On solve: consumes 2 freezes, preserves streak, increments to 13
+    // On solve: thaws freeze, preserves streak, increments to 13, starts week progress at 1
     const onSolve = resolveStreakOnSolve(state, "2026-11-04");
     expect(onSolve.currentStreak).toBe(13);
     expect(onSolve.streakFreezes).toBe(0);
-    expect(onSolve.perfectWeekCounter).toBe(0);
+    expect(onSolve.perfectWeekCounter).toBe(1);
+    expect(onSolve.isFrozenState).toBe(false);
     expect(onSolve.lastSolvedDate).toBe("2026-11-04");
   });
 
@@ -172,6 +179,32 @@ test.describe("Task 2: Deterministic Streak & 2-Day Streak Freeze System Unit Te
     expect(onSolve.currentStreak).toBe(1);
     expect(onSolve.perfectWeekCounter).toBe(1);
     expect(onSolve.streakFreezes).toBe(0);
+  });
+
+  test("Day 1 Streak Initialization: currentStreak === 0 immediately becomes 1 with today's date and perfectWeekCounter 1", () => {
+    const state: StreakData = {
+      currentStreak: 0,
+      lastSolvedDate: null,
+      streakFreezes: 0,
+      perfectWeekCounter: 0,
+    };
+    const nextState = resolveStreakOnSolve(state, "2026-11-04");
+    expect(nextState.currentStreak).toBe(1);
+    expect(nextState.lastSolvedDate).toBe("2026-11-04");
+    expect(nextState.perfectWeekCounter).toBe(1);
+
+    // Even if lastSolvedDate was set from an old lapsed session
+    const lapsedState: StreakData = {
+      currentStreak: 0,
+      lastSolvedDate: "2026-10-20",
+      streakFreezes: 1,
+      perfectWeekCounter: 0,
+    };
+    const nextLapsed = resolveStreakOnSolve(lapsedState, "2026-11-04");
+    expect(nextLapsed.currentStreak).toBe(1);
+    expect(nextLapsed.lastSolvedDate).toBe("2026-11-04");
+    expect(nextLapsed.perfectWeekCounter).toBe(1);
+    expect(nextLapsed.streakFreezes).toBe(1);
   });
 });
 
@@ -219,6 +252,17 @@ test.describe("Task 1 & Task 2: UI Integration & In-App Saved Puzzle Player", ()
       "title",
       "Earned every 7-day streak • Protects up to 2 missed days"
     );
+
+    // 1b. Verify Header streak indicator is ignited (fill="#f59e0b", stroke="#fbbf24", text in #f5f2eb)
+    const headerStreak = page.getByTestId("header-streak-indicator");
+    await expect(headerStreak).toBeVisible();
+    await expect(headerStreak).toContainText("8");
+    const headerFlame = page.getByTestId("header-flame-icon");
+    await expect(headerFlame).toHaveAttribute("fill", "#f59e0b");
+    await expect(headerFlame).toHaveAttribute("stroke", "#fbbf24");
+    await page.waitForTimeout(450);
+    const streakNum = page.getByTestId("streak-number-display").last();
+    await expect(streakNum).toHaveClass(/text-\[#f5f2eb\]/);
 
     // 2. Open Profile via Bottom Dock
     const dockProfileBtn = page.getByTestId("bottom-nav-profile");
@@ -353,5 +397,48 @@ test.describe("Task 1 & Task 2: UI Integration & In-App Saved Puzzle Player", ()
     // Verify user is returned directly to the Saved Puzzles list
     await expect(savedCard).toBeVisible({ timeout: 5000 });
     await expect(page.getByText("Saved Tactical Library")).toBeVisible();
+  });
+
+  test("0-day streak renders hollow flame (fill=none, stroke=#78716c) alongside 0 in stone muted text", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      const account = {
+        id: "streak_user_zero",
+        username: "newbie_zero",
+        displayName: "New Player",
+        avatar: "♚",
+        elo: 1200,
+        peakElo: 1200,
+        streak: 0,
+        bestStreak: 0,
+        isCalibrated: true,
+        calibrationStep: 6,
+        plan: "free",
+      };
+      const streakData = {
+        currentStreak: 0,
+        lastSolvedDate: null,
+        streakFreezes: 0,
+        perfectWeekCounter: 0,
+      };
+      localStorage.setItem("chess_reel_account", JSON.stringify(account));
+      localStorage.setItem("chess_reel_streak_data", JSON.stringify(streakData));
+      localStorage.setItem("chess_reel_daily_streak", "0");
+      document.cookie = "chess_reel_session=streak_user_zero; path=/; max-age=86400";
+    });
+
+    await page.goto("/play");
+
+    const headerStreak = page.getByTestId("header-streak-indicator");
+    await expect(headerStreak).toBeVisible({ timeout: 10000 });
+    await expect(headerStreak).toContainText("0");
+
+    const headerFlame = page.getByTestId("header-flame-icon");
+    await expect(headerFlame).toHaveAttribute("fill", "none");
+    await expect(headerFlame).toHaveAttribute("stroke", "#78716c");
+
+    const streakNum = page.getByTestId("streak-number-display");
+    await expect(streakNum).toHaveClass(/text-\[#78716c\]/);
   });
 });

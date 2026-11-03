@@ -23,6 +23,7 @@ model User {
   calibrationStep Int          @default(0)
   passwordHash    String?
   plan            String?      @default("free")
+  isTestAccount   Boolean?     @default(false)
   createdAt       DateTime     @default(now())
 
   // Friendships

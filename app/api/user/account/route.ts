@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { hashPassword } from "@/lib/auth";
 import { isGuestUserId } from "@/lib/guestAccount";
+import { isTestAccountPattern } from "@/lib/cleanupTestUsers";
 
 export async function POST(request: NextRequest) {
   try {
@@ -93,6 +94,13 @@ export async function POST(request: NextRequest) {
         ? Math.max(400, Math.min(2600, userElo))
         : fallbackBaseElo;
 
+    const isTest = isTestAccountPattern({
+      isTestAccount: body?.isTestAccount,
+      email: cleanEmail,
+      username: cleanUsername,
+      displayName: displayName?.trim() || cleanUsername,
+    });
+
     let user;
 
     // If a prior registered row exists under this id, upgrade it without inheriting guest Elo
@@ -117,6 +125,7 @@ export async function POST(request: NextRequest) {
             isCalibrated: false,
             calibrationStep: 0,
             passwordHash,
+            isTestAccount: isTest || Boolean(guestUser.isTestAccount),
             plan: guestUser.plan === "premium" || guestUser.plan === "pro" ? "premium" : "free",
           },
         });
@@ -139,6 +148,7 @@ export async function POST(request: NextRequest) {
           isCalibrated: false,
           calibrationStep: 0,
           passwordHash,
+          isTestAccount: isTest,
           plan: "free",
         },
       });
@@ -155,6 +165,7 @@ export async function POST(request: NextRequest) {
       bestStreak: user.bestStreak,
       isCalibrated: user.isCalibrated,
       calibrationStep: user.calibrationStep,
+      isTestAccount: Boolean(user.isTestAccount),
       plan: user.plan || "free",
     };
 

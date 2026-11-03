@@ -29,6 +29,7 @@ import {
   clearAllUserAndPuzzleCache,
 } from "@/lib/puzzleCache";
 import { useStreak, resetStreakStats } from "@/lib/useStreak";
+import { StreakFlameBadge } from "@/components/StreakFlameBadge";
 import { useTierQuota } from "@/lib/useTierQuota";
 import { clearGuestLocalSession, isGuestAccount } from "@/lib/guestAccount";
 import { RefreshCw, WifiOff, UserPlus, BarChart2, Trophy, Zap, Flame, Crown, Sparkles, User, Snowflake } from "lucide-react";
@@ -241,6 +242,7 @@ export function PlayView({
     dailyStreak,
     streakFreezes,
     perfectWeekCounter,
+    isFrozenState,
     combo,
     bestCombo,
     totalSolved,
@@ -1160,40 +1162,14 @@ export function PlayView({
               </AnimatePresence>
             </div>
 
-            {/* Flush Daily Streak */}
-            <div
-              data-testid="header-streak-indicator"
-              suppressHydrationWarning
-              className="flex items-center gap-1 font-bold text-xs text-amber-400"
-              title={`Daily Streak: ${dailyStreak} ${dailyStreak === 1 ? "day" : "days"}`}
-            >
-              <span className="sr-only">🔥</span>
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-                className="w-3.5 h-3.5 shrink-0"
-                aria-hidden="true"
-              >
-                <path
-                  d="M12 2C10.5 4.5 9 6.8 9 9.5C9 10.2 9.15 10.87 9.42 11.48C8.5 10.82 8 9.73 8 8.5C5.5 10.5 4 13.5 4 16.5C4 20.09 7.13 23 11 23C16 23 20 19.42 20 15C20 10.5 16.5 6 12 2Z"
-                  fill="url(#headerFireGrad)"
-                />
-                <path
-                  d="M11.5 13C10.8 14 10.2 15.2 10.2 16.5C10.2 18.4 11.8 20 13.8 20C14.9 20 15.9 19.5 16.5 18.7C16.3 16.6 14.7 15 13.3 13.8C12.7 13.3 12 12.9 11.5 13Z"
-                  fill="#fef08a"
-                  opacity="0.95"
-                />
-                <defs>
-                  <linearGradient id="headerFireGrad" x1="12" y1="2" x2="12" y2="23" gradientUnits="userSpaceOnUse">
-                    <stop offset="0%" stopColor="#fef08a" />
-                    <stop offset="40%" stopColor="#f59e0b" />
-                    <stop offset="100%" stopColor="#d97706" />
-                  </linearGradient>
-                </defs>
-              </svg>
-              <span suppressHydrationWarning>{dailyStreak}</span>
-            </div>
+            {/* Flush Daily Streak Indicator with Flame States and Ignition Micro-Animation */}
+            <StreakFlameBadge
+              streak={dailyStreak}
+              isFrozenState={isFrozenState}
+              testId="header-streak-indicator"
+              flameTestId="header-flame-icon"
+              size="sm"
+            />
 
             {/* Streak Freeze Badge */}
             <div

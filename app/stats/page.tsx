@@ -468,8 +468,19 @@ export default function ProfileStatsPage() {
       <section className="bg-[#22201e] border border-white/10 rounded-3xl p-4 shadow-xl mb-4 flex flex-col gap-3">
         <div className="flex items-center justify-between border-b border-white/5 pb-3">
           <div className="flex items-center gap-2">
-            <div className="p-2 rounded-xl bg-[#c29b78]/15 border border-[#c29b78]/30 text-[#c29b78]">
-              <Flame className="w-5 h-5 fill-[#c29b78]" />
+            <div className={`p-2 rounded-xl border transition-all ${
+              dailyStreak >= 1
+                ? "bg-amber-500/15 border-amber-500/30 text-amber-400"
+                : "bg-white/5 border-white/10 text-stone-500"
+            }`}>
+              <Flame
+                fill={dailyStreak >= 1 ? "#f59e0b" : "none"}
+                stroke={dailyStreak >= 1 ? "#fbbf24" : "#78716c"}
+                strokeWidth={dailyStreak >= 1 ? 1.5 : 1.75}
+                className={`w-5 h-5 transition-colors duration-300 ${
+                  dailyStreak >= 1 ? "drop-shadow-[0_0_8px_rgba(245,158,11,0.55)]" : ""
+                }`}
+              />
             </div>
             <div>
               <h3 className="text-sm font-black text-[#f5f5f5]">Daily Streak</h3>
@@ -486,7 +497,9 @@ export default function ProfileStatsPage() {
               <span>{streakFreezes}/2</span>
             </div>
             <div className="text-right">
-              <span className="text-2xl font-black text-[#c29b78]">
+              <span className={`text-2xl font-black ${
+                dailyStreak >= 1 ? "text-[#f5f2eb]" : "text-[#78716c]"
+              }`}>
                 {dailyStreak}
               </span>
               <span className="text-xs text-[#a3a3a3] ml-1">

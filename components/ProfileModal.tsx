@@ -841,10 +841,19 @@ export function ProfileModal({
                         <Snowflake className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.5} />
                         <span>{streakFreezes}/2</span>
                       </div>
-                      <Flame className="w-4 h-4 text-amber-400 fill-amber-400" />
+                      <Flame
+                        fill={dailyStreak >= 1 ? "#f59e0b" : "none"}
+                        stroke={dailyStreak >= 1 ? "#fbbf24" : "#78716c"}
+                        strokeWidth={dailyStreak >= 1 ? 1.5 : 1.75}
+                        className={`w-4 h-4 transition-colors duration-300 ${
+                          dailyStreak >= 1 ? "drop-shadow-[0_0_8px_rgba(245,158,11,0.55)]" : ""
+                        }`}
+                      />
                     </div>
                   </div>
-                  <div className="text-2xl font-black text-amber-400 tracking-tight font-mono">
+                  <div className={`text-2xl font-black tracking-tight font-mono ${
+                    dailyStreak >= 1 ? "text-[#f5f2eb]" : "text-[#78716c]"
+                  }`}>
                     {dailyStreak} <span className="text-xs font-semibold text-[#a3a3a3]">{dailyStreak === 1 ? "day" : "days"}</span>
                   </div>
                   <span className="text-[10px] text-[#a3a3a3] mt-0.5">Consecutive daily training</span>

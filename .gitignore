@@ -52,3 +52,23 @@ public/sw.js*
 public/workbox-*
 public/swe-worker-*
 .neon
+
+# Temporary & scratch files
+*.tmp
+*.tmp.*
+*.temp
+*.temp.*
+*.swp
+*.swo
+*~
+*.bak
+.temp/
+.tmp/
+temp/
+tmp/
+scratch/
+
+# Temporary QA harness & testing pages
+app/temp-qa/
+e2e/temp-qa.spec.ts
+

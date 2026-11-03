@@ -15,6 +15,7 @@ export interface StreakData {
   lastSolvedDate: string | null; // Strictly YYYY-MM-DD in local timezone
   streakFreezes: number;         // Integer strictly clamped between 0 and 2
   perfectWeekCounter: number;    // Tracks consecutive active solve days (0 to 7) toward earning a freeze
+  isFrozenState?: boolean;       // True when streak is currently preserved by a freeze awaiting solve
 }
 
 export function getTodayDateString(): string {
@@ -23,6 +24,21 @@ export function getTodayDateString(): string {
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+export function addCalendarDays(dateStr: string, days: number): string {
+  try {
+    const [y, m, d] = dateStr.split("-").map(Number);
+    if (!y || !m || !d) return dateStr;
+    const date = new Date(Date.UTC(y, m - 1, d));
+    date.setUTCDate(date.getUTCDate() + days);
+    const ny = date.getUTCFullYear();
+    const nm = String(date.getUTCMonth() + 1).padStart(2, "0");
+    const nd = String(date.getUTCDate()).padStart(2, "0");
+    return `${ny}-${nm}-${nd}`;
+  } catch {
+    return dateStr;
+  }
 }
 
 export function getCalendarDaysDiff(fromDateStr: string, toDateStr: string): number {
@@ -41,42 +57,63 @@ export function getCalendarDaysDiff(fromDateStr: string, toDateStr: string): num
 // Backward-compatible alias
 export const getDaysDifference = getCalendarDaysDiff;
 
+/**
+ * Check Missed Days (App Load / Day Rollover)
+ * Separated strictly from "Solve Puzzle Today".
+ * - Consuming a freeze PRESERVES currentStreak at its exact existing value (never increments it).
+ * - Running out of freezes drops currentStreak strictly to 0.
+ */
 export function resolveStreakOnLoad(data: StreakData, todayStr: string): StreakData {
   const freezes = Math.min(2, Math.max(0, data.streakFreezes || 0));
-  if (!data.lastSolvedDate) {
+  if (data.currentStreak === 0 || !data.lastSolvedDate) {
     return {
       currentStreak: 0,
-      lastSolvedDate: null,
+      lastSolvedDate: data.lastSolvedDate || null,
       streakFreezes: freezes,
       perfectWeekCounter: 0,
+      isFrozenState: false,
     };
   }
 
   const daysDiff = getCalendarDaysDiff(data.lastSolvedDate, todayStr);
 
-  if (daysDiff <= 1) {
-    // Solved today or yesterday: streak is currently active
+  if (daysDiff <= 0) {
+    // Solved today or in future: active, not frozen
     return {
       ...data,
       streakFreezes: freezes,
+      isFrozenState: false,
+    };
+  }
+
+  if (daysDiff === 1) {
+    // Solved yesterday: active streak, retain freeze state if set
+    return {
+      ...data,
+      streakFreezes: freezes,
+      isFrozenState: Boolean(data.isFrozenState),
     };
   }
 
   if (daysDiff === 2) {
     // Missed 1 calendar day
     if (freezes >= 1) {
-      // Protected by freeze
+      // Protected by 1 freeze: preserve currentStreak at exact existing value (never increment)
       return {
-        ...data,
-        streakFreezes: freezes,
+        currentStreak: data.currentStreak,
+        lastSolvedDate: addCalendarDays(todayStr, -1), // advance to yesterday (the frozen day)
+        streakFreezes: freezes - 1,
+        perfectWeekCounter: 0,
+        isFrozenState: true,
       };
     } else {
-      // Streak lapsed
+      // Streak lapsed: strictly reset to 0
       return {
         currentStreak: 0,
         lastSolvedDate: data.lastSolvedDate,
         streakFreezes: 0,
         perfectWeekCounter: 0,
+        isFrozenState: false,
       };
     }
   }
@@ -84,128 +121,100 @@ export function resolveStreakOnLoad(data: StreakData, todayStr: string): StreakD
   if (daysDiff === 3) {
     // Missed 2 calendar days
     if (freezes >= 2) {
-      // Protected by 2 freezes
+      // Protected by 2 freezes: preserve currentStreak at exact existing value
       return {
-        ...data,
-        streakFreezes: freezes,
+        currentStreak: data.currentStreak,
+        lastSolvedDate: addCalendarDays(todayStr, -1),
+        streakFreezes: freezes - 2,
+        perfectWeekCounter: 0,
+        isFrozenState: true,
       };
     } else {
-      // Streak lapsed
+      // Insufficient freezes: strictly reset to 0
       return {
         currentStreak: 0,
         lastSolvedDate: data.lastSolvedDate,
         streakFreezes: 0,
         perfectWeekCounter: 0,
+        isFrozenState: false,
       };
     }
   }
 
-  // daysDiff > 3: Missed 3+ calendar days
+  // daysDiff > 3: Missed 3+ calendar days (exceeds 2-day protection limit)
   return {
     currentStreak: 0,
     lastSolvedDate: data.lastSolvedDate,
     streakFreezes: 0,
     perfectWeekCounter: 0,
+    isFrozenState: false,
   };
 }
 
+/**
+ * Solve Puzzle Today
+ * - Resolves missed days first via resolveStreakOnLoad.
+ * - When currentStreak === 0, immediately initializes from 0 to 1, sets lastSolvedDate to today, perfectWeek = 1.
+ * - When solving today, clears isFrozenState back to false and increments currentStreak.
+ */
 export function resolveStreakOnSolve(data: StreakData, todayStr: string): StreakData {
-  let freezes = Math.min(2, Math.max(0, data.streakFreezes || 0));
-  let currentStreak = data.currentStreak || 0;
-  let perfectWeek = data.perfectWeekCounter || 0;
+  // 1. Reconcile day rollover / missed days to get current status before solving
+  const current = resolveStreakOnLoad(data, todayStr);
+  let freezes = current.streakFreezes;
+  let streak = current.currentStreak;
+  let perfectWeek = current.perfectWeekCounter;
 
-  if (!data.lastSolvedDate) {
-    // First puzzle ever solved
+  // Day 1 Streak Initialization:
+  // When currentStreak === 0, solving a puzzle immediately increments currentStreak from 0 to 1,
+  // sets lastSolvedDate to todayStr, perfectWeekCounter = 1, and isFrozenState = false.
+  if (streak === 0 || !current.lastSolvedDate) {
     return {
       currentStreak: 1,
       lastSolvedDate: todayStr,
       streakFreezes: freezes,
       perfectWeekCounter: 1,
+      isFrozenState: false,
     };
   }
 
-  const daysDiff = getCalendarDaysDiff(data.lastSolvedDate, todayStr);
+  const daysDiff = getCalendarDaysDiff(current.lastSolvedDate, todayStr);
 
   if (daysDiff === 0) {
     // Already solved today; do not increment currentStreak again today
     return {
-      currentStreak: Math.max(1, currentStreak),
+      currentStreak: Math.max(1, streak),
       lastSolvedDate: todayStr,
       streakFreezes: freezes,
       perfectWeekCounter: Math.max(1, perfectWeek),
+      isFrozenState: false,
     };
   }
 
   if (daysDiff === 1) {
-    // Consecutive Day Solved
-    currentStreak += 1;
+    // Consecutive Day Solved (or yesterday was preserved by freeze):
+    // Thaw freeze state back to ignited amber and increment streak
+    streak += 1;
     perfectWeek += 1;
     if (perfectWeek === 7) {
       perfectWeek = 0;
       freezes = Math.min(2, freezes + 1);
     }
     return {
-      currentStreak,
+      currentStreak: streak,
       lastSolvedDate: todayStr,
       streakFreezes: freezes,
       perfectWeekCounter: perfectWeek,
+      isFrozenState: false,
     };
   }
 
-  if (daysDiff === 2) {
-    // Missed 1 Calendar Day
-    if (freezes >= 1) {
-      // Consume 1 freeze, preserve streak (do not reset to 0), reset perfectWeek = 0, increment for today
-      freezes -= 1;
-      currentStreak += 1;
-      perfectWeek = 0;
-      return {
-        currentStreak,
-        lastSolvedDate: todayStr,
-        streakFreezes: freezes,
-        perfectWeekCounter: 0,
-      };
-    } else {
-      // No freeze available: streak reset to 1
-      return {
-        currentStreak: 1,
-        lastSolvedDate: todayStr,
-        streakFreezes: 0,
-        perfectWeekCounter: 1,
-      };
-    }
-  }
-
-  if (daysDiff === 3) {
-    // Missed 2 Calendar Days
-    if (freezes >= 2) {
-      // Consume 2 freezes, preserve streak, reset perfectWeek = 0, increment for today
-      freezes -= 2;
-      currentStreak += 1;
-      perfectWeek = 0;
-      return {
-        currentStreak,
-        lastSolvedDate: todayStr,
-        streakFreezes: freezes,
-        perfectWeekCounter: 0,
-      };
-    } else {
-      // Less than 2 freezes: streak reset to 1
-      return {
-        currentStreak: 1,
-        lastSolvedDate: todayStr,
-        streakFreezes: 0,
-        perfectWeekCounter: 1,
-      };
-    }
-  }
-
-  // daysDiff > 3: Missed 3+ Calendar Days
+  // Fallback if daysDiff > 1
   return {
     currentStreak: 1,
     lastSolvedDate: todayStr,
-    streakFreezes: 0,
+    streakFreezes: freezes,
     perfectWeekCounter: 1,
+    isFrozenState: false,
   };
 }
 
@@ -218,6 +227,7 @@ export interface StreakStats {
   lastPlayedDate: string | null;
   totalSolved: number;
   totalFailed: number;
+  isFrozenState: boolean;
 }
 
 const SERVER_SNAPSHOT: StreakStats = {
@@ -229,6 +239,7 @@ const SERVER_SNAPSHOT: StreakStats = {
   lastPlayedDate: null,
   totalSolved: 0,
   totalFailed: 0,
+  isFrozenState: false,
 };
 
 let cachedSnapshot: StreakStats = SERVER_SNAPSHOT;
@@ -254,6 +265,7 @@ function getSnapshot(): StreakStats {
           lastSolvedDate: parsed.lastSolvedDate || null,
           streakFreezes: Math.min(2, Math.max(0, parsed.streakFreezes || 0)),
           perfectWeekCounter: Math.min(7, Math.max(0, parsed.perfectWeekCounter || 0)),
+          isFrozenState: Boolean(parsed.isFrozenState),
         };
       } catch {
         streakData = {
@@ -261,6 +273,7 @@ function getSnapshot(): StreakStats {
           lastSolvedDate: rawLegacyLastDate,
           streakFreezes: 0,
           perfectWeekCounter: 0,
+          isFrozenState: false,
         };
       }
     } else {
@@ -269,6 +282,7 @@ function getSnapshot(): StreakStats {
         lastSolvedDate: rawLegacyLastDate,
         streakFreezes: 0,
         perfectWeekCounter: 0,
+        isFrozenState: false,
       };
     }
 
@@ -300,7 +314,8 @@ function getSnapshot(): StreakStats {
       cachedSnapshot.bestCombo !== rawBestCombo ||
       cachedSnapshot.lastPlayedDate !== effectiveStreakData.lastSolvedDate ||
       cachedSnapshot.totalSolved !== totalSolved ||
-      cachedSnapshot.totalFailed !== totalFailed
+      cachedSnapshot.totalFailed !== totalFailed ||
+      cachedSnapshot.isFrozenState !== Boolean(effectiveStreakData.isFrozenState)
     ) {
       cachedSnapshot = {
         dailyStreak: effectiveStreakData.currentStreak,
@@ -311,6 +326,7 @@ function getSnapshot(): StreakStats {
         lastPlayedDate: effectiveStreakData.lastSolvedDate,
         totalSolved,
         totalFailed,
+        isFrozenState: Boolean(effectiveStreakData.isFrozenState),
       };
     }
 
@@ -384,6 +400,7 @@ export function useStreak() {
             lastSolvedDate: parsed.lastSolvedDate || null,
             streakFreezes: Math.min(2, Math.max(0, parsed.streakFreezes || 0)),
             perfectWeekCounter: Math.min(7, Math.max(0, parsed.perfectWeekCounter || 0)),
+            isFrozenState: Boolean(parsed.isFrozenState),
           };
         } catch {
           currentStreakData = {
@@ -391,6 +408,7 @@ export function useStreak() {
             lastSolvedDate: rawLegacyLastDate,
             streakFreezes: 0,
             perfectWeekCounter: 0,
+            isFrozenState: false,
           };
         }
       } else {
@@ -399,6 +417,7 @@ export function useStreak() {
           lastSolvedDate: rawLegacyLastDate,
           streakFreezes: 0,
           perfectWeekCounter: 0,
+          isFrozenState: false,
         };
       }
 
@@ -462,6 +481,7 @@ export function useStreak() {
     dailyStreak: stats.dailyStreak,
     streakFreezes: stats.streakFreezes,
     perfectWeekCounter: stats.perfectWeekCounter,
+    isFrozenState: stats.isFrozenState,
     combo: stats.combo,
     bestCombo: stats.bestCombo,
     totalSolved: stats.totalSolved,

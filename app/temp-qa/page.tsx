@@ -32,12 +32,20 @@ import {
   getStoredQueue,
   saveQueue,
 } from "@/lib/puzzleCache";
+import { StreakFlameBadge } from "@/components/StreakFlameBadge";
+import {
+  fetchRecentAccountsAction,
+  purgeFlaggedTestAccountsAction,
+  deleteSelectedAccountsAction,
+} from "@/app/actions/cleanupTestUsers";
+import type { UserSummary } from "@/lib/cleanupTestUsers";
 import {
   StreakData,
   resolveStreakOnSolve,
   resolveStreakOnLoad,
   getTodayDateString,
   getCalendarDaysDiff,
+  addCalendarDays,
 } from "@/lib/useStreak";
 
 // Smooth animated Elo number counter matching PlayView.tsx
@@ -127,11 +135,23 @@ export default function TempQAPage() {
   const [upsellFeedback, setUpsellFeedback] = useState<string | null>(null);
 
   // -------------------------------------------------------------
-  // MODULE 2: Auth Cache & Account Switch Inspector
+  // MODULE 2: Auth Cache & Account Switch Inspector (Pure Client Memory / qa_mock_)
   // -------------------------------------------------------------
   const [storageKeys, setStorageKeys] = useState<{ key: string; value: string; type: "local" | "session" }[]>([]);
   const [activeUserSimulation, setActiveUserSimulation] = useState<string | null>(null);
   const [cacheClearMessage, setCacheClearMessage] = useState<string | null>(null);
+
+  const clearQAMockStorage = () => {
+    if (typeof window === "undefined") return;
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const k = window.localStorage.key(i);
+      if (k && k.startsWith("qa_mock_")) {
+        keysToRemove.push(k);
+      }
+    }
+    keysToRemove.forEach((k) => window.localStorage.removeItem(k));
+  };
 
   const refreshStorageTable = () => {
     if (typeof window === "undefined") return;
@@ -140,7 +160,14 @@ export default function TempQAPage() {
     // LocalStorage
     for (let i = 0; i < window.localStorage.length; i++) {
       const k = window.localStorage.key(i);
-      if (k && (k.startsWith("chess_reel") || k.includes("elo") || k.includes("puzzle") || k.includes("streak"))) {
+      if (
+        k &&
+        (k.startsWith("qa_mock_") ||
+          k.startsWith("chess_reel") ||
+          k.includes("elo") ||
+          k.includes("puzzle") ||
+          k.includes("streak"))
+      ) {
         entries.push({
           key: k,
           value: window.localStorage.getItem(k) || "",
@@ -171,23 +198,26 @@ export default function TempQAPage() {
   const simulateAccountSwitch = (userId: string, username: string, elo: number) => {
     if (typeof window === "undefined") return;
     // Wipe previous cache first to guarantee zero cross-contamination
+    clearQAMockStorage();
     clearAllUserAndPuzzleCache();
 
-    // Set new account credentials
+    // Isolated localStorage keys prefixed with qa_mock_ so ZERO database rows are created
     window.localStorage.setItem(
-      "chess_reel_account",
+      "qa_mock_account",
       JSON.stringify({
         id: userId,
         username,
         displayName: username,
         elo,
         plan: "free",
+        isTestAccount: true,
       })
     );
-    window.localStorage.setItem("chess_reel_elo", String(elo));
-    window.localStorage.setItem("chess_reel_user_elo", String(elo));
+    window.localStorage.setItem("qa_mock_elo", String(elo));
+    window.localStorage.setItem("qa_mock_user_elo", String(elo));
+    window.localStorage.setItem("qa_mock_active_user", userId);
 
-    // Save dedicated queue for this userId
+    // Save dedicated queue for this userId under isolated qa_mock_ prefix
     const queueData = [
       {
         id: `${userId}_p1`,
@@ -202,17 +232,22 @@ export default function TempQAPage() {
         rating: elo + 25,
       },
     ];
-    window.localStorage.setItem(`chess_reel_puzzle_queue_${userId}`, JSON.stringify(queueData));
+    window.localStorage.setItem(`qa_mock_puzzle_queue_${userId}`, JSON.stringify(queueData));
 
     setActiveUserSimulation(`${username} (${elo} Elo)`);
-    setCacheClearMessage(`Switched to ${username}. Scoped cache populated with ${elo} Elo puzzles.`);
+    setCacheClearMessage(
+      `Switched to ${username}. Isolated QA mock cache (qa_mock_) populated with ${elo} Elo puzzles (0 DB writes).`
+    );
     refreshStorageTable();
   };
 
   const handleTestLogout = () => {
+    clearQAMockStorage();
     clearAllUserAndPuzzleCache();
     setActiveUserSimulation(null);
-    setCacheClearMessage("Full cache flushed! Cookies, puzzle queues, Elo, and user state cleared. Zero residual data.");
+    setCacheClearMessage(
+      "Full cache flushed! QA mock keys (qa_mock_), cookies, queues, Elo, and user state cleared. Zero residual data."
+    );
     refreshStorageTable();
   };
 
@@ -418,10 +453,120 @@ export default function TempQAPage() {
     lastSolvedDate: "2026-11-04",
     streakFreezes: 1,
     perfectWeekCounter: 5,
+    isFrozenState: false,
   });
   const [streakLog, setStreakLog] = useState<string[]>([
     "Simulator loaded: Current Streak 5, 1/2 Freezes, 5/7 towards next Freeze.",
   ]);
+  const [isTestingIgnition, setIsTestingIgnition] = useState<boolean>(false);
+
+  const handleTestStreakIgnition = () => {
+    const today = simulatedDate || "2026-11-04";
+    setIsTestingIgnition(false);
+
+    // Set to 0 first if not already 0 so the transition to 1 is visible
+    setStreakData((prev) => ({
+      ...prev,
+      currentStreak: 0,
+      lastSolvedDate: null,
+      perfectWeekCounter: 0,
+      isFrozenState: false,
+    }));
+
+    setTimeout(() => {
+      const resolved = resolveStreakOnSolve(
+        {
+          currentStreak: 0,
+          lastSolvedDate: null,
+          streakFreezes: streakData.streakFreezes,
+          perfectWeekCounter: 0,
+          isFrozenState: false,
+        },
+        today
+      );
+      setStreakData(resolved);
+      setIsTestingIgnition(true);
+      setStreakLog((prev) => [
+        `[0 -> 1 Ignition] Day 1 solve! Flame ignited with spring pop & golden pulse ring.`,
+        ...prev.slice(0, 7),
+      ]);
+
+      setTimeout(() => {
+        setIsTestingIgnition(false);
+      }, 700);
+    }, 100);
+  };
+
+  const handleTestMissedDayToFrozen = () => {
+    const today = simulatedDate || "2026-11-04";
+    const baseStreak = streakData.currentStreak >= 1 ? streakData.currentStreak : 7;
+    const baseFreezes = Math.max(1, streakData.streakFreezes);
+    const twoDaysAgo = addCalendarDays(today, -2);
+
+    // Simulate previous solve was 2 days ago with at least 1 freeze
+    const simulatedState: StreakData = {
+      currentStreak: baseStreak,
+      lastSolvedDate: twoDaysAgo,
+      streakFreezes: baseFreezes,
+      perfectWeekCounter: 3,
+      isFrozenState: false,
+    };
+
+    // Check missed day on current date (daysDiff === 2) -> consumes 1 freeze, preserves streak, isFrozenState = true
+    const resolved = resolveStreakOnLoad(simulatedState, today);
+    setStreakData(resolved);
+    setIsTestingIgnition(true);
+    setStreakLog((prev) => [
+      `[Missed Day -> Icy Frozen State] Consumed 1 freeze (${baseFreezes} -> ${resolved.streakFreezes}). Streak preserved at ${resolved.currentStreak} in Icy Cyan (#38bdf8) with accent snowflakes!`,
+      ...prev.slice(0, 7),
+    ]);
+
+    setTimeout(() => {
+      setIsTestingIgnition(false);
+    }, 700);
+  };
+
+  const handleTestSolveOnFrozenDay = () => {
+    const today = simulatedDate || "2026-11-04";
+    let currentFrozenData = streakData;
+    if (!currentFrozenData.isFrozenState || currentFrozenData.currentStreak < 1) {
+      currentFrozenData = {
+        currentStreak: 7,
+        lastSolvedDate: addCalendarDays(today, -1),
+        streakFreezes: 1,
+        perfectWeekCounter: 0,
+        isFrozenState: true,
+      };
+    }
+
+    // Solve on frozen day: Thaws ice (isFrozenState = false) and increments streak
+    const resolved = resolveStreakOnSolve(currentFrozenData, today);
+    setStreakData(resolved);
+    setIsTestingIgnition(true);
+    setStreakLog((prev) => [
+      `[Thaw Ice on Solve] Ice thawed! Streak advanced ${currentFrozenData.currentStreak} -> ${resolved.currentStreak}, Flame ignited to warm Amber/Gold.`,
+      ...prev.slice(0, 7),
+    ]);
+
+    setTimeout(() => {
+      setIsTestingIgnition(false);
+    }, 700);
+  };
+
+  const handleSetStreakZero = () => {
+    setStreakData((prev) => ({
+      ...prev,
+      currentStreak: 0,
+      lastSolvedDate: null,
+      perfectWeekCounter: 0,
+      isFrozenState: false,
+    }));
+    setIsTestingIgnition(false);
+    setStreakLog((prev) => [
+      `[Streak Set to 0] Flame is in hollowed-out stone state (#78716c) awaiting Day 1 solve.`,
+      ...prev.slice(0, 7),
+    ]);
+  };
 
   useEffect(() => {
     const today = getTodayDateString();
@@ -431,16 +576,6 @@ export default function TempQAPage() {
       lastSolvedDate: today,
     }));
   }, []);
-
-  const addCalendarDays = (dateStr: string, days: number): string => {
-    const [y, m, d] = dateStr.split("-").map(Number);
-    const date = new Date(y, m - 1, d);
-    date.setDate(date.getDate() + days);
-    const ny = date.getFullYear();
-    const nm = String(date.getMonth() + 1).padStart(2, "0");
-    const nd = String(date.getDate()).padStart(2, "0");
-    return `${ny}-${nm}-${nd}`;
-  };
 
   const handleStreakSolveNextDay = () => {
     const nextDate = addCalendarDays(simulatedDate, 1);
@@ -471,29 +606,26 @@ export default function TempQAPage() {
   };
 
   const handleMissDays = (daysMissed: number) => {
-    // Jump forward (daysMissed + 1) days to simulate skipping daysMissed then solving on next day
-    const solveDate = addCalendarDays(simulatedDate, daysMissed + 1);
+    // Advance calendar date by daysMissed + 1 to simulate arriving on the new day
+    const newSimulatedDate = addCalendarDays(simulatedDate, daysMissed + 1);
     const beforeFreezes = streakData.streakFreezes;
-    const resolved = resolveStreakOnSolve(streakData, solveDate);
 
-    setSimulatedDate(solveDate);
+    // Check missed days via resolveStreakOnLoad (NO SOLVE TRIGGERED!)
+    const resolved = resolveStreakOnLoad(streakData, newSimulatedDate);
+
+    setSimulatedDate(newSimulatedDate);
     setStreakData(resolved);
 
     let explanation = "";
-    if (daysMissed === 1) {
-      explanation = beforeFreezes >= 1
-        ? `Missed 1 day: Consumed 1 freeze (${beforeFreezes} -> ${resolved.streakFreezes}). Streak PRESERVED (${resolved.currentStreak})!`
-        : `Missed 1 day: Zero freezes available. Streak LAPSED to 1.`;
-    } else if (daysMissed === 2) {
-      explanation = beforeFreezes >= 2
-        ? `Missed 2 days: Consumed 2 freezes (${beforeFreezes} -> ${resolved.streakFreezes}). Streak PRESERVED (${resolved.currentStreak})!`
-        : `Missed 2 days: Insufficient freezes. Streak LAPSED to 1.`;
-    } else {
-      explanation = `Missed ${daysMissed} days: Limit exceeded (Max 2 Freezes). Streak RESET to 1.`;
+    if (resolved.currentStreak === 0) {
+      explanation = `Missed ${daysMissed} day(s) without enough freezes. Streak LAPSED strictly to 0!`;
+    } else if (resolved.isFrozenState) {
+      const freezesUsed = beforeFreezes - resolved.streakFreezes;
+      explanation = `Missed ${daysMissed} day(s): Consumed ${freezesUsed} freeze(s). Streak PRESERVED at ${resolved.currentStreak} in Icy Frozen State (never incremented)!`;
     }
 
     setStreakLog((prev) => [
-      `[Missed ${daysMissed} Days -> Solved on ${solveDate}] ${explanation}`,
+      `[Missed ${daysMissed} Day(s) -> Day Rollover ${newSimulatedDate}] ${explanation}`,
       ...prev.slice(0, 7),
     ]);
   };
@@ -506,8 +638,97 @@ export default function TempQAPage() {
       lastSolvedDate: today,
       streakFreezes: 1,
       perfectWeekCounter: 1,
+      isFrozenState: false,
     });
     setStreakLog(["Streak state reset to: 1-Day Streak, 1 Freeze, 1/7 Week."]);
+  };
+
+  // -------------------------------------------------------------
+  // MODULE 7: Database Test Account Cleanup & Inspector
+  // -------------------------------------------------------------
+  const [dbAccounts, setDbAccounts] = useState<UserSummary[]>([]);
+  const [dbFlaggedCount, setDbFlaggedCount] = useState<number>(0);
+  const [dbTotalCount, setDbTotalCount] = useState<number>(0);
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+  const [isDbLoading, setIsDbLoading] = useState<boolean>(false);
+  const [dbActionMessage, setDbActionMessage] = useState<string | null>(null);
+  const [dbActionError, setDbActionError] = useState<string | null>(null);
+
+  const loadDbAccounts = async () => {
+    setIsDbLoading(true);
+    setDbActionError(null);
+    try {
+      const res = await fetchRecentAccountsAction(30);
+      if (res.success) {
+        setDbAccounts(res.accounts);
+        setDbFlaggedCount(res.flaggedCount);
+        setDbTotalCount(res.totalCount);
+        setSelectedUserIds([]);
+      } else {
+        setDbActionError(res.error || "Failed to load database accounts");
+      }
+    } catch (err) {
+      setDbActionError((err as Error).message);
+    } finally {
+      setIsDbLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadDbAccounts();
+  }, []);
+
+  const handlePurgeAllFlagged = async () => {
+    setIsDbLoading(true);
+    setDbActionMessage(null);
+    setDbActionError(null);
+    try {
+      const res = await purgeFlaggedTestAccountsAction();
+      if (res.success) {
+        setDbActionMessage(`Purge Complete: Deleted ${res.deletedCount} flagged test account(s) and all cascading records.`);
+        await loadDbAccounts();
+      } else {
+        setDbActionError(res.error || "Failed to purge test accounts.");
+      }
+    } catch (err) {
+      setDbActionError((err as Error).message);
+    } finally {
+      setIsDbLoading(false);
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedUserIds.length === 0) return;
+    setIsDbLoading(true);
+    setDbActionMessage(null);
+    setDbActionError(null);
+    try {
+      const res = await deleteSelectedAccountsAction(selectedUserIds);
+      if (res.success) {
+        setDbActionMessage(`Deletion Complete: Deleted ${res.deletedCount} selected account(s) and cascading records.`);
+        await loadDbAccounts();
+      } else {
+        setDbActionError(res.error || "Failed to delete selected accounts.");
+      }
+    } catch (err) {
+      setDbActionError((err as Error).message);
+    } finally {
+      setIsDbLoading(false);
+    }
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedUserIds.length === dbAccounts.length) {
+      setSelectedUserIds([]);
+    } else {
+      setSelectedUserIds(dbAccounts.map((a) => a.id));
+    }
+  };
+
+  const toggleSelectUser = (id: string) => {
+    setSelectedUserIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
   };
 
   return (
@@ -1276,28 +1497,102 @@ export default function TempQAPage() {
             </p>
 
             {/* HUD Status Bar Simulation */}
-            <div className="p-3.5 rounded-xl bg-[#0a0908] border border-white/10 mb-4 flex items-center justify-between">
-              {/* Daily Streak */}
+            <div className="p-3.5 rounded-xl bg-[#0a0908] border border-white/10 mb-3 flex items-center justify-between">
+              {/* Daily Streak Flame Badge (Hollow vs Ignited vs Icy Frozen) */}
               <div
                 data-testid="qa-streak-indicator"
-                className="flex items-center gap-1.5 font-bold text-sm text-amber-400"
+                className="flex items-center gap-1.5"
               >
-                <Flame className="w-4 h-4 text-amber-400 fill-amber-400" />
-                <span>{streakData.currentStreak} Days</span>
+                <StreakFlameBadge
+                  streak={streakData.currentStreak}
+                  isFrozenState={Boolean(streakData.isFrozenState)}
+                  isIgniting={isTestingIgnition}
+                  testId="qa-streak-flame-badge"
+                  flameTestId="qa-flame-icon"
+                  size="md"
+                />
+                <span className="text-xs text-white/60 font-bold">
+                  {streakData.currentStreak} {streakData.currentStreak === 1 ? "Day" : "Days"}
+                </span>
               </div>
 
               {/* Snowflake Freeze Badge */}
               <div
                 data-testid="qa-freeze-indicator"
-                className="flex items-center gap-1.5 text-xs font-semibold text-sky-400"
+                className="flex items-center gap-1 text-xs font-medium text-sky-400/90 cursor-help"
+                title="Earned every 7-day streak • Protects up to 2 missed days"
               >
-                <Snowflake className="w-4 h-4 text-sky-400" />
+                <Snowflake className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.5} />
                 <span>{streakData.streakFreezes}/2 Freezes</span>
               </div>
 
               {/* 7-Day Week Progress */}
               <div className="text-[11px] text-white/60">
                 Week: <span className="text-white font-bold">{streakData.perfectWeekCounter}/7</span>
+              </div>
+            </div>
+
+            {/* Visual State & Ignition Controls */}
+            <div className="mb-4 p-3 rounded-xl bg-gradient-to-r from-amber-500/10 via-sky-500/10 to-transparent border border-white/10 space-y-2.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-white flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                  <span>Streak State &amp; Thaw Simulator</span>
+                </span>
+                <span
+                  data-testid="qa-streak-state-badge"
+                  className={`text-[10px] font-mono px-2 py-0.5 rounded font-semibold ${
+                    streakData.currentStreak === 0
+                      ? "bg-stone-500/20 text-stone-400 border border-stone-500/30"
+                      : streakData.isFrozenState
+                      ? "bg-sky-500/20 text-sky-300 border border-sky-400/40"
+                      : "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                  }`}
+                >
+                  {streakData.currentStreak === 0
+                    ? "State A: Hollow (0)"
+                    : streakData.isFrozenState
+                    ? "State B: Icy Frozen (❄️)"
+                    : "State C: Ignited Amber (🔥)"}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  data-testid="test-streak-ignition-btn"
+                  onClick={handleTestStreakIgnition}
+                  className="py-2 px-3 rounded-lg bg-amber-500/20 border border-amber-500/40 text-xs font-bold text-amber-300 hover:bg-amber-500/30 active:scale-[0.99] transition-all flex items-center justify-center gap-1.5"
+                >
+                  <Flame className="w-3.5 h-3.5 fill-[#f59e0b] stroke-[#fbbf24] drop-shadow-[0_0_8px_rgba(245,158,11,0.55)]" />
+                  <span>Test 0 → 1 Ignition</span>
+                </button>
+                <button
+                  data-testid="test-missed-day-frozen-btn"
+                  onClick={handleTestMissedDayToFrozen}
+                  className="py-2 px-3 rounded-lg bg-sky-500/20 border border-sky-500/40 text-xs font-bold text-sky-300 hover:bg-sky-500/30 active:scale-[0.99] transition-all flex items-center justify-center gap-1.5"
+                >
+                  <Snowflake className="w-3.5 h-3.5 text-sky-300" />
+                  <span>Test Missed Day → Icy Frozen</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  data-testid="test-solve-frozen-thaw-btn"
+                  onClick={handleTestSolveOnFrozenDay}
+                  className="py-2 px-3 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-xs font-bold text-emerald-300 hover:bg-emerald-500/30 active:scale-[0.99] transition-all flex items-center justify-center gap-1.5"
+                >
+                  <Flame className="w-3.5 h-3.5 fill-[#f59e0b] stroke-[#fbbf24]" />
+                  <span>Thaw Ice → Amber (+1)</span>
+                </button>
+                <button
+                  data-testid="set-streak-zero-btn"
+                  onClick={handleSetStreakZero}
+                  className="py-2 px-3 rounded-lg bg-white/5 border border-white/10 text-xs font-medium text-stone-400 hover:bg-white/10 text-center transition-all flex items-center justify-center gap-1.5"
+                >
+                  <Flame className="w-3.5 h-3.5 fill-none stroke-[#78716c]" strokeWidth={1.75} />
+                  <span>Set 0 Streak (Hollow)</span>
+                </button>
               </div>
             </div>
 
@@ -1362,6 +1657,198 @@ export default function TempQAPage() {
               >
                 Miss 3 Days
               </button>
+            </div>
+          </div>
+        </section>
+
+        {/* ------------------------------------------------------------- */}
+        {/* MODULE 7: Database Test Account Cleanup & Inspector */}
+        {/* ------------------------------------------------------------- */}
+        <section
+          data-testid="module-db-cleanup"
+          className="lg:col-span-2 p-5 sm:p-6 rounded-2xl bg-[#12100e] border border-white/10 flex flex-col justify-between"
+        >
+          <div>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-white/10 mb-4 gap-2">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400 font-bold text-xs">
+                  7
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-white tracking-wide flex items-center gap-2">
+                    <span>Database Test Account Cleanup &amp; Live Inspector</span>
+                    <span className="text-[10px] text-rose-400 font-semibold bg-rose-500/10 px-2 py-0.5 rounded-full border border-rose-500/20">
+                      Live DB Action
+                    </span>
+                  </h2>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-white/50">
+                  Total in DB: <strong className="text-white">{dbTotalCount}</strong> • Flagged:{" "}
+                  <strong data-testid="db-flagged-count" className="text-rose-400 font-mono">{dbFlaggedCount}</strong>
+                </span>
+                <button
+                  data-testid="refresh-db-accounts-btn"
+                  onClick={loadDbAccounts}
+                  disabled={isDbLoading}
+                  className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white transition-all disabled:opacity-50"
+                  title="Refresh Database Accounts"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isDbLoading ? "animate-spin" : ""}`} />
+                </button>
+              </div>
+            </div>
+
+            <p className="text-xs text-white/60 mb-4 leading-relaxed">
+              Safely clean up unwanted test accounts from the production PostgreSQL database. Cascading delete removes foreign-key records (<code className="text-[#c29b78]">session</code>, <code className="text-[#c29b78]">account</code>, <code className="text-[#c29b78]">PuzzleHistory</code>, <code className="text-[#c29b78]">Friendship</code>, and <code className="text-[#c29b78]">PuzzleLike</code>) first before deleting from the user table.
+            </p>
+
+            {/* Action Feedback Messages */}
+            {dbActionMessage && (
+              <div
+                data-testid="db-action-success-banner"
+                className="mb-4 p-3 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2"
+              >
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>{dbActionMessage}</span>
+              </div>
+            )}
+            {dbActionError && (
+              <div
+                data-testid="db-action-error-banner"
+                className="mb-4 p-3 rounded-xl bg-rose-950/40 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2"
+              >
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{dbActionError}</span>
+              </div>
+            )}
+
+            {/* Action Buttons Toolbar */}
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4 p-3 rounded-xl bg-[#0a0908] border border-white/10">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  data-testid="purge-flagged-test-accounts-btn"
+                  onClick={handlePurgeAllFlagged}
+                  disabled={isDbLoading || dbFlaggedCount === 0}
+                  className="py-2 px-3.5 rounded-xl bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-bold hover:bg-rose-500/30 active:scale-[0.99] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Purge All Flagged Test Accounts ({dbFlaggedCount})</span>
+                </button>
+
+                <button
+                  data-testid="delete-selected-from-db-btn"
+                  onClick={handleDeleteSelected}
+                  disabled={isDbLoading || selectedUserIds.length === 0}
+                  className="py-2 px-3.5 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold hover:bg-amber-500/30 active:scale-[0.99] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete Selected from DB ({selectedUserIds.length})</span>
+                </button>
+              </div>
+
+              <div className="text-[11px] text-white/50">
+                Showing 30 most recent accounts from PostgreSQL
+              </div>
+            </div>
+
+            {/* Recent Accounts Table */}
+            <div className="rounded-xl border border-white/10 overflow-hidden bg-[#0a0908]">
+              <div className="overflow-x-auto max-h-[380px] overflow-y-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="sticky top-0 bg-[#161412] text-white/60 font-semibold border-b border-white/10 text-[11px]">
+                    <tr>
+                      <th className="p-3 w-10 text-center">
+                        <input
+                          type="checkbox"
+                          data-testid="select-all-accounts-checkbox"
+                          checked={dbAccounts.length > 0 && selectedUserIds.length === dbAccounts.length}
+                          onChange={toggleSelectAll}
+                          className="rounded border-white/20 bg-white/5 text-amber-500 focus:ring-0 cursor-pointer"
+                        />
+                      </th>
+                      <th className="p-3">User</th>
+                      <th className="p-3">Email</th>
+                      <th className="p-3 text-center">Elo</th>
+                      <th className="p-3">Created</th>
+                      <th className="p-3 text-right">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5 text-[11px]">
+                    {dbAccounts.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="p-6 text-center text-white/40">
+                          {isDbLoading ? "Loading accounts from PostgreSQL..." : "No accounts found in database"}
+                        </td>
+                      </tr>
+                    ) : (
+                      dbAccounts.map((acc) => {
+                        const isSelected = selectedUserIds.includes(acc.id);
+                        return (
+                          <tr
+                            key={acc.id}
+                            data-testid={`db-account-row-${acc.id}`}
+                            className={`hover:bg-white/[0.02] transition-colors ${
+                              isSelected ? "bg-amber-500/10" : ""
+                            }`}
+                          >
+                            <td className="p-3 text-center">
+                              <input
+                                type="checkbox"
+                                data-testid={`checkbox-user-${acc.id}`}
+                                checked={isSelected}
+                                onChange={() => toggleSelectUser(acc.id)}
+                                className="rounded border-white/20 bg-white/5 text-amber-500 focus:ring-0 cursor-pointer"
+                              />
+                            </td>
+                            <td className="p-3">
+                              <div className="font-bold text-white flex items-center gap-1.5">
+                                <span>{acc.name}</span>
+                                <span className="text-[10px] text-white/40 font-mono">(@{acc.username})</span>
+                              </div>
+                              <div className="text-[9px] font-mono text-white/30 truncate max-w-[140px]" title={acc.id}>
+                                {acc.id}
+                              </div>
+                            </td>
+                            <td className="p-3 font-mono text-white/70">
+                              {acc.email ? (
+                                <span title={acc.email}>{acc.email}</span>
+                              ) : (
+                                <span className="text-white/25 italic">None</span>
+                              )}
+                            </td>
+                            <td className="p-3 text-center font-bold text-[#c29b78]">
+                              {acc.elo}
+                            </td>
+                            <td className="p-3 text-white/50 text-[10px]">
+                              {acc.createdAt ? new Date(acc.createdAt).toLocaleDateString() : "-"}
+                            </td>
+                            <td className="p-3 text-right">
+                              {acc.isTestPattern || acc.isTestAccount ? (
+                                <span
+                                  data-testid={`badge-test-${acc.id}`}
+                                  className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/15 text-rose-300 border border-rose-500/30 inline-block"
+                                >
+                                  Test Pattern
+                                </span>
+                              ) : (
+                                <span
+                                  data-testid={`badge-real-${acc.id}`}
+                                  className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 inline-block"
+                                >
+                                  Real User
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </section>
