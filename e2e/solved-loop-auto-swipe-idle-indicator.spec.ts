@@ -173,8 +173,8 @@ test.describe("Solved Loop Fix, Auto-Swipe Setting & 7-Second Idle Indicator", (
     await expect(indicator).toBeVisible({ timeout: 10000 });
     await expect(indicator).toContainText("Swipe up for next puzzle");
 
-    // Click indicator to advance/dismiss
-    await indicator.click();
+    // Advance / dismiss via vertical swipe or PageDown
+    await page.keyboard.press("PageDown");
     await expect(indicator).not.toBeVisible();
 
     // Verify that when auto-advance is ON, the 7-second idle indicator NEVER appears

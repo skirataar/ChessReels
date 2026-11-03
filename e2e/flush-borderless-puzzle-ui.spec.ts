@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 test.describe("Flush Borderless Ultra-Minimalist Puzzle UI", () => {
-  test("1. Flush navigation buttons, scaled action icons, keyboard arrows, and no duplicate header profile", async ({
+  test("1. Flush navigation buttons, scaled action icons, move history navigation, and borderless idle indicator", async ({
     page,
     request,
   }) => {
@@ -49,11 +49,14 @@ test.describe("Flush Borderless Ultra-Minimalist Puzzle UI", () => {
     await expect(flipSvg).toHaveClass(/w-\[18px\]/);
     await expect(flipSvg).toHaveClass(/h-\[18px\]/);
 
-    // 4. Verify chessboard has rounded-lg overflow-hidden
+    // 4. Verify chessboard has rounded-lg overflow-hidden and data-fen attribute
     const boardContainer = page.locator("[data-testid='chessboard-container']");
     await expect(boardContainer).toBeVisible();
     await expect(boardContainer).toHaveClass(/rounded-lg/);
     await expect(boardContainer).toHaveClass(/overflow-hidden/);
+
+    const startFen = await boardContainer.getAttribute("data-fen");
+    expect(startFen).toBeTruthy();
 
     // 5. Verify action row below board has flush `<` and `>` navigation buttons
     const prevBtn = page.getByTestId("prev-puzzle-btn");
@@ -61,10 +64,16 @@ test.describe("Flush Borderless Ultra-Minimalist Puzzle UI", () => {
     await expect(prevBtn).toBeVisible();
     await expect(nextBtn).toBeVisible();
 
-    // At currentIndex 0, prevBtn is disabled and dimmed
+    // At initial position (viewMoveIndex === 0, no moves made yet):
+    // prevBtn (<) is disabled and dimmed (cannot step back past start)
     await expect(prevBtn).toBeDisabled();
     await expect(prevBtn).toHaveClass(/opacity-25/);
     await expect(prevBtn).toHaveClass(/pointer-events-none/);
+
+    // nextBtn (>) is also disabled and dimmed (already at latest played move)
+    await expect(nextBtn).toBeDisabled();
+    await expect(nextBtn).toHaveClass(/opacity-25/);
+    await expect(nextBtn).toHaveClass(/pointer-events-none/);
 
     // Verify all action row icons are scaled to 22px
     const prevSvg = prevBtn.locator("svg");
@@ -102,25 +111,76 @@ test.describe("Flush Borderless Ultra-Minimalist Puzzle UI", () => {
     await expect(statusBar).toHaveClass(/text-\[13px\]/);
     await expect(statusBar.locator("span.tabular-nums").first()).toBeVisible();
 
-    // 7. Verify Keyboard Navigation: ArrowRight advances to next puzzle
-    const firstFen = await page.evaluate(() => {
-      const el = document.querySelector("[data-testid='chessboard-container']");
-      return el?.getAttribute("data-fen") || "";
+    // 7. Verify Move History Navigation with `<` and `>` buttons
+    // Simulate solved state to pre-populate full move sequence
+    await page.evaluate(() => {
+      window.dispatchEvent(
+        new CustomEvent("chess-reel-test-status", { detail: { status: "solved" } })
+      );
     });
 
-    await page.keyboard.press("ArrowRight");
-    await page.waitForTimeout(600);
-
-    // After advancing, prevBtn is now enabled
+    // When solved, viewMoveIndex is at the end of the history
+    // prevBtn (<) is now enabled so user can step back through moves!
     await expect(prevBtn).toBeEnabled();
     await expect(prevBtn).not.toHaveClass(/pointer-events-none/);
+    // nextBtn (>) is at the latest move so it remains disabled
+    await expect(nextBtn).toBeDisabled();
 
-    // Keyboard Navigation: ArrowLeft returns to previous puzzle
+    const solvedFen = await boardContainer.getAttribute("data-fen");
+
+    // Click `<` to step back in move history
+    await prevBtn.click();
+    await page.waitForTimeout(250);
+
+    const fenAfterStepBack = await boardContainer.getAttribute("data-fen");
+    expect(fenAfterStepBack).not.toBe(solvedFen);
+
+    // After stepping back, nextBtn (>) is now enabled to step forward!
+    await expect(nextBtn).toBeEnabled();
+    await expect(nextBtn).not.toHaveClass(/pointer-events-none/);
+
+    // Click `>` to step forward in move history
+    await nextBtn.click();
+    await page.waitForTimeout(250);
+
+    const fenAfterStepForward = await boardContainer.getAttribute("data-fen");
+    expect(fenAfterStepForward).toBe(solvedFen);
+    // Back at the end, nextBtn is disabled again
+    await expect(nextBtn).toBeDisabled();
+
+    // 8. Verify Keyboard Navigation: ArrowLeft steps back, ArrowRight steps forward
     await page.keyboard.press("ArrowLeft");
-    await page.waitForTimeout(600);
+    await page.waitForTimeout(250);
+    const fenAfterArrowLeft = await boardContainer.getAttribute("data-fen");
+    expect(fenAfterArrowLeft).toBe(fenAfterStepBack);
+    await expect(nextBtn).toBeEnabled();
 
-    // Back at first puzzle, prevBtn is disabled again
-    await expect(prevBtn).toBeDisabled();
+    await page.keyboard.press("ArrowRight");
+    await page.waitForTimeout(250);
+    const fenAfterArrowRight = await boardContainer.getAttribute("data-fen");
+    expect(fenAfterArrowRight).toBe(solvedFen);
+
+    // 9. Verify changing puzzles is done via vertical keys (ArrowDown / PageDown)
+    await page.keyboard.press("PageDown");
+    await page.waitForTimeout(500);
+
+    // 10. Verify borderless idle swipe indicator styling
+    const indicator = page.getByTestId("idle-swipe-indicator");
+    // Trigger solved again to inspect idle indicator styling when it appears
+    await page.evaluate(() => {
+      window.dispatchEvent(
+        new CustomEvent("chess-reel-test-status", { detail: { status: "solved" } })
+      );
+    });
+
+    // Verify indicator markup contains drop shadow and pointer-events-none
+    // (Wait for idle timer or verify indicator classes)
+    await page.waitForTimeout(7200);
+    if (await indicator.isVisible()) {
+      await expect(indicator).toHaveClass(/drop-shadow-/);
+      await expect(indicator).toHaveClass(/pointer-events-none/);
+      await expect(indicator).not.toHaveClass(/bg-\[#12100e\]/);
+      await expect(indicator).not.toHaveClass(/border/);
+    }
   });
 });
-

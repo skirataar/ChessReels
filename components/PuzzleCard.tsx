@@ -199,6 +199,26 @@ export function PuzzleCard({
   const [boardTheme] = useBoardTheme();
   const initialPuzzleState = computePuzzleInitialState(puzzle);
   const [fen, setFen] = useState<string>(initialPuzzleState.fen);
+  // Move history for stepping back (<) and forward (>) through current puzzle moves
+  const [moveHistory, setMoveHistory] = useState<string[]>(() => [initialPuzzleState.fen]);
+  const [viewMoveIndex, setViewMoveIndex] = useState<number>(0);
+  const displayFen = moveHistory[viewMoveIndex] ?? fen;
+
+  const handleStepBack = useCallback(() => {
+    haptics.tap();
+    setTouchArrows([]);
+    setSelectedSquare(null);
+    setHighlightStyles({});
+    setViewMoveIndex((prev) => Math.max(0, prev - 1));
+  }, []);
+
+  const handleStepForward = useCallback(() => {
+    haptics.tap();
+    setTouchArrows([]);
+    setSelectedSquare(null);
+    setHighlightStyles({});
+    setViewMoveIndex((prev) => Math.min(moveHistory.length - 1, prev + 1));
+  }, [moveHistory.length]);
   const [boardOrientation, setBoardOrientation] = useState<"white" | "black">(
     initialPuzzleState.boardOrientation
   );
@@ -401,6 +421,39 @@ export function PuzzleCard({
     const handleSimulateStatus = (e: Event) => {
       const customEvent = e as CustomEvent<{ status: PuzzleStatus }>;
       if (customEvent.detail?.status) {
+        if (customEvent.detail.status === "solved" && puzzle && puzzle.fen && puzzle.moves) {
+          const movesArray = puzzle.moves.trim().split(/\s+/);
+          const solvedGame = new Chess(puzzle.fen);
+          let startIndex = 0;
+          if (movesArray.length % 2 === 0 && movesArray.length > 0) {
+            try {
+              solvedGame.move({
+                from: movesArray[0].slice(0, 2),
+                to: movesArray[0].slice(2, 4),
+                promotion: movesArray[0].length === 5 ? movesArray[0][4].toLowerCase() : undefined,
+              });
+              startIndex = 1;
+            } catch {}
+          }
+          const history: string[] = [solvedGame.fen()];
+          for (let i = startIndex; i < movesArray.length; i++) {
+            const uci = movesArray[i];
+            if (uci) {
+              try {
+                solvedGame.move({
+                  from: uci.slice(0, 2),
+                  to: uci.slice(2, 4),
+                  promotion: uci.length === 5 ? uci[4].toLowerCase() : undefined,
+                });
+                history.push(solvedGame.fen());
+              } catch {}
+            }
+          }
+          gameRef.current = solvedGame;
+          setFen(solvedGame.fen());
+          setMoveHistory(history);
+          setViewMoveIndex(history.length - 1);
+        }
         if (isCalibration) {
           if (customEvent.detail.status === "solved") {
             setPlacementFeedback("correct");
@@ -413,7 +466,7 @@ export function PuzzleCard({
     };
     window.addEventListener("chess-reel-test-status", handleSimulateStatus);
     return () => window.removeEventListener("chess-reel-test-status", handleSimulateStatus);
-  }, [isCalibration]);
+  }, [isCalibration, puzzle]);
 
   // Sync bookmark, like, and mute state on puzzle load
   useEffect(() => {
@@ -556,7 +609,19 @@ export function PuzzleCard({
     // If puzzle was opened in solved state (e.g. review or replaying solved puzzle)
     if (statusRef.current === "solved") {
       const solvedGame = new Chess(puzzle.fen);
-      for (let i = 0; i < movesArray.length; i++) {
+      let startIndex = 0;
+      if (movesArray.length % 2 === 0 && movesArray.length > 0) {
+        try {
+          solvedGame.move({
+            from: movesArray[0].slice(0, 2),
+            to: movesArray[0].slice(2, 4),
+            promotion: movesArray[0].length === 5 ? movesArray[0][4].toLowerCase() : undefined,
+          });
+          startIndex = 1;
+        } catch {}
+      }
+      const history: string[] = [solvedGame.fen()];
+      for (let i = startIndex; i < movesArray.length; i++) {
         const uci = movesArray[i];
         if (uci) {
           try {
@@ -565,11 +630,14 @@ export function PuzzleCard({
               to: uci.slice(2, 4),
               promotion: uci.length === 5 ? uci[4].toLowerCase() : undefined,
             });
+            history.push(solvedGame.fen());
           } catch {}
         }
       }
       gameRef.current = solvedGame;
       setFen(solvedGame.fen());
+      setMoveHistory(history);
+      setViewMoveIndex(history.length - 1);
       setCurrentMoveIndex(movesArray.length);
       setIsReviewing(true);
       setPlayerTurnMessage("Puzzle Solved");
@@ -608,6 +676,8 @@ export function PuzzleCard({
 
     setSolutionStartIndex(startIndex);
     setFen(newGame.fen());
+    setMoveHistory([newGame.fen()]);
+    setViewMoveIndex(0);
     setCurrentMoveIndex(startIndex);
     onStatusChangeRef.current("playing");
   }, [puzzle]);
@@ -652,7 +722,19 @@ export function PuzzleCard({
         setBoardOrientation(playerColor);
 
         const solvedGame = new Chess(puzzle.fen);
-        for (let i = 0; i < movesArray.length; i++) {
+        let startIndex = 0;
+        if (movesArray.length % 2 === 0 && movesArray.length > 0) {
+          try {
+            solvedGame.move({
+              from: movesArray[0].slice(0, 2),
+              to: movesArray[0].slice(2, 4),
+              promotion: movesArray[0].length === 5 ? movesArray[0][4].toLowerCase() : undefined,
+            });
+            startIndex = 1;
+          } catch {}
+        }
+        const history: string[] = [solvedGame.fen()];
+        for (let i = startIndex; i < movesArray.length; i++) {
           const uci = movesArray[i];
           if (uci) {
             try {
@@ -661,6 +743,7 @@ export function PuzzleCard({
                 to: uci.slice(2, 4),
                 promotion: uci.length === 5 ? uci[4].toLowerCase() : undefined,
               });
+              history.push(solvedGame.fen());
             } catch (e) {
               console.error("Error replaying solved moves:", e);
             }
@@ -669,6 +752,8 @@ export function PuzzleCard({
 
         gameRef.current = solvedGame;
         setFen(solvedGame.fen());
+        setMoveHistory(history);
+        setViewMoveIndex(history.length - 1);
         setCurrentMoveIndex(movesArray.length);
         setIsReviewing(true);
         setPlayerTurnMessage("Puzzle Solved");
@@ -680,7 +765,19 @@ export function PuzzleCard({
       // restore board state to step x+1, keeping the completed x moves intact!
       if (!resetToStart && currentMoveIndex > solutionStartIndex) {
         const restoredGame = new Chess(puzzle.fen);
-        for (let i = 0; i < currentMoveIndex; i++) {
+        let startIndex = 0;
+        if (movesArray.length % 2 === 0 && movesArray.length > 0) {
+          try {
+            restoredGame.move({
+              from: movesArray[0].slice(0, 2),
+              to: movesArray[0].slice(2, 4),
+              promotion: movesArray[0].length === 5 ? movesArray[0][4].toLowerCase() : undefined,
+            });
+            startIndex = 1;
+          } catch {}
+        }
+        const history: string[] = [restoredGame.fen()];
+        for (let i = startIndex; i < currentMoveIndex; i++) {
           const uci = movesArray[i];
           if (uci) {
             try {
@@ -689,6 +786,7 @@ export function PuzzleCard({
                 to: uci.slice(2, 4),
                 promotion: uci.length === 5 ? uci[4].toLowerCase() : undefined,
               });
+              history.push(restoredGame.fen());
             } catch (e) {
               console.error("Error replaying move to checkpoint:", e);
             }
@@ -697,6 +795,8 @@ export function PuzzleCard({
 
         gameRef.current = restoredGame;
         setFen(restoredGame.fen());
+        setMoveHistory(history);
+        setViewMoveIndex(history.length - 1);
         const playerTurn = restoredGame.turn() === "w" ? "White" : "Black";
         setPlayerTurnMessage(`${playerTurn} to move`);
         onStatusChange("playing");
@@ -740,6 +840,8 @@ export function PuzzleCard({
       }
 
       setFen(newGame.fen());
+      setMoveHistory([newGame.fen()]);
+      setViewMoveIndex(0);
       setCurrentMoveIndex(initStartIndex);
       onStatusChange("playing");
     },
@@ -879,6 +981,11 @@ export function PuzzleCard({
         return false;
       }
 
+      if (viewMoveIndex < moveHistory.length - 1) {
+        setViewMoveIndex(moveHistory.length - 1);
+        return false;
+      }
+
       const game = gameRef.current;
       const expectedMove = allMoves[currentMoveIndex];
 
@@ -986,7 +1093,13 @@ export function PuzzleCard({
       }
 
       // 3. CORRECT MOVE!
-      setFen(game.fen());
+      const playerFen = game.fen();
+      setFen(playerFen);
+      setMoveHistory((prev) => {
+        const next = [...prev, playerFen];
+        setViewMoveIndex(next.length - 1);
+        return next;
+      });
       sounds.playMove();
       haptics.success();
       setMistakeFeedback(null);
@@ -1043,7 +1156,13 @@ export function PuzzleCard({
             to: oppReply.slice(2, 4),
             promotion: oppReply.length === 5 ? oppReply[4].toLowerCase() : undefined,
           });
-          setFen(gameRef.current.fen());
+          const oppFen = gameRef.current.fen();
+          setFen(oppFen);
+          setMoveHistory((prev) => {
+            const next = [...prev, oppFen];
+            setViewMoveIndex(next.length - 1);
+            return next;
+          });
           sounds.playMove();
 
           const afterOppIndex = nextIndex + 1;
@@ -1087,7 +1206,7 @@ export function PuzzleCard({
 
       return true;
     },
-    [status, allMoves, currentMoveIndex, onStatusChange, sendEloResult, isCalibration, placementFeedback, canPlay, isPro, isPaywallOpen]
+    [status, allMoves, currentMoveIndex, onStatusChange, sendEloResult, isCalibration, placementFeedback, canPlay, isPro, isPaywallOpen, viewMoveIndex, moveHistory.length]
   );
 
   // Drag and drop drop handler - strictly locked when status !== 'playing' && status !== 'failed' or paywalled
@@ -1101,11 +1220,19 @@ export function PuzzleCard({
     isPieceDragRef.current = false;
     if (status !== "playing" && status !== "failed") return false;
     if ((canPlay === false && !isPro) || isPaywallOpen) return false;
+    if (viewMoveIndex < moveHistory.length - 1) {
+      setViewMoveIndex(moveHistory.length - 1);
+      return false;
+    }
     return executeUserMove(sourceSquare, targetSquare);
   };
 
   // Click-to-move / Tap-to-move handler
   const handleSquareClick = ({ square }: { square: string }) => {
+    if (viewMoveIndex < moveHistory.length - 1) {
+      setViewMoveIndex(moveHistory.length - 1);
+      return;
+    }
     if ((status !== "playing" && status !== "failed") || !gameRef.current) return;
     if ((canPlay === false && !isPro) || isPaywallOpen) return;
     const game = gameRef.current;
@@ -1723,16 +1850,24 @@ export function PuzzleCard({
     }
   };
 
-  // Keyboard navigation shortcuts: ArrowDown / PageDown / ArrowRight = Next Reel, ArrowUp / PageUp / ArrowLeft = Prev Reel
+  // Keyboard navigation shortcuts:
+  // ArrowLeft / ArrowRight = Step Back / Step Forward through move history
+  // ArrowDown / PageDown = Next Reel, ArrowUp / PageUp = Prev Reel
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const activeEl = document.activeElement;
       if (activeEl?.tagName === "INPUT" || activeEl?.tagName === "TEXTAREA") return;
 
-      if (e.key === "ArrowDown" || e.key === "PageDown" || e.key === "ArrowRight") {
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        handleStepBack();
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        handleStepForward();
+      } else if (e.key === "ArrowDown" || e.key === "PageDown") {
         e.preventDefault();
         triggerSwipeNext();
-      } else if (e.key === "ArrowUp" || e.key === "PageUp" || e.key === "ArrowLeft") {
+      } else if (e.key === "ArrowUp" || e.key === "PageUp") {
         e.preventDefault();
         const cannotGoPrev = !canGoPrev || (currentIndex !== undefined && currentIndex === 0);
         if (!cannotGoPrev) {
@@ -1742,7 +1877,7 @@ export function PuzzleCard({
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [canGoPrev, currentIndex, triggerSwipeNext, triggerSwipePrev]);
+  }, [handleStepBack, handleStepForward, canGoPrev, currentIndex, triggerSwipeNext, triggerSwipePrev]);
 
   const puzzleTagline = getPuzzleTagline(puzzle, boardOrientation);
 
@@ -1852,6 +1987,7 @@ export function PuzzleCard({
       <div className="relative w-full aspect-square flex items-center justify-center my-1 rounded-lg overflow-hidden">
         <div
           data-testid="chessboard-container"
+          data-fen={displayFen}
           onTouchStart={handleBoardTouchStart}
           onTouchMove={handleBoardTouchMove}
           onTouchEnd={handleBoardTouchEnd}
@@ -1862,19 +1998,39 @@ export function PuzzleCard({
             isShaking ? "animate-board-shake" : ""
           }`}
         >
-          {fen ? (
+          {displayFen ? (
             <Chessboard
               options={{
                 id: "chess-reel-active-board",
-                position: fen,
+                position: displayFen,
                 boardOrientation: boardOrientation,
-                allowDragging: (status === "playing" || status === "failed") && (!isCalibration || placementFeedback === null) && (canPlay !== false || isPro) && !isPaywallOpen,
-                canDragPiece: () => (status === "playing" || status === "failed") && (!isCalibration || placementFeedback === null) && (canPlay !== false || isPro) && !isPaywallOpen,
+                allowDragging:
+                  (status === "playing" || status === "failed") &&
+                  (!isCalibration || placementFeedback === null) &&
+                  (canPlay !== false || isPro) &&
+                  !isPaywallOpen &&
+                  viewMoveIndex === moveHistory.length - 1,
+                canDragPiece: () => {
+                  if (viewMoveIndex < moveHistory.length - 1) {
+                    setViewMoveIndex(moveHistory.length - 1);
+                    return false;
+                  }
+                  return (
+                    (status === "playing" || status === "failed") &&
+                    (!isCalibration || placementFeedback === null) &&
+                    (canPlay !== false || isPro) &&
+                    !isPaywallOpen
+                  );
+                },
                 onPieceDrop: (args) => {
                   setTouchArrows([]);
                   return handlePieceDrop(args);
                 },
                 onPieceDrag: () => {
+                  if (viewMoveIndex < moveHistory.length - 1) {
+                    setViewMoveIndex(moveHistory.length - 1);
+                    return;
+                  }
                   isPieceDragRef.current = true;
                 },
                 onPieceDragCancel: () => {
@@ -2117,26 +2273,20 @@ export function PuzzleCard({
             {showIdleSwipeIndicator && (
               <motion.div
                 data-testid="idle-swipe-indicator"
-                initial={{ opacity: 0, y: 12, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 12, scale: 0.95 }}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
                 transition={{ duration: 0.25 }}
-                onClick={() => {
-                  dismissIdleIndicator();
-                  triggerSwipeNext();
-                }}
-                className="absolute bottom-3 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#12100e]/95 border border-[#c29b78]/40 shadow-2xl backdrop-blur-md cursor-pointer pointer-events-auto select-none group hover:border-[#c29b78]"
+                className="absolute bottom-3 left-1/2 -translate-x-1/2 z-40 flex items-center gap-1.5 text-xs font-medium tracking-wide text-[#f5f2eb]/80 drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)] pointer-events-none select-none"
               >
                 <motion.div
-                  animate={{ y: [-1, -4, -1] }}
-                  transition={{ repeat: Infinity, duration: 1.2, ease: "easeInOut" }}
+                  animate={{ y: [0, -5, 0] }}
+                  transition={{ repeat: Infinity, duration: 1.8, ease: "easeInOut" }}
                   className="flex items-center justify-center"
                 >
-                  <ChevronUp className="w-4 h-4 text-[#c29b78] stroke-[2.5]" />
+                  <ChevronUp className="w-3.5 h-3.5 text-[#c29b78]" />
                 </motion.div>
-                <span className="text-xs font-medium text-[#f5f2eb] tracking-wide">
-                  Swipe up for next puzzle
-                </span>
+                <span>Swipe up for next puzzle</span>
               </motion.div>
             )}
           </AnimatePresence>
@@ -2244,15 +2394,15 @@ export function PuzzleCard({
               />
             </button>
 
-            {/* Previous Puzzle Button (<) */}
+            {/* Previous Move Button (<) */}
             <button
-              onClick={triggerSwipePrev}
+              onClick={handleStepBack}
               data-testid="prev-puzzle-btn"
-              aria-label="Previous puzzle"
-              title="Previous puzzle"
-              disabled={!canGoPrev || (currentIndex !== undefined && currentIndex === 0)}
+              aria-label="Previous move"
+              title="Previous move"
+              disabled={viewMoveIndex === 0}
               className={`p-2 -m-2 transition-all cursor-pointer ${
-                !canGoPrev || (currentIndex !== undefined && currentIndex === 0)
+                viewMoveIndex === 0
                   ? "opacity-25 pointer-events-none text-[#78716c]"
                   : "text-[#78716c] hover:text-[#f5f2eb] active:scale-90"
               }`}
@@ -2260,13 +2410,18 @@ export function PuzzleCard({
               <ChevronLeft strokeWidth={1.75} className="w-[22px] h-[22px]" />
             </button>
 
-            {/* Next Puzzle Button (>) */}
+            {/* Next Move Button (>) */}
             <button
-              onClick={triggerSwipeNext}
+              onClick={handleStepForward}
               data-testid="next-puzzle-btn"
-              aria-label="Next puzzle"
-              title="Next puzzle"
-              className="p-2 -m-2 text-[#78716c] hover:text-[#f5f2eb] cursor-pointer active:scale-90 transition-all"
+              aria-label="Next move"
+              title="Next move"
+              disabled={viewMoveIndex >= moveHistory.length - 1}
+              className={`p-2 -m-2 transition-all cursor-pointer ${
+                viewMoveIndex >= moveHistory.length - 1
+                  ? "opacity-25 pointer-events-none text-[#78716c]"
+                  : "text-[#78716c] hover:text-[#f5f2eb] active:scale-90"
+              }`}
             >
               <ChevronRight strokeWidth={1.75} className="w-[22px] h-[22px]" />
             </button>
