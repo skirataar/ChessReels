@@ -6,7 +6,7 @@ import { isGuestUserId } from "@/lib/guestAccount";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { guestId, username, password, email, displayName, avatar, skillLevel } = body;
+    const { guestId, username, password, email, displayName, avatar, skillLevel, startingElo, elo } = body;
 
     if (!username || typeof username !== "string") {
       return NextResponse.json(
@@ -73,9 +73,25 @@ export async function POST(request: NextRequest) {
     // Secure password hashing
     const passwordHash = hashPassword(password);
 
-    // Calculate initial Elo baseline based on user self-selected skill level
-    const initialSkill = skillLevel === "beginner" ? "beginner" : skillLevel === "advanced" ? "advanced" : "intermediate";
-    const baseElo = initialSkill === "beginner" ? 600 : initialSkill === "advanced" ? 1100 : 850;
+    // Calculate initial Elo baseline based on user self-selected starting Elo or skill level
+    const userElo =
+      typeof elo === "number"
+        ? elo
+        : typeof startingElo === "number"
+        ? startingElo
+        : undefined;
+    const initialSkill =
+      skillLevel === "beginner"
+        ? "beginner"
+        : skillLevel === "advanced"
+        ? "advanced"
+        : "intermediate";
+    const fallbackBaseElo =
+      initialSkill === "beginner" ? 600 : initialSkill === "advanced" ? 1600 : 1200;
+    const baseElo =
+      typeof userElo === "number"
+        ? Math.max(400, Math.min(2600, userElo))
+        : fallbackBaseElo;
 
     let user;
 

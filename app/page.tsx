@@ -6,9 +6,10 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ArrowRight, Check, LogIn, Sparkles } from "lucide-react";
 import { BOARD_THEMES, BoardTheme, setStoredBoardTheme, getStoredBoardTheme } from "@/lib/boardThemes";
 import { clearGuestLocalSession, isGuestAccount } from "@/lib/guestAccount";
+import { prefetchPuzzles, clearAllUserAndPuzzleCache } from "@/lib/puzzleCache";
 
 // --- Types ---
-type FlowStep = "gate" | "step-elo" | "step-goal" | "auth" | "pro-upsell";
+type FlowStep = "gate" | "step-elo" | "step-goal" | "step-board" | "auth" | "pro-upsell";
 
 interface EloOption {
   id: string;
@@ -599,8 +600,31 @@ export default function RootPage() {
         router.replace("/play");
         return;
       }
+
+      if (!stepParam && !modeParam && !googleOnboarding) {
+        setStep("gate");
+      }
     } catch {}
   }, [router]);
+
+  // Reset flow to entry gate upon logout / account clearing
+  useEffect(() => {
+    const handleAccountUpdate = () => {
+      const hasAccount = window.localStorage.getItem("chess_reel_account");
+      if (!hasAccount) {
+        setStep("gate");
+        setAuthMode("signup");
+        setUsername("");
+        setPassword("");
+        setConfirmPassword("");
+        setName("");
+        setEmail("");
+        setAuthError(null);
+      }
+    };
+    window.addEventListener("account-updated", handleAccountUpdate);
+    return () => window.removeEventListener("account-updated", handleAccountUpdate);
+  }, []);
 
   // Keep target Elo higher than starting Elo automatically
   useEffect(() => {
@@ -621,19 +645,20 @@ export default function RootPage() {
   const handleBack = () => {
     if (step === "step-elo") goTo("gate", -1);
     else if (step === "step-goal") goTo("step-elo", -1);
+    else if (step === "step-board") goTo("step-goal", -1);
     else if (step === "auth") {
       if (authMode === "signin") goTo("gate", -1);
-      else goTo("step-goal", -1);
+      else goTo("step-board", -1);
     }
   };
 
-  // Progress index for top horizontal segments (1: elo, 2: goal, 3: auth-signup)
+  // Progress index for top horizontal segments (1: elo, 2: goal, 3: board, 3: auth-signup)
   const activeProgressSegment =
     step === "step-elo"
       ? 1
       : step === "step-goal"
       ? 2
-      : (step === "auth" && authMode === "signup")
+      : step === "step-board" || (step === "auth" && authMode === "signup")
       ? 3
       : 0;
 
@@ -679,19 +704,11 @@ export default function RootPage() {
       }
 
       if (data.user) {
+        clearAllUserAndPuzzleCache();
         window.localStorage.setItem("chess_reel_account", JSON.stringify(data.user));
         window.localStorage.setItem("chess_reel_elo", String(data.user.elo || startingElo));
         window.localStorage.setItem("chess_reel_plan", data.user.plan || "free");
-        window.localStorage.removeItem("chess_reel_peak_elo");
-        window.localStorage.removeItem("chess_reel_best_streak");
-        window.localStorage.removeItem("chess_reel_daily_streak");
-        window.localStorage.removeItem("chess_reel_solve_combo");
-        window.localStorage.removeItem("chess_reel_best_combo");
-        window.localStorage.removeItem("chess_reel_total_solved");
-        window.localStorage.removeItem("chess_reel_total_failed");
-        window.localStorage.removeItem("chess_reel_tier_session");
-        window.localStorage.removeItem("chess_reel_tier_session_guest");
-        window.localStorage.removeItem("chess_reel_last_solved_puzzle");
+        prefetchPuzzles(startingElo, 5, data.user.id).catch(() => {});
         document.cookie = "chess_reel_pending_google=; path=/; max-age=0";
         document.cookie = `chess_reel_session=${encodeURIComponent(data.user.id)}; path=/; max-age=${60 * 60 * 24 * 30}`;
         window.dispatchEvent(new Event("account-updated"));
@@ -762,6 +779,8 @@ export default function RootPage() {
             username: cleanUser,
             password,
             skillLevel: skill.skillLevel,
+            startingElo,
+            elo: startingElo,
           }),
         });
         const data = await res.json();
@@ -772,6 +791,7 @@ export default function RootPage() {
         }
 
         if (data.user) {
+          clearAllUserAndPuzzleCache();
           window.localStorage.setItem("chess_reel_account", JSON.stringify(data.user));
           window.localStorage.setItem("chess_reel_elo", String(data.user.elo || startingElo));
           if (data.user.plan) {
@@ -780,17 +800,7 @@ export default function RootPage() {
           } else {
             window.localStorage.removeItem("chess_reel_plan");
           }
-          // Clear any stale stats or old solved puzzle to prevent cross-account bleeding
-          window.localStorage.removeItem("chess_reel_peak_elo");
-          window.localStorage.removeItem("chess_reel_best_streak");
-          window.localStorage.removeItem("chess_reel_daily_streak");
-          window.localStorage.removeItem("chess_reel_solve_combo");
-          window.localStorage.removeItem("chess_reel_best_combo");
-          window.localStorage.removeItem("chess_reel_total_solved");
-          window.localStorage.removeItem("chess_reel_total_failed");
-          window.localStorage.removeItem("chess_reel_tier_session");
-          window.localStorage.removeItem("chess_reel_tier_session_guest");
-          window.localStorage.removeItem("chess_reel_last_solved_puzzle");
+          prefetchPuzzles(data.user.elo || 800, 5, data.user.id).catch(() => {});
           window.dispatchEvent(new Event("tier-session-updated"));
 
           document.cookie = `chess_reel_session=${encodeURIComponent(data.user.id)}; path=/; max-age=${60 * 60 * 24 * 30}`;
@@ -833,6 +843,7 @@ export default function RootPage() {
         }
 
         if (data.user) {
+          clearAllUserAndPuzzleCache();
           window.localStorage.setItem("chess_reel_account", JSON.stringify(data.user));
           if (data.user.elo) {
             window.localStorage.setItem("chess_reel_elo", String(data.user.elo));
@@ -843,22 +854,12 @@ export default function RootPage() {
           } else {
             window.localStorage.removeItem("chess_reel_plan");
           }
-          // Clear any stale stats or old solved puzzle to prevent cross-account bleeding
-          window.localStorage.removeItem("chess_reel_peak_elo");
-          window.localStorage.removeItem("chess_reel_best_streak");
-          window.localStorage.removeItem("chess_reel_daily_streak");
-          window.localStorage.removeItem("chess_reel_solve_combo");
-          window.localStorage.removeItem("chess_reel_best_combo");
-          window.localStorage.removeItem("chess_reel_total_solved");
-          window.localStorage.removeItem("chess_reel_total_failed");
-          window.localStorage.removeItem("chess_reel_tier_session");
-          window.localStorage.removeItem("chess_reel_tier_session_guest");
-          window.localStorage.removeItem("chess_reel_last_solved_puzzle");
+          prefetchPuzzles(data.user.elo || 800, 5, data.user.id).catch(() => {});
           window.dispatchEvent(new Event("tier-session-updated"));
 
           document.cookie = `chess_reel_session=${encodeURIComponent(data.user.id)}; path=/; max-age=${60 * 60 * 24 * 30}`;
           window.dispatchEvent(new Event("account-updated"));
-          router.push("/play");
+          router.replace("/play");
         }
       } catch {
         setAuthError("Network error. Please try again.");
@@ -1263,6 +1264,97 @@ export default function RootPage() {
                           }`}
                         >
                           +{delta}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="w-full pb-2 shrink-0">
+                  <button
+                    onClick={() => goTo("step-board", 1)}
+                    type="button"
+                    className="w-full h-12 rounded-full bg-[#c29b78] hover:bg-[#d4b08f] text-[#0a0908] font-semibold text-sm tracking-wide transition-all duration-150 active:scale-[0.98] shadow-lg shadow-[#c29b78]/20 flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <span>Continue</span>
+                    <ArrowRight className="w-4 h-4 stroke-[2]" />
+                  </button>
+                </div>
+              </motion.div>
+            )}
+
+            {/* ============================================================ */}
+            {/* STATE 3: 'step-board' (Board Theme 2x3 Grid, No Pieces)      */}
+            {/* ============================================================ */}
+            {step === "step-board" && (
+              <motion.div
+                key="step-board"
+                custom={direction}
+                variants={slideVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                className="w-full h-full flex flex-col justify-between"
+              >
+                <div>
+                  <h2 className="text-xl font-semibold tracking-tight text-[#f5f2eb]">
+                    Choose your board.
+                  </h2>
+                  <p className="text-xs text-[#78716c] mt-1">
+                    Select your aesthetic for the puzzle reels feed.
+                  </p>
+
+                  {/* 2x3 Grid of Board Options (Pure checkerboards, No pieces) */}
+                  <div className="grid grid-cols-2 gap-2.5 sm:gap-3 mt-4">
+                    {BOARD_THEMES.map((theme) => {
+                      const isSelected = selectedTheme.id === theme.id;
+                      return (
+                        <button
+                          key={theme.id}
+                          onClick={() => {
+                            setSelectedTheme(theme);
+                            setStoredBoardTheme(theme.id);
+                          }}
+                          type="button"
+                          className={`relative p-2.5 sm:p-3 rounded-2xl border transition-all duration-150 flex flex-col items-center gap-2 cursor-pointer ${
+                            isSelected
+                              ? "bg-[#c29b78]/[0.1] border-[#c29b78] shadow-lg shadow-[#c29b78]/15 ring-1 ring-[#c29b78]"
+                              : "bg-[#12100e] border-white/[0.08] hover:border-white/20 hover:bg-[#181512]"
+                          }`}
+                        >
+                          {/* Selected Check Badge */}
+                          {isSelected && (
+                            <div className="absolute top-2 right-2 w-4 h-4 rounded-full bg-[#c29b78] text-[#0a0908] flex items-center justify-center shadow-md">
+                              <Check className="w-2.5 h-2.5 stroke-[3]" />
+                            </div>
+                          )}
+
+                          {/* 4x4 Mini Checkerboard Swatch (Clean, no pieces) */}
+                          <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl overflow-hidden grid grid-cols-4 grid-rows-4 border border-black/40 shadow-inner shrink-0">
+                            {[...Array(16)].map((_, idx) => {
+                              const r = Math.floor(idx / 4);
+                              const c = idx % 4;
+                              const isDark = (r + c) % 2 === 1;
+                              return (
+                                <div
+                                  key={idx}
+                                  className="w-full h-full"
+                                  style={{
+                                    backgroundColor: isDark ? theme.dark : theme.light,
+                                  }}
+                                />
+                              );
+                            })}
+                          </div>
+
+                          {/* Board Name Underneath */}
+                          <span
+                            className={`text-xs font-medium text-center transition-colors ${
+                              isSelected ? "text-[#f5f2eb]" : "text-[#a8a29e]"
+                            }`}
+                          >
+                            {theme.name}
+                          </span>
                         </button>
                       );
                     })}

@@ -46,6 +46,7 @@ import {
 import { sounds } from "@/lib/audio";
 import { CURATED_AVATARS, compressImageFile, persistAvatar } from "@/lib/avatarUpload";
 import { clearGuestLocalSession, isGuestAccount } from "@/lib/guestAccount";
+import { clearAllUserAndPuzzleCache } from "@/lib/puzzleCache";
 
 interface DayData {
   day: string;
@@ -208,17 +209,9 @@ export default function ProfileStatsPage() {
   };
 
   const handleSignOut = () => {
-    try {
-      localStorage.removeItem("chess_reel_account");
-      localStorage.removeItem("chess_reel_plan");
-      localStorage.removeItem("chess_reel_custom_dp");
-      localStorage.removeItem("chess_reel_preview_guest");
-      document.cookie = "chess_reel_session=; path=/; max-age=0";
-      document.cookie = "chess_reel_oauth_user=; path=/; max-age=0";
-      window.dispatchEvent(new Event("account-updated"));
-      window.dispatchEvent(new Event("plan-updated"));
-    } catch {}
-    router.push("/");
+    clearAllUserAndPuzzleCache(userAccount?.id);
+    setUserAccount(null);
+    router.replace("/");
   };
 
   const handleToggleMute = () => {

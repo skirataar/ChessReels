@@ -25,8 +25,8 @@ export async function POST(request: NextRequest) {
     }
 
     if (isFinished || (typeof step === "number" && step >= 6)) {
-      // Balanced placement test ceiling: 1450 max (players can climb higher in ranked play)
-      const settledElo = Math.max(400, Math.min(1450, typeof finalElo === "number" ? finalElo : user.elo));
+      // Allow calibration to accurately reflect true tactical rating up to 2800
+      const settledElo = Math.max(400, Math.min(2800, typeof finalElo === "number" ? finalElo : user.elo));
 
       const updated = await prisma.user.update({
         where: { id: userId },
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
 
     // Otherwise, record step progress
     const nextStep = typeof step === "number" ? step : user.calibrationStep + 1;
-    const currentEstimatedElo = typeof finalElo === "number" ? finalElo : user.elo;
+    const currentEstimatedElo = typeof finalElo === "number" ? Math.max(400, Math.min(2800, finalElo)) : user.elo;
 
     const updated = await prisma.user.update({
       where: { id: userId },

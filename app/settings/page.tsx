@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { SettingsModal } from "@/components/SettingsModal";
+import { clearAllUserAndPuzzleCache } from "@/lib/puzzleCache";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -24,11 +25,8 @@ export default function SettingsPage() {
         onClose={() => router.push("/play")}
         userAccount={account}
         onSignOut={() => {
-          if (typeof window !== "undefined") {
-            window.localStorage.removeItem("chess_reel_account");
-            document.cookie = "chess_reel_session=; path=/; max-age=0";
-            router.push("/");
-          }
+          clearAllUserAndPuzzleCache(account?.id);
+          router.replace("/");
         }}
       />
     </div>

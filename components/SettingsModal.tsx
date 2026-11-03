@@ -60,7 +60,7 @@ export function SettingsModal({
   const [isHapticsEnabled, setIsHapticsEnabled] = useState<boolean>(true);
 
   // Gameplay state
-  const [autoAdvance, setAutoAdvance] = useState<boolean>(true);
+  const [autoAdvance, setAutoAdvance] = useState<boolean>(false);
   const [showCoordinates, setShowCoordinates] = useState<boolean>(true);
   const [animSpeed, setAnimSpeed] = useState<"snappy" | "smooth" | "instant">("snappy");
 
@@ -75,9 +75,9 @@ export function SettingsModal({
     const haptics = window.localStorage.getItem("chess_reel_haptics");
     setIsHapticsEnabled(haptics !== "0");
 
-    // Auto advance
+    // Auto advance (defaults to false)
     const auto = window.localStorage.getItem("chess_reel_auto_advance");
-    setAutoAdvance(auto !== "0");
+    setAutoAdvance(auto === "1" || auto === "true");
 
     // Board coordinates / markings
     const coords = window.localStorage.getItem("chess_reel_show_coordinates");
@@ -89,18 +89,26 @@ export function SettingsModal({
       setAnimSpeed(speed);
     }
 
+    const handleAutoAdvanceEvent = () => {
+      const currentVal = window.localStorage.getItem("chess_reel_auto_advance");
+      setAutoAdvance(currentVal === "1" || currentVal === "true");
+    };
+    window.addEventListener("auto-advance-updated", handleAutoAdvanceEvent);
+
     // Username
     const savedAcc = window.localStorage.getItem("chess_reel_account");
     if (savedAcc) {
       try {
         const parsed = JSON.parse(savedAcc);
-        if (parsed.username) setUsernameInput(parsed.username);
-        if (parsed.displayName) setDisplayNameInput(parsed.displayName);
+        if (parsed?.username) setUsernameInput(parsed.username);
+        if (parsed?.displayName) setDisplayNameInput(parsed.displayName);
       } catch {}
     } else if (userAccount?.username) {
       setUsernameInput(userAccount.username);
       setDisplayNameInput(userAccount.displayName || "");
     }
+
+    return () => window.removeEventListener("auto-advance-updated", handleAutoAdvanceEvent);
   }, [isOpen, userAccount]);
 
   if (!isOpen) return null;
@@ -136,6 +144,7 @@ export function SettingsModal({
     setAutoAdvance(next);
     if (typeof window !== "undefined") {
       window.localStorage.setItem("chess_reel_auto_advance", next ? "1" : "0");
+      window.dispatchEvent(new Event("auto-advance-updated"));
     }
   };
 
@@ -503,12 +512,14 @@ export function SettingsModal({
               {/* Auto Advance */}
               <div className="flex items-center justify-between p-3 rounded-2xl bg-[#141210] border border-white/[0.08]">
                 <div>
-                  <span className="text-xs font-medium text-[#f5f2eb] block">Auto-Advance Reels</span>
-                  <span className="text-[10px] text-[#78716c]">Automatically move to next puzzle after solve</span>
+                  <span className="text-xs font-medium text-[#f5f2eb] block">Auto-advance after solving</span>
+                  <span className="text-[10px] text-[#78716c]">Automatically swipe to next puzzle after solve</span>
                 </div>
 
                 <button
                   type="button"
+                  data-testid="settings-auto-advance-toggle"
+                  aria-label="Toggle auto-advance after solving"
                   onClick={handleToggleAutoAdvance}
                   className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
                     autoAdvance ? "bg-[#c29b78]" : "bg-white/[0.1]"

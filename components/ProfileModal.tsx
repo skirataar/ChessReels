@@ -84,6 +84,7 @@ export function ProfileModal({
   const [savedPuzzlesMap, setSavedPuzzlesMap] = useState<Record<string, PuzzleData>>({});
   const [, setLoadingPuzzleId] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState<boolean>(false);
+  const [autoAdvance, setAutoAdvance] = useState<boolean>(false);
   const [showResetConfirm, setShowResetConfirm] = useState<boolean>(false);
   const [peakElo, setPeakElo] = useState<number>(currentElo);
   const [bestStreak, setBestStreak] = useState<number>(streak);
@@ -176,6 +177,10 @@ export function ProfileModal({
 
       // Mute state
       setIsMuted(sounds.getIsMuted());
+
+      // Auto advance state (defaults to false)
+      const autoRaw = window.localStorage.getItem("chess_reel_auto_advance");
+      setAutoAdvance(autoRaw === "1" || autoRaw === "true");
     } catch (e) {
       console.warn("Error accessing profile data:", e);
     }
@@ -194,8 +199,20 @@ export function ProfileModal({
         if (pRaw) setSavedPuzzlesMap(JSON.parse(pRaw));
       } catch {}
     };
+
+    const handleAutoAdvanceEvent = () => {
+      try {
+        const autoRaw = window.localStorage.getItem("chess_reel_auto_advance");
+        setAutoAdvance(autoRaw === "1" || autoRaw === "true");
+      } catch {}
+    };
+
     window.addEventListener("bookmarks-updated", handleBookmarksUpdate);
-    return () => window.removeEventListener("bookmarks-updated", handleBookmarksUpdate);
+    window.addEventListener("auto-advance-updated", handleAutoAdvanceEvent);
+    return () => {
+      window.removeEventListener("bookmarks-updated", handleBookmarksUpdate);
+      window.removeEventListener("auto-advance-updated", handleAutoAdvanceEvent);
+    };
   }, [userAccount?.id]);
 
   const openSavedPuzzle = async (puzzleOrId: PuzzleData | string) => {
@@ -299,6 +316,16 @@ export function ProfileModal({
   const handleToggleMute = () => {
     const next = sounds.toggleMute();
     setIsMuted(next);
+  };
+
+  // Toggle Auto-advance after solving
+  const handleToggleAutoAdvance = () => {
+    const nextState = !autoAdvance;
+    setAutoAdvance(nextState);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("chess_reel_auto_advance", nextState ? "1" : "0");
+      window.dispatchEvent(new Event("auto-advance-updated"));
+    }
   };
 
   // Remove a bookmark
@@ -1063,6 +1090,32 @@ export function ProfileModal({
                   }`}
                 >
                   {isMuted ? "Unmute" : "Mute"}
+                </button>
+              </div>
+
+              {/* Auto-advance after solving */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-[#22201e] border border-white/10">
+                <div className="flex items-center gap-2.5">
+                  <Zap className={`w-4 h-4 ${autoAdvance ? "text-[#c29b78]" : "text-neutral-500"}`} />
+                  <div>
+                    <div className="text-xs font-semibold text-white">Auto-advance after solving</div>
+                    <div className="text-[10px] text-[#a3a3a3]">
+                      {autoAdvance ? "Automatically swipe to next puzzle" : "Swipe manually when ready"}
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  data-testid="toggle-auto-advance-btn"
+                  onClick={handleToggleAutoAdvance}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    autoAdvance
+                      ? "bg-[#c29b78]/20 text-[#c29b78] border border-[#c29b78]/40"
+                      : "bg-[#151413] text-[#a3a3a3] hover:text-white border border-white/5"
+                  }`}
+                >
+                  {autoAdvance ? "On" : "Off"}
                 </button>
               </div>
 

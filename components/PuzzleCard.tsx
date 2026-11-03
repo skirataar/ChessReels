@@ -11,6 +11,7 @@ import {
   Flame,
   CheckCircle2,
   AlertCircle,
+  XCircle,
   ArrowRight,
   RotateCcw,
   Sparkles,
@@ -218,6 +219,10 @@ export function PuzzleCard({
     () => Boolean(!canPlay && !isPro && status === "solved")
   );
 
+  // Placement / calibration game feedback and pause timer
+  const [placementFeedback, setPlacementFeedback] = useState<"correct" | "incorrect" | null>(null);
+  const placementTransitionTimerRef = useRef<NodeJS.Timeout | null>(null);
+
   // Mode and Timer state
   const [activeMode, setActiveMode] = useState<"ranked" | "practice">(mode);
   const [timerSeconds, setTimerSeconds] = useState<number>(0);
@@ -301,6 +306,22 @@ export function PuzzleCard({
     return () => window.removeEventListener("board-coordinates-updated", handleCoordUpdate);
   }, []);
 
+  // Preference: Auto-advance after solving (defaults to false)
+  const [isAutoAdvanceEnabled, setIsAutoAdvanceEnabled] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const syncAuto = () => {
+      try {
+        const val = window.localStorage.getItem("chess_reel_auto_advance");
+        setIsAutoAdvanceEnabled(val === "1" || val === "true");
+      } catch {}
+    };
+    syncAuto();
+    window.addEventListener("auto-advance-updated", syncAuto);
+    return () => window.removeEventListener("auto-advance-updated", syncAuto);
+  }, []);
+
   const gameRef = useRef<Chess | null>(initialPuzzleState.game);
   const autoNextTimerRef = useRef<NodeJS.Timeout | null>(null);
   const mistakeTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -308,9 +329,91 @@ export function PuzzleCard({
   const hasPenalizedRef = useRef<boolean>(false);
   const hasWonRef = useRef<boolean>(false);
 
+  // Stable refs for callbacks & props to prevent puzzle re-initialization loops
+  const onStatusChangeRef = useRef(onStatusChange);
+  useEffect(() => {
+    onStatusChangeRef.current = onStatusChange;
+  }, [onStatusChange]);
+
+  const statusRef = useRef(status);
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+
+  const lastInitializedPuzzleIdRef = useRef<string | null>(null);
+
+  // 7-second idle swipe indicator state
+  const [showIdleSwipeIndicator, setShowIdleSwipeIndicator] = useState<boolean>(false);
+  const idleTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const dismissIdleIndicator = useCallback(() => {
+    setShowIdleSwipeIndicator(false);
+    if (idleTimerRef.current) {
+      clearTimeout(idleTimerRef.current);
+      idleTimerRef.current = null;
+    }
+  }, []);
+
+  // Cleanup placement transition timer on unmount
+  useEffect(() => {
+    return () => {
+      if (placementTransitionTimerRef.current) {
+        clearTimeout(placementTransitionTimerRef.current);
+        placementTransitionTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  // When finished (solved or failed) and auto-advance is off, start 7s idle timer
+  useEffect(() => {
+    if (status !== "solved" && status !== "failed") {
+      dismissIdleIndicator();
+      return;
+    }
+
+    if (isAutoAdvanceEnabled) {
+      dismissIdleIndicator();
+      return;
+    }
+
+    setShowIdleSwipeIndicator(false);
+    if (idleTimerRef.current) {
+      clearTimeout(idleTimerRef.current);
+    }
+    idleTimerRef.current = setTimeout(() => {
+      setShowIdleSwipeIndicator(true);
+    }, 7000);
+
+    return () => {
+      if (idleTimerRef.current) {
+        clearTimeout(idleTimerRef.current);
+        idleTimerRef.current = null;
+      }
+    };
+  }, [status, isAutoAdvanceEnabled, isCalibration, puzzle?.id, dismissIdleIndicator]);
+
+  // Test event listener for deterministic status simulation in e2e tests
+  useEffect(() => {
+    const handleSimulateStatus = (e: Event) => {
+      const customEvent = e as CustomEvent<{ status: PuzzleStatus }>;
+      if (customEvent.detail?.status) {
+        if (isCalibration) {
+          if (customEvent.detail.status === "solved") {
+            setPlacementFeedback("correct");
+          } else if (customEvent.detail.status === "failed") {
+            setPlacementFeedback("incorrect");
+          }
+        }
+        onStatusChangeRef.current(customEvent.detail.status);
+      }
+    };
+    window.addEventListener("chess-reel-test-status", handleSimulateStatus);
+    return () => window.removeEventListener("chess-reel-test-status", handleSimulateStatus);
+  }, [isCalibration]);
+
   // Sync bookmark, like, and mute state on puzzle load
   useEffect(() => {
-    if (!puzzle) return;
+    if (!puzzle || !puzzle.fen || !puzzle.moves) return;
     try {
       const userKey = guestId ? `chess_reel_bookmarks_${guestId}` : "chess_reel_bookmarks";
       const savedBookmarks = localStorage.getItem(userKey) || localStorage.getItem("chess_reel_bookmarks");
@@ -407,7 +510,7 @@ export function PuzzleCard({
 
   // Initialize or reset puzzle game state
   const initializePuzzle = useCallback(() => {
-    if (!puzzle) return;
+    if (!puzzle || !puzzle.fen || !puzzle.moves) return;
 
     if (autoNextTimerRef.current) {
       clearTimeout(autoNextTimerRef.current);
@@ -417,7 +520,12 @@ export function PuzzleCard({
       clearTimeout(mistakeTimerRef.current);
       mistakeTimerRef.current = null;
     }
+    if (placementTransitionTimerRef.current) {
+      clearTimeout(placementTransitionTimerRef.current);
+      placementTransitionTimerRef.current = null;
+    }
 
+    setPlacementFeedback(null);
     setAutoNextCountdown(null);
     setIsReviewing(false);
     setMistakeFeedback(null);
@@ -434,17 +542,42 @@ export function PuzzleCard({
     const movesArray = puzzle.moves.trim().split(/\s+/);
     setAllMoves(movesArray);
 
+    const initialTurn = new Chess(puzzle.fen).turn();
+    const playerColor: "white" | "black" =
+      movesArray.length % 2 === 0 && movesArray.length > 0
+        ? initialTurn === "w" ? "black" : "white"
+        : initialTurn === "w" ? "white" : "black";
+    setBoardOrientation(playerColor);
+
+    // If puzzle was opened in solved state (e.g. review or replaying solved puzzle)
+    if (statusRef.current === "solved") {
+      const solvedGame = new Chess(puzzle.fen);
+      for (let i = 0; i < movesArray.length; i++) {
+        const uci = movesArray[i];
+        if (uci) {
+          try {
+            solvedGame.move({
+              from: uci.slice(0, 2),
+              to: uci.slice(2, 4),
+              promotion: uci.length === 5 ? uci[4].toLowerCase() : undefined,
+            });
+          } catch {}
+        }
+      }
+      gameRef.current = solvedGame;
+      setFen(solvedGame.fen());
+      setCurrentMoveIndex(movesArray.length);
+      setIsReviewing(true);
+      setPlayerTurnMessage("Puzzle Solved");
+      return;
+    }
+
     const newGame = new Chess(puzzle.fen);
     gameRef.current = newGame;
-
-    const initialTurn = newGame.turn(); // 'w' or 'b'
     let startIndex = 0;
 
     // In Lichess format, if moves count is even, moves[0] is opponent's blunder
     if (movesArray.length % 2 === 0 && movesArray.length > 0) {
-      const playerColor: "white" | "black" =
-        initialTurn === "w" ? "black" : "white";
-      setBoardOrientation(playerColor);
       setPlayerTurnMessage(
         `${playerColor === "white" ? "White" : "Black"} to move`
       );
@@ -463,9 +596,6 @@ export function PuzzleCard({
         console.error("Error playing opponent setup move:", e);
       }
     } else {
-      const playerColor: "white" | "black" =
-        initialTurn === "w" ? "white" : "black";
-      setBoardOrientation(playerColor);
       setPlayerTurnMessage(
         `${playerColor === "white" ? "White" : "Black"} to move`
       );
@@ -475,14 +605,14 @@ export function PuzzleCard({
     setSolutionStartIndex(startIndex);
     setFen(newGame.fen());
     setCurrentMoveIndex(startIndex);
-    onStatusChange("playing");
-  }, [puzzle, onStatusChange]);
+    onStatusChangeRef.current("playing");
+  }, [puzzle]);
 
   // Retry handler: resets board, clears all error states, allows trying again without API refetch
   // QOL: If incorrect on step x+1 (currentMoveIndex > solutionStartIndex), progress up to step x is preserved!
   const handleRetry = useCallback(
     (resetToStartArg?: boolean | unknown) => {
-      if (!puzzle) return;
+      if (!puzzle || !puzzle.fen || !puzzle.moves) return;
       const resetToStart =
         typeof resetToStartArg === "boolean" ? resetToStartArg : false;
       haptics.tap();
@@ -613,12 +743,18 @@ export function PuzzleCard({
   );
 
   useEffect(() => {
+    if (!puzzle || !puzzle.id || !puzzle.fen || !puzzle.moves) return;
+    if (lastInitializedPuzzleIdRef.current === puzzle.id) {
+      // Board already initialized for this puzzle ID; do not reset on Elo or status changes
+      return;
+    }
+    lastInitializedPuzzleIdRef.current = puzzle.id;
     initializePuzzle();
-  }, [initializePuzzle]);
+  }, [puzzle?.id, initializePuzzle]);
 
   // Handle celebratory confetti and auto-advance timer on solve
   useEffect(() => {
-    if (status !== "solved") return;
+    if (status !== "solved" || isCalibration) return;
 
     // 1. Triumphant multi-stage Confetti celebration
     try {
@@ -648,8 +784,8 @@ export function PuzzleCard({
       // Audio/canvas fallback
     }
 
-    // 2. If user chooses to review the board, or if user is paywalled (out of free quota), do not auto-advance
-    if (isReviewing || (canPlay === false && !isPro) || isPaywallOpen) {
+    // 2. If user chooses to review the board, is paywalled, or auto-advance is disabled (default): do not auto-advance
+    if (isReviewing || (canPlay === false && !isPro) || isPaywallOpen || !isAutoAdvanceEnabled) {
       if ((canPlay === false && !isPro && !isReviewing) || isPaywallOpen) {
         setIsReviewing(true);
       }
@@ -661,7 +797,7 @@ export function PuzzleCard({
       return;
     }
 
-    // 3. 3-second countdown giving feeling of achievement and control
+    // 3. 3-second countdown giving feeling of achievement and control (only when autoAdvance is enabled)
     const timer = setTimeout(() => {
       setAutoNextCountdown(3);
     }, 0);
@@ -685,7 +821,7 @@ export function PuzzleCard({
         clearTimeout(autoNextTimerRef.current);
       }
     };
-  }, [status, isReviewing, canPlay, isPro, isPaywallOpen, onNextPuzzle]);
+  }, [status, isReviewing, canPlay, isPro, isPaywallOpen, isAutoAdvanceEnabled, onNextPuzzle]);
 
   // Whenever the user is paywalled or the paywall modal is open, ensure the board is never exited or hidden, and stays in review mode
   useEffect(() => {
@@ -722,13 +858,17 @@ export function PuzzleCard({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [status, onNextPuzzle, canPlay, isPro]);
 
+  // Stable ref for triggerSwipeNext to use in executeUserMove
+  const triggerSwipeNextRef = useRef<() => void>(() => {});
+
   // Unified move executor for both Drag-and-Drop and Click-to-Move
   const executeUserMove = useCallback(
     (sourceSquare: string, targetSquare: string | null): boolean => {
       if (
         (status !== "playing" && status !== "failed") ||
         !targetSquare ||
-        !gameRef.current
+        !gameRef.current ||
+        (isCalibration && placementFeedback !== null)
       ) {
         return false;
       }
@@ -778,6 +918,34 @@ export function PuzzleCard({
         game.undo();
         sounds.playError();
         haptics.error();
+
+        if (isCalibration) {
+          // Placement / Calibration game: finish on wrong move with clear crimson feedback & board highlight
+          setFen(game.fen());
+          setHighlightStyles({
+            [sourceSquare]: {
+              backgroundColor: "rgba(239, 68, 68, 0.45)",
+              boxShadow: "inset 0 0 10px rgba(239, 68, 68, 0.8)",
+            },
+            [targetSquare]: {
+              backgroundColor: "rgba(239, 68, 68, 0.55)",
+              boxShadow: "inset 0 0 14px rgba(239, 68, 68, 0.95)",
+            },
+          });
+          setPlacementFeedback("incorrect");
+          onStatusChange("failed");
+          if (!hasPenalizedRef.current) {
+            hasPenalizedRef.current = true;
+            sendEloResult("loss");
+          }
+          if (placementTransitionTimerRef.current) {
+            clearTimeout(placementTransitionTimerRef.current);
+          }
+          placementTransitionTimerRef.current = setTimeout(() => {
+            triggerSwipeNextRef.current();
+          }, 1200);
+          return false;
+        }
 
         // Penalize Elo once per puzzle and record in PuzzleHistory
         if (!hasPenalizedRef.current) {
@@ -833,6 +1001,27 @@ export function PuzzleCard({
           hasWonRef.current = true;
           sendEloResult("win");
         }
+
+        if (isCalibration) {
+          setHighlightStyles({
+            [sourceSquare]: {
+              backgroundColor: "rgba(16, 185, 129, 0.45)",
+              boxShadow: "inset 0 0 10px rgba(16, 185, 129, 0.8)",
+            },
+            [targetSquare]: {
+              backgroundColor: "rgba(16, 185, 129, 0.55)",
+              boxShadow: "inset 0 0 14px rgba(16, 185, 129, 0.95)",
+            },
+          });
+          setPlacementFeedback("correct");
+          if (placementTransitionTimerRef.current) {
+            clearTimeout(placementTransitionTimerRef.current);
+          }
+          placementTransitionTimerRef.current = setTimeout(() => {
+            triggerSwipeNextRef.current();
+          }, 1200);
+        }
+
         return true;
       }
 
@@ -862,6 +1051,28 @@ export function PuzzleCard({
               hasWonRef.current = true;
               sendEloResult("win");
             }
+
+            if (isCalibration) {
+              const oppFrom = oppReply.slice(0, 2);
+              const oppTo = oppReply.slice(2, 4);
+              setHighlightStyles({
+                [oppFrom]: {
+                  backgroundColor: "rgba(16, 185, 129, 0.45)",
+                  boxShadow: "inset 0 0 10px rgba(16, 185, 129, 0.8)",
+                },
+                [oppTo]: {
+                  backgroundColor: "rgba(16, 185, 129, 0.55)",
+                  boxShadow: "inset 0 0 14px rgba(16, 185, 129, 0.95)",
+                },
+              });
+              setPlacementFeedback("correct");
+              if (placementTransitionTimerRef.current) {
+                clearTimeout(placementTransitionTimerRef.current);
+              }
+              placementTransitionTimerRef.current = setTimeout(() => {
+                triggerSwipeNextRef.current();
+              }, 1200);
+            }
           }
         } catch (err) {
           console.error("Opponent reply error:", err);
@@ -870,7 +1081,7 @@ export function PuzzleCard({
 
       return true;
     },
-    [status, allMoves, currentMoveIndex, onStatusChange, sendEloResult]
+    [status, allMoves, currentMoveIndex, onStatusChange, sendEloResult, isCalibration, placementFeedback]
   );
 
   // Drag and drop drop handler - strictly locked when status !== 'playing' && status !== 'failed'
@@ -1174,6 +1385,11 @@ export function PuzzleCard({
 
   // Trigger next puzzle advance with smooth reel upward launch
   const triggerSwipeNext = useCallback(() => {
+    dismissIdleIndicator();
+    if (placementTransitionTimerRef.current) {
+      clearTimeout(placementTransitionTimerRef.current);
+      placementTransitionTimerRef.current = null;
+    }
     if ((canPlay === false && !isPro) || isPaywallOpen) {
       setIsExiting(false);
       setDragY(0);
@@ -1195,10 +1411,19 @@ export function PuzzleCard({
         window.scrollTo({ top: 0, left: 0, behavior: "instant" });
       }
     }, 180);
-  }, [isExiting, onNextPuzzle, canPlay, isPro, isPaywallOpen]);
+  }, [isExiting, onNextPuzzle, canPlay, isPro, isPaywallOpen, dismissIdleIndicator]);
+
+  useEffect(() => {
+    triggerSwipeNextRef.current = triggerSwipeNext;
+  }, [triggerSwipeNext]);
 
   // Trigger previous puzzle advance with smooth reel downward slide
   const triggerSwipePrev = useCallback(() => {
+    dismissIdleIndicator();
+    if (placementTransitionTimerRef.current) {
+      clearTimeout(placementTransitionTimerRef.current);
+      placementTransitionTimerRef.current = null;
+    }
     if (!canGoPrev || !onPrevPuzzle) {
       setDragY(0);
       return;
@@ -1216,7 +1441,7 @@ export function PuzzleCard({
         window.scrollTo({ top: 0, left: 0, behavior: "instant" });
       }
     }, 180);
-  }, [canGoPrev, isExiting, onPrevPuzzle]);
+  }, [canGoPrev, isExiting, onPrevPuzzle, dismissIdleIndicator]);
 
   // User drawn arrows state (synced with react-chessboard options.arrows)
   const [touchArrows, setTouchArrows] = useState<Array<{ startSquare: string; endSquare: string; color: string }>>([]);
@@ -1327,6 +1552,7 @@ export function PuzzleCard({
 
     // Only initiate vertical swipe if vertical movement clearly dominates horizontal movement
     if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > 6) {
+      dismissIdleIndicator();
       if (e.cancelable) {
         e.preventDefault();
       }
@@ -1415,6 +1641,7 @@ export function PuzzleCard({
       const deltaX = e.clientX - touchStartRef.current.x;
 
       if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > 6) {
+        dismissIdleIndicator();
         setIsSwiping(true);
         if (deltaY < 0) {
           setDragY(deltaY);
@@ -1463,7 +1690,7 @@ export function PuzzleCard({
       window.removeEventListener("mousemove", handleWindowMouseMove);
       window.removeEventListener("mouseup", handleWindowMouseUp);
     };
-  }, [isExiting, canGoPrev, triggerSwipeNext, triggerSwipePrev]);
+  }, [isExiting, canGoPrev, triggerSwipeNext, triggerSwipePrev, dismissIdleIndicator]);
 
   // Wheel / Trackpad Scroll to advance / prev
   const handleWheel = (e: React.WheelEvent) => {
@@ -1474,9 +1701,11 @@ export function PuzzleCard({
     if (now - lastWheelTimeRef.current < 500) return;
 
     if (e.deltaY > 45) {
+      dismissIdleIndicator();
       lastWheelTimeRef.current = now;
       triggerSwipeNext();
     } else if (e.deltaY < -45) {
+      dismissIdleIndicator();
       lastWheelTimeRef.current = now;
       if (canGoPrev) {
         triggerSwipePrev();
@@ -1624,8 +1853,8 @@ export function PuzzleCard({
                 id: "chess-reel-active-board",
                 position: fen,
                 boardOrientation: boardOrientation,
-                allowDragging: status === "playing" || status === "failed",
-                canDragPiece: () => status === "playing" || status === "failed",
+                allowDragging: (status === "playing" || status === "failed") && (!isCalibration || placementFeedback === null),
+                canDragPiece: () => (status === "playing" || status === "failed") && (!isCalibration || placementFeedback === null),
                 onPieceDrop: (args) => {
                   setTouchArrows([]);
                   return handlePieceDrop(args);
@@ -1702,7 +1931,7 @@ export function PuzzleCard({
 
           {/* Solved Celebration Hero Overlay */}
           <AnimatePresence>
-            {status === "solved" && !isReviewing && (
+            {status === "solved" && !isReviewing && !isCalibration && (
               <motion.div
                 initial={{ scale: 0.85, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
@@ -1821,7 +2050,7 @@ export function PuzzleCard({
 
           {/* Floating 'Incorrect' Pill Badge */}
           <AnimatePresence>
-            {isFlashingRed && (
+            {!isCalibration && isFlashingRed && (
               <motion.div
                 key="incorrect-badge"
                 data-testid="incorrect-flash-badge"
@@ -1833,6 +2062,66 @@ export function PuzzleCard({
               >
                 <AlertCircle className="w-3.5 h-3.5 text-white stroke-[2.5]" />
                 <span>Incorrect</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Placement Feedback Status Banner */}
+          <AnimatePresence>
+            {isCalibration && placementFeedback !== null && (
+              <motion.div
+                key={`placement-feedback-${placementFeedback}`}
+                data-testid="placement-feedback-banner"
+                initial={{ scale: 0.85, opacity: 0, y: -8 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.85, opacity: 0, y: -8 }}
+                transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                className={`absolute top-3 inset-x-0 mx-auto w-fit z-40 flex items-center gap-2 px-4 py-2 rounded-full border backdrop-blur-md text-sm font-black shadow-2xl tracking-wide select-none pointer-events-none ${
+                  placementFeedback === "correct"
+                    ? "bg-[#12100e]/95 border-[#10b981] text-[#10b981] shadow-emerald-950/70"
+                    : "bg-[#12100e]/95 border-[#ef4444] text-[#ef4444] shadow-rose-950/70"
+                }`}
+              >
+                {placementFeedback === "correct" ? (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 text-[#10b981] stroke-[2.5]" />
+                    <span>Correct!</span>
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="w-4 h-4 text-[#ef4444] stroke-[2.5]" />
+                    <span>Incorrect</span>
+                  </>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* 7-second post-solve idle swipe indicator */}
+          <AnimatePresence>
+            {showIdleSwipeIndicator && (
+              <motion.div
+                data-testid="idle-swipe-indicator"
+                initial={{ opacity: 0, y: 12, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 12, scale: 0.95 }}
+                transition={{ duration: 0.25 }}
+                onClick={() => {
+                  dismissIdleIndicator();
+                  triggerSwipeNext();
+                }}
+                className="absolute bottom-3 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#12100e]/95 border border-[#c29b78]/40 shadow-2xl backdrop-blur-md cursor-pointer pointer-events-auto select-none group hover:border-[#c29b78]"
+              >
+                <motion.div
+                  animate={{ y: [-1, -4, -1] }}
+                  transition={{ repeat: Infinity, duration: 1.2, ease: "easeInOut" }}
+                  className="flex items-center justify-center"
+                >
+                  <ChevronUp className="w-4 h-4 text-[#c29b78] stroke-[2.5]" />
+                </motion.div>
+                <span className="text-xs font-medium text-[#f5f2eb] tracking-wide">
+                  Swipe up for next puzzle
+                </span>
               </motion.div>
             )}
           </AnimatePresence>

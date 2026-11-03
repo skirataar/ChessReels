@@ -16,17 +16,23 @@ import {
 import { LeaderboardModal } from "@/components/LeaderboardModal";
 import { ProfileModal } from "@/components/ProfileModal";
 import { AuthModal } from "@/components/AuthModal";
-import { LandingPage } from "@/components/LandingPage";
 import { CalibrationCompleteModal } from "@/components/CalibrationCompleteModal";
 import { StatsModal } from "@/components/StatsModal";
 import { UserAvatar } from "@/components/UserAvatar";
 import { AdModal } from "@/components/AdModal";
 import { QuotaPaywallModal } from "@/components/QuotaPaywallModal";
-import { popNextPuzzle, prefetchPuzzles, getStoredQueue } from "@/lib/puzzleCache";
+import {
+  popNextPuzzle,
+  prefetchPuzzles,
+  getStoredQueue,
+  saveQueue,
+  clearAllUserAndPuzzleCache,
+} from "@/lib/puzzleCache";
 import { useStreak, resetStreakStats } from "@/lib/useStreak";
 import { useTierQuota } from "@/lib/useTierQuota";
 import { clearGuestLocalSession, isGuestAccount } from "@/lib/guestAccount";
 import { RefreshCw, WifiOff, UserPlus, BarChart2, Trophy, Zap, Flame, Crown, Sparkles, User, Snowflake } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 const GUEST_ID_KEY = "chess_reel_guest_id";
 const ELO_STORAGE_KEY = "chess_reel_elo";
@@ -62,33 +68,7 @@ function readRegisteredAccount(): UserAccount | null {
   }
 }
 
-// Curated fallbacks in case the database is empty or offline with empty cache
-const FALLBACK_PUZZLES: PuzzleData[] = [
-  {
-    id: "00008",
-    fen: "r6k/pp2r2p/4Rp1Q/3p4/8/1N1P2R1/P1P2bPP/7K b - - 0 24",
-    moves: "f2g3 e6e7",
-    rating: 800,
-    ratingDeviation: 75,
-    popularity: 94,
-    nbPlays: 40,
-    themes: "crushing hangingPiece middlegame",
-    gameUrl: "https://lichess.org/78aSDYey/black#48",
-    openingTags: "Sicilian Defense",
-  },
-  {
-    id: "0000d",
-    fen: "5rk1/1p3ppp/pq3b2/8/8/1P1Q1N2/P4PPP/3R2K1 w - - 2 27",
-    moves: "d3d6 f8d8 d6d8 f6d8",
-    rating: 850,
-    ratingDeviation: 73,
-    popularity: 96,
-    nbPlays: 73,
-    themes: "advantage endgame short pin",
-    gameUrl: "https://lichess.org/F8M8OS71#53",
-    openingTags: "Queen's Gambit Declined",
-  },
-];
+
 
 function subscribeToOnline(callback: () => void) {
   if (typeof window === "undefined") return () => {};
@@ -108,6 +88,53 @@ function getOnlineServerSnapshot() {
   return true;
 }
 
+function AnimatedEloCounter({ value, duration = 600 }: { value: number; duration?: number }) {
+  const [displayValue, setDisplayValue] = useState<number>(value);
+  const prevValueRef = useRef<number>(value);
+  const animationFrameRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const from = prevValueRef.current;
+    const to = value;
+    prevValueRef.current = value;
+
+    if (from === to) {
+      setDisplayValue(to);
+      return;
+    }
+
+    const startTime = performance.now();
+
+    const animateNumber = (now: number) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(1, elapsed / duration);
+      // easeOutCubic: 1 - Math.pow(1 - progress, 3)
+      const ease = 1 - Math.pow(1 - progress, 3);
+      const current = Math.round(from + (to - from) * ease);
+      setDisplayValue(current);
+
+      if (progress < 1) {
+        animationFrameRef.current = requestAnimationFrame(animateNumber);
+      } else {
+        setDisplayValue(to);
+      }
+    };
+
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+    animationFrameRef.current = requestAnimationFrame(animateNumber);
+
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, [value, duration]);
+
+  return <span suppressHydrationWarning className="tracking-tight">{displayValue}</span>;
+}
+
 export function PlayView({
   initialShowLanding = false,
 }: {
@@ -118,18 +145,49 @@ export function PlayView({
   const [currentElo, setCurrentElo] = useState<number>(() => {
     if (typeof window !== "undefined") {
       try {
-        const savedElo = window.localStorage.getItem(ELO_STORAGE_KEY);
-        if (savedElo) return parseInt(savedElo, 10);
         const raw = window.localStorage.getItem(ACCOUNT_STORAGE_KEY);
         if (raw) {
           const acc = JSON.parse(raw);
-          if (acc?.elo) return acc.elo;
+          if (acc?.elo && typeof acc.elo === "number") return acc.elo;
+        }
+        const savedElo = window.localStorage.getItem(ELO_STORAGE_KEY);
+        if (savedElo) {
+          const parsed = parseInt(savedElo, 10);
+          if (!isNaN(parsed)) return parsed;
         }
       } catch {}
     }
     return 800;
   });
   const [lastEloChange, setLastEloChange] = useState<number | null>(null);
+
+  // Transient floating Elo delta badge state (slides up, holds, auto-dismisses after 1.5s)
+  const [transientEloDelta, setTransientEloDelta] = useState<number | null>(null);
+  const [showEloDeltaBadge, setShowEloDeltaBadge] = useState<boolean>(false);
+  const eloDeltaTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [deltaAnimationKey, setDeltaAnimationKey] = useState<number>(0);
+
+  const triggerEloDeltaBadge = useCallback((delta: number) => {
+    if (delta === 0) return;
+    setTransientEloDelta(delta);
+    setShowEloDeltaBadge(true);
+    setDeltaAnimationKey((k) => k + 1);
+
+    if (eloDeltaTimerRef.current) {
+      clearTimeout(eloDeltaTimerRef.current);
+    }
+    eloDeltaTimerRef.current = setTimeout(() => {
+      setShowEloDeltaBadge(false);
+    }, 1500);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (eloDeltaTimerRef.current) {
+        clearTimeout(eloDeltaTimerRef.current);
+      }
+    };
+  }, []);
 
   // Spaced-repetition: solved puzzle IDs (persisted so zero-mistake solves never re-appear)
   const [solvedPuzzleIds, setSolvedPuzzleIds] = useState<Set<string>>(() => {
@@ -145,14 +203,9 @@ export function PlayView({
     return new Set<string>();
   });
 
-  // Puzzle feed queue state & active pointer for bi-directional swiping
-  const [queue, setQueue] = useState<PuzzleData[]>(() => {
-    if (typeof window !== "undefined") {
-      const stored = getStoredQueue();
-      if (stored.length > 0) return stored;
-    }
-    return FALLBACK_PUZZLES;
-  });
+  // Puzzle feed queue state & active pointer for bi-directional swiping.
+  // Initialized to empty array so no hardcoded placeholder puzzles render before real API puzzles arrive.
+  const [queue, setQueue] = useState<PuzzleData[]>([]);
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [slideDirection, setSlideDirection] = useState<"next" | "prev">("next");
 
@@ -164,7 +217,7 @@ export function PlayView({
   // Tracks `${puzzle.id}#${currentIndex}` so failure re-insertion is only scheduled once per attempt
   const scheduledReinsertionsRef = useRef<Set<string>>(new Set());
 
-  const [puzzleStatus, setPuzzleStatus] = useState<PuzzleStatus>("playing");
+  const [puzzleStatus, setPuzzleStatus] = useState<PuzzleStatus>("loading");
   const [streak, setStreak] = useState<number>(0);
   const [activeTab, setActiveTab] = useState<"reels" | "rank" | "profile">("reels");
 
@@ -172,7 +225,6 @@ export function PlayView({
   const [userAccount, setUserAccount] = useState<UserAccount | null>(() =>
     readRegisteredAccount()
   );
-  const [showLanding, setShowLanding] = useState<boolean>(initialShowLanding);
   const [authModalTab, setAuthModalTab] = useState<"register" | "login">("register");
   const [authModalGoogle, setAuthModalGoogle] = useState<boolean>(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
@@ -180,6 +232,9 @@ export function PlayView({
   const [calibratedFinalElo, setCalibratedFinalElo] = useState<number>(800);
   const [isStatsModalOpen, setIsStatsModalOpen] = useState<boolean>(false);
   const [oauthAlert, setOauthAlert] = useState<string | null>(null);
+
+  // Account switch detection: tracks previous userId to wipe stale queues and cached state
+  const previousUserIdRef = useRef<string | null>(null);
 
   // Daily streak, solve combo & puzzle totals tracking
   const {
@@ -229,13 +284,43 @@ export function PlayView({
     const handleOpenProfile = () => {
       setActiveTab("profile");
     };
+    const handleTestStatus = (e: Event) => {
+      const customEvent = e as CustomEvent<{ status: PuzzleStatus }>;
+      if (customEvent.detail?.status) {
+        setPuzzleStatus(customEvent.detail.status);
+      }
+    };
+    const handleTestElo = (e: Event) => {
+      const customEvent = e as CustomEvent<{ delta: number; newElo?: number }>;
+      if (customEvent.detail?.delta !== undefined) {
+        const delta = customEvent.detail.delta;
+        const targetElo = customEvent.detail.newElo ?? (currentEloRef.current + delta);
+        setCurrentElo(targetElo);
+        currentEloRef.current = targetElo;
+        setLastEloChange(delta);
+        triggerEloDeltaBadge(delta);
+        try {
+          if (typeof window !== "undefined") {
+            window.localStorage.setItem(ELO_STORAGE_KEY, targetElo.toString());
+            if (userAccount) {
+              const updated = { ...userAccount, elo: targetElo };
+              window.localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(updated));
+            }
+          }
+        } catch {}
+      }
+    };
     window.addEventListener("open-quota-paywall", handleOpenPaywall);
     window.addEventListener("open-auth-modal", handleOpenAuth);
     window.addEventListener("open-profile-modal", handleOpenProfile);
+    window.addEventListener("chess-reel-test-status", handleTestStatus);
+    window.addEventListener("chess-reel-test-elo-update", handleTestElo);
     return () => {
       window.removeEventListener("open-quota-paywall", handleOpenPaywall);
       window.removeEventListener("open-auth-modal", handleOpenAuth);
       window.removeEventListener("open-profile-modal", handleOpenProfile);
+      window.removeEventListener("chess-reel-test-status", handleTestStatus);
+      window.removeEventListener("chess-reel-test-elo-update", handleTestElo);
     };
   }, [setIsQuotaModalOpen]);
 
@@ -310,14 +395,14 @@ export function PlayView({
   // Sync landing visibility to hide/show dock
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const isLanding = showLanding || (!userAccount && hasMounted);
+      const isLanding = !userAccount && hasMounted;
       window.dispatchEvent(
         new CustomEvent("landing-visibility", {
           detail: { visible: isLanding },
         })
       );
     }
-  }, [showLanding, userAccount, hasMounted]);
+  }, [userAccount, hasMounted]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -350,7 +435,6 @@ export function PlayView({
                 }
                 setUserAccount(oauthUser);
                 if (oauthUser.elo) setCurrentElo(oauthUser.elo);
-                setShowLanding(false);
                 window.dispatchEvent(new Event("account-updated"));
                 if (window.location.search.includes("google_auth=success")) {
                   window.history.replaceState({}, document.title, window.location.pathname);
@@ -399,7 +483,13 @@ export function PlayView({
                       return;
                     }
                     setUserAccount(data.user);
-                    if (data.user.elo) setCurrentElo(data.user.elo);
+                    const currentLocalElo =
+                      typeof window !== "undefined"
+                        ? window.localStorage.getItem(ELO_STORAGE_KEY)
+                        : null;
+                    if (!currentLocalElo && data.user.elo) {
+                      setCurrentElo(data.user.elo);
+                    }
                     window.localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(data.user));
                     if (data.user.plan) {
                       window.localStorage.setItem("chess_reel_plan", data.user.plan);
@@ -411,27 +501,60 @@ export function PlayView({
             } else {
               clearGuestLocalSession();
               setUserAccount(null);
-              setShowLanding(false);
               router.replace("/");
               return;
             }
           } catch {
             clearGuestLocalSession();
             setUserAccount(null);
-            setShowLanding(false);
             router.replace("/");
             return;
           }
         } else {
           clearGuestLocalSession();
           setUserAccount(null);
-          setShowLanding(false);
           router.replace("/");
         }
       } catch (e) {
         console.warn("Storage access restricted:", e);
       }
-  }, []);
+  }, [router]);
+
+  // Account switch detection: wipe previous user's queue and reload for the new user
+  useEffect(() => {
+    const currentUserId = userAccount?.id || null;
+    if (previousUserIdRef.current && currentUserId && previousUserIdRef.current !== currentUserId) {
+      clearAllUserAndPuzzleCache(previousUserIdRef.current);
+      setQueue([]);
+      setCurrentIndex(0);
+      setSolvedPuzzleIds(new Set());
+      setPuzzleStatus("loading");
+      initialFetchDoneRef.current = false;
+      const elo = userAccount?.elo || 800;
+      fetch(`/api/puzzle/random?elo=${elo}&count=5&userId=${encodeURIComponent(currentUserId)}`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data) {
+            const arr: PuzzleData[] = Array.isArray(data) ? data : [data];
+            const filtered = arr.filter((p) => p && !solvedPuzzleIdsRef.current.has(p.id));
+            if (filtered.length > 0) {
+              setQueue(filtered);
+              setCurrentIndex(0);
+              setPuzzleStatus("playing");
+              saveQueue(filtered.slice(1), currentUserId);
+            }
+          }
+        })
+        .catch(() => {});
+    }
+    previousUserIdRef.current = currentUserId;
+  }, [userAccount?.id]);
+
+  // Solved puzzle IDs ref to prevent fetch effects from re-running on solve
+  const solvedPuzzleIdsRef = useRef<Set<string>>(solvedPuzzleIds);
+  useEffect(() => {
+    solvedPuzzleIdsRef.current = solvedPuzzleIds;
+  }, [solvedPuzzleIds]);
 
   // Sync solved puzzle IDs to localStorage
   useEffect(() => {
@@ -476,12 +599,8 @@ export function PlayView({
             newBatch = arr.filter((p) => p && !solvedPuzzleIds.has(p.id));
           }
 
-          if (newBatch.length === 0) {
-            newBatch = FALLBACK_PUZZLES.filter((p) => !solvedPuzzleIds.has(p.id));
-          }
-
           setQueue((prevQueue) => {
-            const extended = [...prevQueue, ...newBatch];
+            const extended = newBatch.length > 0 ? [...prevQueue, ...newBatch] : [...prevQueue];
             const insertIndex = Math.min(fromIndex + offset, extended.length);
             const updated = [...extended];
             updated.splice(insertIndex, 0, cleanResetCopy);
@@ -489,9 +608,8 @@ export function PlayView({
           });
         } catch {
           setQueue((prevQueue) => {
-            const extended = [...prevQueue, ...FALLBACK_PUZZLES];
-            const insertIndex = Math.min(fromIndex + offset, extended.length);
-            const updated = [...extended];
+            const insertIndex = Math.min(fromIndex + offset, prevQueue.length);
+            const updated = [...prevQueue];
             updated.splice(insertIndex, 0, cleanResetCopy);
             return updated;
           });
@@ -537,7 +655,7 @@ export function PlayView({
     [queue, currentIndex, scheduleFailedPuzzleReinsertion]
   );
 
-  // Swipe Up / Next Puzzle navigation
+  // Swipe Up / Next Puzzle navigation: strictly increment currentIndex to a new puzzle ID & deduplicate against solved
   const goToNextPuzzle = useCallback(async () => {
     if (!canPlay && !isPro && !isCalibrating) {
       if (!currentPuzzle) {
@@ -550,13 +668,7 @@ export function PlayView({
             const p = JSON.parse(lastSolvedRaw);
             setQueue((prev) => [p, ...prev]);
             setCurrentIndex(0);
-          } catch {
-            setQueue([FALLBACK_PUZZLES[0]]);
-            setCurrentIndex(0);
-          }
-        } else {
-          setQueue([FALLBACK_PUZZLES[0]]);
-          setCurrentIndex(0);
+          } catch {}
         }
       }
       setPuzzleStatus("solved");
@@ -566,47 +678,87 @@ export function PlayView({
     }
 
     setSlideDirection("next");
-    const nextIndex = currentIndex + 1;
+    const currentP = queue[currentIndex];
+    const currentId = currentP?.id;
+    const currentSolved = solvedPuzzleIdsRef.current;
+    const elo = currentEloRef.current;
+    const targetUserId = userAccount?.id;
 
     // Buffer management: prefetch & pull ahead when within 3 puzzles of queue end
-    if (nextIndex >= queue.length - 3) {
-      const elo = currentEloRef.current;
-      const targetUserId = userAccount?.id || guestId;
+    if (currentIndex + 1 >= queue.length - 3) {
       prefetchPuzzles(elo, 5, targetUserId).catch(() => {});
+    }
 
-      const cached = popNextPuzzle();
-      if (cached && !solvedPuzzleIds.has(cached.id)) {
-        setQueue((prev) => [...prev, cached]);
+    // 1. Scan ahead in the active queue for the next valid puzzle that is NOT currentId and NOT already solved
+    let foundUpcomingIndex = -1;
+    for (let i = currentIndex + 1; i < queue.length; i++) {
+      const candidate = queue[i];
+      if (candidate && candidate.id !== currentId && !currentSolved.has(candidate.id)) {
+        foundUpcomingIndex = i;
+        break;
       }
     }
 
-    if (nextIndex < queue.length) {
-      setCurrentIndex(nextIndex);
+    if (foundUpcomingIndex !== -1) {
+      // If there are duplicate or already solved puzzles between currentIndex and foundUpcomingIndex, collapse them
+      if (foundUpcomingIndex > currentIndex + 1) {
+        const validPuzzle = queue[foundUpcomingIndex];
+        setQueue((prev) => {
+          const nextQ = [...prev];
+          nextQ.splice(currentIndex + 1, foundUpcomingIndex - currentIndex, validPuzzle);
+          return nextQ;
+        });
+      }
+      setCurrentIndex(currentIndex + 1);
       setPuzzleStatus("playing");
-    } else {
-      setPuzzleStatus("loading");
-      try {
-        const elo = currentEloRef.current;
-        const targetUserId = userAccount?.id || guestId;
-        const userParam = targetUserId ? `&userId=${encodeURIComponent(targetUserId)}` : "";
-        const res = await fetch(`/api/puzzle/random?elo=${elo}${userParam}`);
-        if (res.ok) {
-          const data = (await res.json()) as PuzzleData;
-          if (data && !solvedPuzzleIds.has(data.id)) {
-            setQueue((prev) => [...prev, data]);
-            setCurrentIndex(nextIndex);
-            setPuzzleStatus("playing");
-            return;
-          }
-        }
-      } catch {}
+      return;
+    }
 
-      const fallback =
-        FALLBACK_PUZZLES[fallbackIndexRef.current % FALLBACK_PUZZLES.length];
-      fallbackIndexRef.current += 1;
-      setQueue((prev) => [...prev, fallback]);
-      setCurrentIndex(nextIndex);
+    // 2. No upcoming valid puzzle in memory; pop from local cache or fetch fresh
+    let nextPuzzle: PuzzleData | null = null;
+    while (true) {
+      const popped = popNextPuzzle(targetUserId);
+      if (!popped) break;
+      if (popped.id !== currentId && !currentSolved.has(popped.id)) {
+        nextPuzzle = popped;
+        break;
+      }
+    }
+
+    if (nextPuzzle) {
+      setQueue((prev) => [...prev.slice(0, currentIndex + 1), nextPuzzle!]);
+      setCurrentIndex(currentIndex + 1);
       setPuzzleStatus("playing");
+      prefetchPuzzles(elo, 5, targetUserId).catch(() => {});
+      return;
+    }
+
+    // 3. Fetch fresh deduplicated puzzles from API
+    setPuzzleStatus("loading");
+    try {
+      const userParam = targetUserId ? `&userId=${encodeURIComponent(targetUserId)}` : "";
+      const res = await fetch(`/api/puzzle/random?elo=${elo}&count=5${userParam}`);
+      if (res.ok) {
+        const data = await res.json();
+        const arr: PuzzleData[] = Array.isArray(data) ? data : [data];
+        const validBatch = arr.filter(
+          (p) => p && p.id !== currentId && !currentSolved.has(p.id)
+        );
+
+        if (validBatch.length > 0) {
+          const chosen = validBatch[0];
+          setQueue((prev) => [...prev.slice(0, currentIndex + 1), chosen]);
+          setCurrentIndex(currentIndex + 1);
+          setPuzzleStatus("playing");
+
+          if (validBatch.length > 1) {
+            saveQueue([...getStoredQueue(targetUserId), ...validBatch.slice(1)], targetUserId);
+          }
+          return;
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load next puzzle:", e);
     }
   }, [
     canPlay,
@@ -614,10 +766,8 @@ export function PlayView({
     isCalibrating,
     currentPuzzle,
     currentIndex,
-    queue.length,
+    queue,
     userAccount?.id,
-    guestId,
-    solvedPuzzleIds,
     setIsQuotaModalOpen,
   ]);
 
@@ -630,19 +780,21 @@ export function PlayView({
     }
   }, [currentIndex]);
 
-  // Initial puzzle fetch on mount
+  // Initial puzzle fetch on mount: wait until user session is loaded
   const initialFetchDoneRef = useRef(false);
   useEffect(() => {
+    if (!hasMounted) return;
+    if (!userAccount || !userAccount.id) return;
+
     if (canPlay || isPro || isCalibrating) {
       if (!initialFetchDoneRef.current) {
         initialFetchDoneRef.current = true;
-        const elo = currentEloRef.current;
-        const targetUserId = userAccount?.id || guestId;
-        const userParam = targetUserId ? `&userId=${encodeURIComponent(targetUserId)}` : "";
+        const elo = userAccount.elo || currentEloRef.current || 800;
+        const targetUserId = userAccount.id;
 
-        // Check local prefetch buffer first
-        const cached = popNextPuzzle();
-        if (cached && !solvedPuzzleIds.has(cached.id)) {
+        // Check local prefetch buffer first - verify it matches user's elo
+        const cached = popNextPuzzle(targetUserId);
+        if (cached && !solvedPuzzleIdsRef.current.has(cached.id) && Math.abs(cached.rating - elo) <= 250) {
           setQueue([cached]);
           setCurrentIndex(0);
           setPuzzleStatus("playing");
@@ -650,20 +802,26 @@ export function PlayView({
           return;
         }
 
-        fetch(`/api/puzzle/random?elo=${elo}&count=5${userParam}`)
+        setPuzzleStatus("loading");
+        fetch(`/api/puzzle/random?elo=${elo}&count=5&userId=${encodeURIComponent(targetUserId)}`)
           .then((res) => (res.ok ? res.json() : null))
           .then((data) => {
             if (data) {
               const arr: PuzzleData[] = Array.isArray(data) ? data : [data];
-              const filtered = arr.filter((p) => p && !solvedPuzzleIds.has(p.id));
+              const filtered = arr.filter((p) => p && !solvedPuzzleIdsRef.current.has(p.id));
               if (filtered.length > 0) {
                 setQueue(filtered);
                 setCurrentIndex(0);
                 setPuzzleStatus("playing");
+                saveQueue(filtered.slice(1), targetUserId);
+                return;
               }
             }
+            setPuzzleStatus("loading");
           })
-          .catch(() => {});
+          .catch(() => {
+            setPuzzleStatus("loading");
+          });
         prefetchPuzzles(elo, 5, targetUserId).catch(() => {});
       }
     } else {
@@ -678,20 +836,14 @@ export function PlayView({
             const p = JSON.parse(lastSolvedRaw);
             setQueue([p]);
             setCurrentIndex(0);
-          } catch {
-            setQueue([FALLBACK_PUZZLES[0]]);
-            setCurrentIndex(0);
-          }
-        } else {
-          setQueue([FALLBACK_PUZZLES[0]]);
-          setCurrentIndex(0);
+          } catch {}
         }
         setPuzzleStatus("solved");
         setPaywallReason("quota");
         setIsQuotaModalOpen(true);
       }
     }
-  }, [userAccount?.id, guestId, canPlay, isPro, isCalibrating, solvedPuzzleIds, setIsQuotaModalOpen]);
+  }, [hasMounted, userAccount?.id, canPlay, isPro, isCalibrating, setIsQuotaModalOpen]);
 
   // Handle Elo update and placement test logic
   const handleEloUpdate = (newElo: number, change: number, isWin?: boolean) => {
@@ -716,12 +868,13 @@ export function PlayView({
         ? calibrationDeltas[stepIndex] || 35
         : -Math.round((calibrationDeltas[stepIndex] || 35) * 0.75);
 
-      // Balanced cap: new players during 6-step placement settle realistically between 500 and 1450
-      const nextElo = Math.max(500, Math.min(1450, currentElo + stepDelta));
+      // Dynamic bounds: allow players to calibrate across their natural skill range (400 to 2800)
+      const nextElo = Math.max(400, Math.min(2800, currentElo + stepDelta));
       const nextStep = stepIndex + 1;
 
       setCurrentElo(nextElo);
       setLastEloChange(stepDelta);
+      triggerEloDeltaBadge(stepDelta);
 
       if (nextStep >= 6) {
         fetch("/api/user/calibrate", {
@@ -782,7 +935,6 @@ export function PlayView({
         } catch {}
       }
 
-      goToNextPuzzle();
       return;
     }
 
@@ -792,6 +944,7 @@ export function PlayView({
     // Standard Continuous Reel Mode
     setCurrentElo(newElo);
     setLastEloChange(change);
+    triggerEloDeltaBadge(change);
 
     if (change > 0) {
       setStreak((prev) => prev + 1);
@@ -845,9 +998,11 @@ export function PlayView({
         }
       }
     } catch {}
-    setQueue(FALLBACK_PUZZLES);
-    setPuzzleStatus("playing");
-    fetch(`/api/puzzle/random?elo=800&count=5`)
+    setQueue([]);
+    setPuzzleStatus("loading");
+    const targetUserId = userAccount?.id;
+    const userParam = targetUserId ? `&userId=${encodeURIComponent(targetUserId)}` : "";
+    fetch(`/api/puzzle/random?elo=800&count=5${userParam}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data) {
@@ -856,6 +1011,7 @@ export function PlayView({
           if (filtered.length > 0) {
             setQueue(filtered);
             setCurrentIndex(0);
+            setPuzzleStatus("playing");
           }
         }
       })
@@ -864,8 +1020,10 @@ export function PlayView({
 
   // Handle successful account creation or sign-in
   const handleAccountSuccess = (user: UserAccount) => {
+    // Clear any previous user's cached puzzle queues and state
+    clearAllUserAndPuzzleCache(userAccount?.id);
+
     setUserAccount(user);
-    setShowLanding(false);
     setCurrentElo(user.elo || 800);
 
     try {
@@ -879,22 +1037,18 @@ export function PlayView({
         } else {
           window.localStorage.removeItem("chess_reel_plan");
         }
-        // Clean any stale guest session or old solved puzzle to prevent cross-account bleeding
-        resetStreakStats();
-        window.localStorage.removeItem("chess_reel_peak_elo");
-        window.localStorage.removeItem("chess_reel_best_streak");
-        window.localStorage.removeItem("chess_reel_custom_dp");
-        window.localStorage.removeItem("chess_reel_tier_session");
-        window.localStorage.removeItem("chess_reel_tier_session_guest");
-        window.localStorage.removeItem("chess_reel_last_solved_puzzle");
         window.dispatchEvent(new Event("account-updated"));
         window.dispatchEvent(new Event("tier-session-updated"));
       }
     } catch {}
 
     setIsQuotaModalOpen(false);
-    setPuzzleStatus("playing");
+    setSolvedPuzzleIds(new Set());
+    setQueue([]);
+    setPuzzleStatus("loading");
     setCurrentIndex(0);
+    initialFetchDoneRef.current = true;
+
     fetch(`/api/puzzle/random?elo=${user.elo || 800}&count=5&userId=${encodeURIComponent(user.id)}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
@@ -904,96 +1058,39 @@ export function PlayView({
           if (filtered.length > 0) {
             setQueue(filtered);
             setCurrentIndex(0);
+            setPuzzleStatus("playing");
+            saveQueue(filtered.slice(1), user.id);
           }
         }
       })
       .catch(() => {});
   };
 
-  // Sign out handler
+  // Sign out handler: clears all caches and transitions cleanly in a single step without landing page flash
   const handleSignOut = () => {
     const oldUserId = userAccount?.id;
+    clearAllUserAndPuzzleCache(oldUserId);
     setUserAccount(null);
-    setShowLanding(true);
     setIsStatsModalOpen(false);
-    resetStreakStats();
-    try {
-      if (typeof window !== "undefined") {
-        window.localStorage.removeItem(ACCOUNT_STORAGE_KEY);
-        window.localStorage.removeItem("chess_reel_preview_guest");
-        window.localStorage.removeItem("chess_reel_plan");
-        window.localStorage.removeItem("chess_reel_custom_dp");
-        window.localStorage.removeItem("chess_reel_peak_elo");
-        window.localStorage.removeItem("chess_reel_best_streak");
-        window.localStorage.removeItem("chess_reel_user_elo");
-        window.localStorage.removeItem("chess_reel_elo");
-        window.localStorage.removeItem(SOLVED_STORAGE_KEY);
-        window.localStorage.removeItem("chess_reel_tier_session");
-        window.localStorage.removeItem("chess_reel_tier_session_guest");
-        if (oldUserId) {
-          window.localStorage.removeItem(`chess_reel_tier_session_${oldUserId}`);
-        }
-        window.localStorage.removeItem("chess_reel_last_solved_puzzle");
-        document.cookie = "chess_reel_session=; path=/; max-age=0";
-        document.cookie = "chess_reel_oauth_user=; path=/; max-age=0";
-        window.dispatchEvent(new Event("account-updated"));
-        window.dispatchEvent(new Event("plan-updated"));
-        window.dispatchEvent(new Event("tier-session-updated"));
-      }
-    } catch {}
     setSolvedPuzzleIds(new Set());
-    setQueue(FALLBACK_PUZZLES);
+    setQueue([]);
     setCurrentIndex(0);
     setActiveTab("reels");
-    router.push("/");
+    router.replace("/");
   };
 
-  if (showLanding || (!userAccount && hasMounted)) {
+  // Route guard: unauthenticated users redirect cleanly to '/'
+  useEffect(() => {
+    if (hasMounted && !userAccount) {
+      router.replace("/");
+    }
+  }, [hasMounted, userAccount, router]);
+
+  if (!userAccount && hasMounted) {
     return (
-      <>
-        {oauthAlert && (
-          <div className="fixed top-16 inset-x-0 z-50 p-3 max-w-md mx-auto animate-in slide-in-from-top-2 duration-200">
-            <div className="p-3 rounded-xl bg-[#22201e] border border-[#c29b78]/40 text-[#f5f5f5] text-xs flex items-start justify-between gap-2 shadow-2xl">
-              <div className="flex items-start gap-2">
-                <span className="material-symbols-outlined text-[#c29b78] text-base shrink-0 mt-0.5">info</span>
-                <span>{oauthAlert}</span>
-              </div>
-              <button
-                onClick={() => setOauthAlert(null)}
-                className="text-[#c29b78] hover:text-white shrink-0 font-bold text-sm px-1 cursor-pointer"
-                aria-label="Dismiss notification"
-              >
-                ✕
-              </button>
-            </div>
-          </div>
-        )}
-        <LandingPage
-          onContinueWithGoogle={() => {
-            const returnUrl = encodeURIComponent("/play");
-            window.location.href = `/api/auth/google?returnUrl=${returnUrl}`;
-          }}
-          onOpenRegister={() => {
-            setAuthModalTab("register");
-            setAuthModalGoogle(false);
-            setIsAuthModalOpen(true);
-          }}
-          onOpenLogin={() => {
-            setAuthModalTab("login");
-            setAuthModalGoogle(false);
-            setIsAuthModalOpen(true);
-          }}
-        />
-        <AuthModal
-          key={`${isAuthModalOpen ? "open" : "closed"}-${authModalTab}-${authModalGoogle}`}
-          isOpen={isAuthModalOpen}
-          onClose={() => setIsAuthModalOpen(false)}
-          guestId={guestId}
-          initialTab={authModalTab}
-          initialShowGoogle={authModalGoogle}
-          onAccountSuccess={handleAccountSuccess}
-        />
-      </>
+      <div className="min-h-screen bg-[#0a0908] flex items-center justify-center">
+        <RefreshCw className="w-8 h-8 text-[#c29b78] animate-spin" />
+      </div>
     );
   }
 
@@ -1043,17 +1140,24 @@ export function PlayView({
               title={`Your Rating: ${currentElo}`}
             >
               <Zap className="w-3.5 h-3.5 text-[#c29b78] fill-[#c29b78]" />
-              <span suppressHydrationWarning className="tracking-tight">{currentElo}</span>
-              {lastEloChange !== null && (
-                <span
-                  suppressHydrationWarning
-                  className={`text-[10px] font-black ${
-                    lastEloChange >= 0 ? "text-[#10b981]" : "text-[#ef4444]"
-                  }`}
-                >
-                  {lastEloChange >= 0 ? `+${lastEloChange}` : lastEloChange}
-                </span>
-              )}
+              <AnimatedEloCounter value={currentElo} />
+              <AnimatePresence>
+                {showEloDeltaBadge && transientEloDelta !== null && (
+                  <motion.span
+                    key={`elo-delta-${deltaAnimationKey}`}
+                    data-testid="elo-delta-badge"
+                    initial={{ opacity: 0, y: 10, scale: 0.9 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -6, scale: 0.9 }}
+                    transition={{ duration: 0.25, ease: "easeOut" }}
+                    className={`text-[10px] font-black ${
+                      transientEloDelta >= 0 ? "text-[#10b981]" : "text-[#ef4444]"
+                    }`}
+                  >
+                    {transientEloDelta >= 0 ? `+${transientEloDelta}` : transientEloDelta}
+                  </motion.span>
+                )}
+              </AnimatePresence>
             </div>
 
             {/* Flush Daily Streak */}
@@ -1175,6 +1279,17 @@ export function PlayView({
               title="Global Standings & Friends"
             >
               <Trophy className="w-3.5 h-3.5" />
+            </button>
+
+            {/* Profile Button */}
+            <button
+              onClick={() => setActiveTab("profile")}
+              aria-label="Profile"
+              data-testid="header-profile-btn"
+              className="w-7 h-7 rounded-full hover:bg-[#22201e] flex items-center justify-center text-[#a3a3a3] hover:text-[#c29b78] transition-colors cursor-pointer"
+              title="Profile & Settings"
+            >
+              <User className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
@@ -1349,7 +1464,7 @@ export function PlayView({
           setAuthModalTab("register");
           setIsAuthModalOpen(true);
         }}
-        onOpenLanding={() => setShowLanding(true)}
+        onOpenLanding={() => router.replace("/")}
         onSignOut={handleSignOut}
         onResetElo={handleResetElo}
       />
@@ -1420,13 +1535,7 @@ export function PlayView({
                   const p = JSON.parse(lastSolvedRaw);
                   setQueue((prev) => [p, ...prev]);
                   setCurrentIndex(0);
-                } catch {
-                  setQueue([FALLBACK_PUZZLES[0]]);
-                  setCurrentIndex(0);
-                }
-              } else {
-                setQueue([FALLBACK_PUZZLES[0]]);
-                setCurrentIndex(0);
+                } catch {}
               }
             }
           } else {
