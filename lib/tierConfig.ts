@@ -89,54 +89,70 @@ export async function updateTierConfig(
 ): Promise<TierConfig> {
   await ensureSettingsTable();
 
+  const promises: Promise<any>[] = [];
+
   if (updates.freePuzzleLimit !== undefined) {
     const val = Math.max(1, Math.floor(updates.freePuzzleLimit)).toString();
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO "system_settings" ("key", "value", "updated_at")
-       VALUES ('free_puzzle_limit', $1, NOW())
-       ON CONFLICT ("key") DO UPDATE SET "value" = $1, "updated_at" = NOW();`,
-      val
+    promises.push(
+      prisma.$executeRawUnsafe(
+        `INSERT INTO "system_settings" ("key", "value", "updated_at")
+         VALUES ('free_puzzle_limit', $1, NOW())
+         ON CONFLICT ("key") DO UPDATE SET "value" = $1, "updated_at" = NOW();`,
+        val
+      )
     );
   }
 
   if (updates.freeWindowHours !== undefined) {
     const val = Math.max(1, Math.floor(updates.freeWindowHours)).toString();
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO "system_settings" ("key", "value", "updated_at")
-       VALUES ('free_window_hours', $1, NOW())
-       ON CONFLICT ("key") DO UPDATE SET "value" = $1, "updated_at" = NOW();`,
-      val
+    promises.push(
+      prisma.$executeRawUnsafe(
+        `INSERT INTO "system_settings" ("key", "value", "updated_at")
+         VALUES ('free_window_hours', $1, NOW())
+         ON CONFLICT ("key") DO UPDATE SET "value" = $1, "updated_at" = NOW();`,
+        val
+      )
     );
   }
 
   if (updates.adFrequencyPuzzles !== undefined) {
     const val = Math.max(1, Math.floor(updates.adFrequencyPuzzles)).toString();
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO "system_settings" ("key", "value", "updated_at")
-       VALUES ('ad_frequency_puzzles', $1, NOW())
-       ON CONFLICT ("key") DO UPDATE SET "value" = $1, "updated_at" = NOW();`,
-      val
+    promises.push(
+      prisma.$executeRawUnsafe(
+        `INSERT INTO "system_settings" ("key", "value", "updated_at")
+         VALUES ('ad_frequency_puzzles', $1, NOW())
+         ON CONFLICT ("key") DO UPDATE SET "value" = $1, "updated_at" = NOW();`,
+        val
+      )
     );
   }
 
   if (updates.proMonthlyPrice !== undefined) {
     const val = Math.max(1, updates.proMonthlyPrice).toString();
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO "system_settings" ("key", "value", "updated_at")
-       VALUES ('pro_monthly_price', $1, NOW())
-       ON CONFLICT ("key") DO UPDATE SET "value" = $1, "updated_at" = NOW();`,
-      val
+    promises.push(
+      prisma.$executeRawUnsafe(
+        `INSERT INTO "system_settings" ("key", "value", "updated_at")
+         VALUES ('pro_monthly_price', $1, NOW())
+         ON CONFLICT ("key") DO UPDATE SET "value" = $1, "updated_at" = NOW();`,
+        val
+      )
     );
   }
 
   if (updates.annualDiscountPercent !== undefined) {
     const val = Math.max(0, Math.min(90, Math.round(updates.annualDiscountPercent))).toString();
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO "system_settings" ("key", "value", "updated_at")
-       VALUES ('annual_discount_percent', $1, NOW())
-       ON CONFLICT ("key") DO UPDATE SET "value" = $1, "updated_at" = NOW();`,
-      val
+    promises.push(
+      prisma.$executeRawUnsafe(
+        `INSERT INTO "system_settings" ("key", "value", "updated_at")
+         VALUES ('annual_discount_percent', $1, NOW())
+         ON CONFLICT ("key") DO UPDATE SET "value" = $1, "updated_at" = NOW();`,
+        val
+      )
     );
+  }
+
+  if (promises.length > 0) {
+    await Promise.all(promises);
   }
 
   // Bust cache
@@ -199,10 +215,11 @@ export async function checkUserQuota(
   const windowStart = new Date(Date.now() - windowDurationMs);
 
   try {
-    // Find all solves recorded in the active rolling window
+    // Find all solves recorded in the active rolling window (only successful solves count towards quota)
     const recentSolves = await prisma.puzzleHistory.findMany({
       where: {
         userId,
+        result: "win",
         solvedAt: { gte: windowStart },
       },
       orderBy: { solvedAt: "asc" },

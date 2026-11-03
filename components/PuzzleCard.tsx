@@ -27,6 +27,8 @@ import {
   FastForward,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
   Clock,
   Heart,
   Lock,
@@ -67,6 +69,7 @@ export interface PuzzleCardProps {
   canPlay?: boolean;
   isPaywallOpen?: boolean;
   canGoPrev?: boolean;
+  currentIndex?: number;
   slideDirection?: "next" | "prev";
   onModeChange?: (mode: "ranked" | "practice") => void;
   onStatusChange: (status: PuzzleStatus) => void;
@@ -183,6 +186,7 @@ export function PuzzleCard({
   canPlay = true,
   isPaywallOpen = false,
   canGoPrev = false,
+  currentIndex,
   slideDirection = "next",
   onModeChange,
   onStatusChange,
@@ -364,9 +368,9 @@ export function PuzzleCard({
     };
   }, []);
 
-  // When finished (solved or failed) and auto-advance is off, start 7s idle timer
+  // When solved and auto-advance is off, start 7s idle timer
   useEffect(() => {
-    if (status !== "solved" && status !== "failed") {
+    if (status !== "solved") {
       dismissIdleIndicator();
       return;
     }
@@ -838,12 +842,12 @@ export function PuzzleCard({
     }
   }, [canPlay, isPro, isPaywallOpen]);
 
-  // Keyboard shortcut to advance when solved (Space, Enter, or ArrowRight)
+  // Keyboard shortcut to advance when solved (Space or Enter)
   useEffect(() => {
     if (status !== "solved") return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === "Space" || e.code === "Enter" || e.code === "ArrowRight") {
+      if (e.code === "Space" || e.code === "Enter") {
         e.preventDefault();
         if (canPlay === false && !isPro) {
           setIsReviewing(true);
@@ -868,7 +872,9 @@ export function PuzzleCard({
         (status !== "playing" && status !== "failed") ||
         !targetSquare ||
         !gameRef.current ||
-        (isCalibration && placementFeedback !== null)
+        (isCalibration && placementFeedback !== null) ||
+        (canPlay === false && !isPro) ||
+        isPaywallOpen
       ) {
         return false;
       }
@@ -1081,10 +1087,10 @@ export function PuzzleCard({
 
       return true;
     },
-    [status, allMoves, currentMoveIndex, onStatusChange, sendEloResult, isCalibration, placementFeedback]
+    [status, allMoves, currentMoveIndex, onStatusChange, sendEloResult, isCalibration, placementFeedback, canPlay, isPro, isPaywallOpen]
   );
 
-  // Drag and drop drop handler - strictly locked when status !== 'playing' && status !== 'failed'
+  // Drag and drop drop handler - strictly locked when status !== 'playing' && status !== 'failed' or paywalled
   const handlePieceDrop = ({
     sourceSquare,
     targetSquare,
@@ -1094,12 +1100,14 @@ export function PuzzleCard({
   }): boolean => {
     isPieceDragRef.current = false;
     if (status !== "playing" && status !== "failed") return false;
+    if ((canPlay === false && !isPro) || isPaywallOpen) return false;
     return executeUserMove(sourceSquare, targetSquare);
   };
 
   // Click-to-move / Tap-to-move handler
   const handleSquareClick = ({ square }: { square: string }) => {
     if ((status !== "playing" && status !== "failed") || !gameRef.current) return;
+    if ((canPlay === false && !isPro) || isPaywallOpen) return;
     const game = gameRef.current;
     const myColor = boardOrientation === "white" ? "w" : "b";
 
@@ -1715,25 +1723,26 @@ export function PuzzleCard({
     }
   };
 
-  // Keyboard navigation shortcuts: ArrowDown / PageDown = Next Reel, ArrowUp / PageUp = Prev Reel
+  // Keyboard navigation shortcuts: ArrowDown / PageDown / ArrowRight = Next Reel, ArrowUp / PageUp / ArrowLeft = Prev Reel
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const activeEl = document.activeElement;
       if (activeEl?.tagName === "INPUT" || activeEl?.tagName === "TEXTAREA") return;
 
-      if (e.key === "ArrowDown" || e.key === "PageDown") {
+      if (e.key === "ArrowDown" || e.key === "PageDown" || e.key === "ArrowRight") {
         e.preventDefault();
         triggerSwipeNext();
-      } else if (e.key === "ArrowUp" || e.key === "PageUp") {
+      } else if (e.key === "ArrowUp" || e.key === "PageUp" || e.key === "ArrowLeft") {
         e.preventDefault();
-        if (canGoPrev) {
+        const cannotGoPrev = !canGoPrev || (currentIndex !== undefined && currentIndex === 0);
+        if (!cannotGoPrev) {
           triggerSwipePrev();
         }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [canGoPrev, triggerSwipeNext, triggerSwipePrev]);
+  }, [canGoPrev, currentIndex, triggerSwipeNext, triggerSwipePrev]);
 
   const puzzleTagline = getPuzzleTagline(puzzle, boardOrientation);
 
@@ -1770,22 +1779,22 @@ export function PuzzleCard({
       {/* Breathing space above the chessboard utility box */}
       <div className="w-full h-2.5 sm:h-3.5" />
 
-      {/* Black Rectangle Spanning Width of Chessboard: Time, Tagline & Controls Flush */}
+      {/* Top Metadata Row: Time, Tagline & Controls Flush across Chessboard Width */}
       <div
         data-testid="puzzle-board-header-bar"
-        className="w-full bg-[#181716] border-y border-white/10 px-3 sm:px-4 py-2 flex items-center justify-between text-xs text-[#f5f5f5]"
+        className="w-full px-0 py-2 flex items-center justify-between text-xs text-[#f5f5f5]"
       >
         {/* Time (Flush on left) */}
         <div
           data-testid="puzzle-timer-pill"
-          className="flex items-center gap-1.5 text-xs font-mono font-bold text-[#f5f5f5] shrink-0"
+          className="flex items-center gap-1.5 text-xs font-mono font-bold tabular-nums text-[#f5f5f5] shrink-0"
           title="Current puzzle time"
         >
           <Clock className="w-3.5 h-3.5 text-[#c29b78]" />
-          <span>{formatTimer(timerSeconds)}</span>
+          <span className="tabular-nums">{formatTimer(timerSeconds)}</span>
         </div>
 
-        {/* Puzzle Tag / Tagline (Flush inside the box, dynamically scaled to available space with NO symbol) */}
+        {/* Puzzle Tag / Tagline (Flush inside the row, dynamically scaled to available space with NO symbol) */}
         <div
           data-testid="puzzle-tagline-container"
           className="flex-1 min-w-0 mx-2 flex items-center justify-center overflow-hidden"
@@ -1808,40 +1817,46 @@ export function PuzzleCard({
         </div>
 
         {/* Audio & Flip Board Buttons (Flush on right) */}
-        <div className="flex items-center gap-2.5 shrink-0">
+        <div className="flex items-center gap-3 shrink-0">
           {/* Sound Toggle */}
           <button
             onClick={handleToggleSFX}
+            data-testid="toggle-sound-btn"
             aria-label="Toggle piece sound"
             title={isMuted ? "Unmute audio" : "Mute audio"}
-            className={`flex items-center justify-center p-0.5 text-xs transition-colors cursor-pointer hover:text-white ${
-              isMuted ? "text-[#737373]" : "text-[#c29b78]"
+            className={`flex items-center justify-center p-1 -m-1 text-xs transition-colors cursor-pointer hover:text-white ${
+              isMuted ? "text-[#78716c]" : "text-[#c29b78]"
             }`}
           >
-            {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+            {isMuted ? (
+              <VolumeX strokeWidth={1.75} className="w-[18px] h-[18px]" />
+            ) : (
+              <Volume2 strokeWidth={1.75} className="w-[18px] h-[18px]" />
+            )}
           </button>
 
           {/* Flip Board */}
           <button
             onClick={handleFlipBoard}
+            data-testid="flip-board-btn"
             aria-label="Flip board"
             title="Flip board orientation"
-            className="flex items-center justify-center p-0.5 text-xs text-[#a3a3a3] hover:text-[#c29b78] transition-colors cursor-pointer"
+            className="flex items-center justify-center p-1 -m-1 text-xs text-[#78716c] hover:text-[#f5f2eb] transition-colors cursor-pointer"
           >
-            <ArrowUpDown className="w-4 h-4" />
+            <ArrowUpDown strokeWidth={1.75} className="w-[18px] h-[18px]" />
           </button>
         </div>
       </div>
 
       {/* 2. The Hero Chessboard Theater (Edge-to-edge horizontal, 1:1 aspect-square) */}
-      <div className="relative w-full aspect-square flex items-center justify-center my-0.5">
+      <div className="relative w-full aspect-square flex items-center justify-center my-1 rounded-lg overflow-hidden">
         <div
           data-testid="chessboard-container"
           onTouchStart={handleBoardTouchStart}
           onTouchMove={handleBoardTouchMove}
           onTouchEnd={handleBoardTouchEnd}
           onContextMenu={(e) => e.preventDefault()}
-          className={`relative w-full h-full aspect-square overflow-hidden flex flex-col justify-between transition-all duration-300 ${
+          className={`relative w-full h-full aspect-square overflow-hidden rounded-lg flex flex-col justify-between transition-all duration-300 ${
             isDesktopPointer ? "touch-none" : ""
           } ${
             isShaking ? "animate-board-shake" : ""
@@ -1853,8 +1868,8 @@ export function PuzzleCard({
                 id: "chess-reel-active-board",
                 position: fen,
                 boardOrientation: boardOrientation,
-                allowDragging: (status === "playing" || status === "failed") && (!isCalibration || placementFeedback === null),
-                canDragPiece: () => (status === "playing" || status === "failed") && (!isCalibration || placementFeedback === null),
+                allowDragging: (status === "playing" || status === "failed") && (!isCalibration || placementFeedback === null) && (canPlay !== false || isPro) && !isPaywallOpen,
+                canDragPiece: () => (status === "playing" || status === "failed") && (!isCalibration || placementFeedback === null) && (canPlay !== false || isPro) && !isPaywallOpen,
                 onPieceDrop: (args) => {
                   setTouchArrows([]);
                   return handlePieceDrop(args);
@@ -2128,30 +2143,32 @@ export function PuzzleCard({
         </div>
       </div>
 
-      {/* 3. Flush Instagram-style Action Row & Compact Mission Subtitle */}
-      <div className="w-full px-3.5 sm:px-4 mt-2.5 space-y-1.5">
-        {/* Flush Action Bar (Instagram-like buttons: Like, Bookmark, Share | Reset, Hint, Next) */}
+      {/* 3. Flush Action Row & Compact Mission Subtitle */}
+      <div className="w-full px-0 mt-3 space-y-2">
+        {/* Flush Action Bar (Like, Bookmark, Share | Reset, Hint, Prev, Next) */}
         <div className="w-full flex items-center justify-between">
-          {/* Left: Reels Engagement (Like, Bookmark, Share) */}
-          <div className="flex items-center gap-2.5 sm:gap-3">
+          {/* Left: Engagement (Like, Bookmark, Share) */}
+          <div className="flex items-center gap-5">
             {/* Animated Like Button */}
             <button
               onClick={handleToggleLike}
+              data-testid="like-btn"
               aria-label="Like puzzle"
               title={isLiked ? "Unlike puzzle" : "Like puzzle"}
-              className="flex items-center gap-1.5 text-[#a3a3a3] hover:text-[#f5f5f5] cursor-pointer transition-colors active:scale-90"
+              className="flex items-center gap-1.5 p-2 -m-2 text-[#78716c] hover:text-[#f5f2eb] cursor-pointer transition-all active:scale-90"
             >
               <motion.div
                 animate={isLiked ? { scale: [1, 1.4, 1] } : { scale: 1 }}
                 transition={{ duration: 0.3, ease: "easeOut" }}
               >
                 <Heart
-                  className={`w-5 h-5 transition-colors ${
+                  strokeWidth={1.75}
+                  className={`w-[22px] h-[22px] transition-colors ${
                     isLiked ? "fill-rose-500 text-rose-500 drop-shadow-[0_0_8px_rgba(244,63,94,0.5)]" : ""
                   }`}
                 />
               </motion.div>
-              <span className="text-xs font-bold font-mono tracking-tight text-[#f5f5f5]">
+              <span data-testid="like-count" className="text-[15px] font-medium tabular-nums text-[#f5f2eb]">
                 {formatLikes(likesCount)}
               </span>
             </button>
@@ -2159,12 +2176,14 @@ export function PuzzleCard({
             {/* Save / Bookmark Button */}
             <button
               onClick={handleToggleBookmark}
+              data-testid="bookmark-btn"
               aria-label="Save puzzle pattern"
               title={isBookmarked ? "Remove bookmark" : "Save puzzle"}
-              className="p-1 text-[#a3a3a3] hover:text-[#c29b78] cursor-pointer transition-colors active:scale-90"
+              className="p-2 -m-2 text-[#78716c] hover:text-[#f5f2eb] cursor-pointer transition-all active:scale-90"
             >
               <Bookmark
-                className={`w-5 h-5 transition-colors ${
+                strokeWidth={1.75}
+                className={`w-[22px] h-[22px] transition-colors ${
                   isBookmarked ? "fill-[#c29b78] text-[#c29b78]" : ""
                 }`}
               />
@@ -2173,25 +2192,26 @@ export function PuzzleCard({
             {/* Share Button */}
             <button
               onClick={handleShare}
+              data-testid="share-puzzle-btn"
               aria-label="Share puzzle card"
               title="Share puzzle"
-              className="p-1 text-[#a3a3a3] hover:text-[#f5f5f5] cursor-pointer transition-colors active:scale-90"
+              className="p-2 -m-2 text-[#78716c] hover:text-[#f5f2eb] cursor-pointer transition-all active:scale-90"
             >
-              <Share2 className="w-5 h-5" />
+              <Share2 strokeWidth={1.75} className="w-[22px] h-[22px]" />
             </button>
           </div>
 
-          {/* Right: Tactical Solver Controls (Reset, Glowing Hint, Skip/Next) */}
-          <div className="flex items-center gap-2 sm:gap-2.5">
+          {/* Right: Tactical Solver Controls & Navigation (Reset, Glowing Hint, Prev, Next) */}
+          <div className="flex items-center gap-5">
             {/* Reset Button */}
             <button
               onClick={() => handleRetry(true)}
               data-testid="reset-puzzle-btn"
               aria-label="Reset puzzle"
               title="Reset puzzle"
-              className="p-1.5 text-[#a3a3a3] hover:text-[#c29b78] cursor-pointer active:scale-90 transition-all"
+              className="p-2 -m-2 text-[#78716c] hover:text-[#f5f2eb] cursor-pointer active:scale-90 transition-all"
             >
-              <RotateCcw className="w-4 h-4" />
+              <RotateCcw strokeWidth={1.75} className="w-[22px] h-[22px]" />
             </button>
 
             {/* Hint Button */}
@@ -2201,19 +2221,20 @@ export function PuzzleCard({
               aria-label="Hint"
               data-testid="hint-btn"
               title={isHintGlowing ? "Need help? Click for a hint!" : "Highlight tactical move"}
-              className={`p-1.5 cursor-pointer active:scale-90 transition-all relative ${
+              className={`p-2 -m-2 cursor-pointer active:scale-90 transition-all relative ${
                 isHintGlowing
                   ? "text-[#c29b78] drop-shadow-[0_0_10px_rgba(194,155,120,0.95)] animate-pulse"
                   : hintUsed
                   ? "text-stone-600"
-                  : "text-[#a3a3a3] hover:text-[#c29b78]"
+                  : "text-[#78716c] hover:text-[#f5f2eb]"
               }`}
             >
               {isHintGlowing && (
                 <span className="absolute -inset-1 rounded-full bg-[#c29b78]/30 animate-ping pointer-events-none" />
               )}
               <Lightbulb
-                className={`w-4 h-4 transition-colors ${
+                strokeWidth={1.75}
+                className={`w-[22px] h-[22px] transition-colors ${
                   isHintGlowing
                     ? "fill-[#c29b78] text-[#c29b78]"
                     : hintUsed
@@ -2223,21 +2244,41 @@ export function PuzzleCard({
               />
             </button>
 
-            {/* Skip / Next Button */}
+            {/* Previous Puzzle Button (<) */}
+            <button
+              onClick={triggerSwipePrev}
+              data-testid="prev-puzzle-btn"
+              aria-label="Previous puzzle"
+              title="Previous puzzle"
+              disabled={!canGoPrev || (currentIndex !== undefined && currentIndex === 0)}
+              className={`p-2 -m-2 transition-all cursor-pointer ${
+                !canGoPrev || (currentIndex !== undefined && currentIndex === 0)
+                  ? "opacity-25 pointer-events-none text-[#78716c]"
+                  : "text-[#78716c] hover:text-[#f5f2eb] active:scale-90"
+              }`}
+            >
+              <ChevronLeft strokeWidth={1.75} className="w-[22px] h-[22px]" />
+            </button>
+
+            {/* Next Puzzle Button (>) */}
             <button
               onClick={triggerSwipeNext}
+              data-testid="next-puzzle-btn"
               aria-label="Next puzzle"
-              title="Next puzzle / Skip"
-              className="p-1.5 text-[#a3a3a3] hover:text-[#f5f5f5] cursor-pointer active:scale-90 transition-all"
+              title="Next puzzle"
+              className="p-2 -m-2 text-[#78716c] hover:text-[#f5f2eb] cursor-pointer active:scale-90 transition-all"
             >
-              <ArrowRight className="w-4 h-4" />
+              <ChevronRight strokeWidth={1.75} className="w-[22px] h-[22px]" />
             </button>
           </div>
         </div>
 
         {/* Flush Subtitle: Turn status + Step counter + Rating */}
-        <div className="w-full flex items-center justify-between pt-0.5 text-xs text-[#a3a3a3] font-medium tracking-tight">
-          <div className="flex items-center gap-1.5">
+        <div
+          data-testid="puzzle-status-bar"
+          className="w-full flex items-center justify-between pt-1 text-[13px] tracking-tight font-medium"
+        >
+          <div data-testid="puzzle-turn-indicator" className="flex items-center gap-1.5">
             <span
               className={`w-2.5 h-2.5 rounded-full ring-1 shadow-sm shrink-0 transition-transform ${
                 boardOrientation === "white"
@@ -2245,14 +2286,14 @@ export function PuzzleCard({
                   : "bg-neutral-900 ring-neutral-600 shadow-black/80"
               }`}
             />
-            <span className="font-bold text-[#f5f5f5]">{playerTurnMessage}</span>
-            <span className="text-[#a3a3a3] text-[11px] font-mono">
+            <span className="font-bold text-[#f5f2eb]">{playerTurnMessage}</span>
+            <span className="text-[#78716c] tabular-nums">
               • Step {currentStep} of {totalPlayerMoves}
             </span>
           </div>
 
-          <div className="flex items-center gap-1">
-            <span className="font-mono font-bold text-xs text-[#c29b78]">
+          <div className="flex items-center">
+            <span className="font-semibold tabular-nums text-[#c29b78]">
               {puzzle ? `${puzzle.rating} Elo` : "---"}
             </span>
           </div>

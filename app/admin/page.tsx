@@ -150,10 +150,24 @@ export default function AdminPage() {
     setTimeout(() => setBannerMessage(null), 4000);
   };
 
+  const adminFetch = useCallback(async (url: string, options: RequestInit = {}) => {
+    let token: string | null = null;
+    try {
+      if (typeof window !== "undefined") {
+        token = sessionStorage.getItem("chess_reel_admin_token");
+      }
+    } catch {}
+    const headers = {
+      ...(options.headers || {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+    return fetch(url, { ...options, headers });
+  }, []);
+
   // 1. Check existing session on mount
   useEffect(() => {
     setSessionLogs([`[${new Date().toLocaleTimeString()}] Admin terminal initialized.`]);
-    fetch("/api/admin/auth")
+    adminFetch("/api/admin/auth")
       .then((r) => r.json())
       .then((data) => {
         setIsAuthenticated(Boolean(data.authenticated));
@@ -161,13 +175,13 @@ export default function AdminPage() {
       .catch(() => {
         setIsAuthenticated(false);
       });
-  }, []);
+  }, [adminFetch]);
 
   // 2. Fetch Metrics
   const fetchMetrics = useCallback(async () => {
     setIsLoadingMetrics(true);
     try {
-      const res = await fetch("/api/admin/stats");
+      const res = await adminFetch("/api/admin/stats");
       if (res.ok) {
         const data = await res.json();
         setMetrics(data.metrics);
@@ -233,7 +247,7 @@ export default function AdminPage() {
   // 5. Fetch Tier Configuration
   const fetchTierConfig = useCallback(async () => {
     try {
-      const res = await fetch("/api/admin/config");
+      const res = await adminFetch("/api/admin/config");
       if (res.ok) {
         const data = await res.json();
         if (data?.config) {
@@ -243,28 +257,33 @@ export default function AdminPage() {
     } catch (e) {
       console.error(e);
     }
-  }, []);
+  }, [adminFetch]);
 
   // Save Tier Configuration
   const handleSaveTierConfig = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSavingConfig(true);
     try {
-      const res = await fetch("/api/admin/config", {
+      const res = await adminFetch("/api/admin/config", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(tierConfig),
       });
+      console.log("SAVE TIER CONFIG STATUS:", res.status);
       if (res.ok) {
         const data = await res.json();
+        console.log("SAVE TIER CONFIG OK:", data);
         showBanner(data.message || "Tier rules & ad settings saved!");
         addLog(
           `Updated Rules: Free ${tierConfig.freePuzzleLimit} puzzles / ${tierConfig.freeWindowHours}h. Ads every ${tierConfig.adFrequencyPuzzles} puzzles.`
         );
       } else {
-        showBanner("Failed to save tier settings", "error");
+        const errData = await res.json().catch(() => ({}));
+        console.log("SAVE TIER CONFIG ERROR:", errData);
+        showBanner(errData.error || "Failed to save tier settings", "error");
       }
-    } catch {
+    } catch (err) {
+      console.log("SAVE TIER CONFIG CATCH:", err);
       showBanner("Network error while saving tier settings", "error");
     } finally {
       setIsSavingConfig(false);
@@ -311,6 +330,12 @@ export default function AdminPage() {
       });
 
       if (res.ok) {
+        const data = await res.json();
+        if (data?.token && typeof window !== "undefined") {
+          try {
+            sessionStorage.setItem("chess_reel_admin_token", data.token);
+          } catch {}
+        }
         setIsAuthenticated(true);
         setSecretKeyInput("");
         addLog("Authenticated successfully with Master Admin Key.");
@@ -328,7 +353,12 @@ export default function AdminPage() {
 
   // Logout handler
   const handleLogout = async () => {
-    await fetch("/api/admin/auth", { method: "DELETE" });
+    try {
+      if (typeof window !== "undefined") {
+        sessionStorage.removeItem("chess_reel_admin_token");
+      }
+    } catch {}
+    await adminFetch("/api/admin/auth", { method: "DELETE" });
     setIsAuthenticated(false);
     addLog("Session locked by administrator.");
   };

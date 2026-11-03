@@ -7,7 +7,7 @@ export interface TierConfig {
 }
 
 export const DEFAULT_TIER_CONFIG: TierConfig = {
-  freePuzzleLimit: 5,
+  freePuzzleLimit: 4,
   freeWindowHours: 4,
   adFrequencyPuzzles: 2,
   proMonthlyPrice: 200, // 200rs/month

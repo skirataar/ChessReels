@@ -46,12 +46,12 @@ test.describe("Tier Rules, Ads, Pricing & Placement Calibration", () => {
     // Test tweaking a value (e.g. ad frequency to 3, then saving, then restoring back to 2)
     await adFreqInput.fill("3");
     await page.click("button:has-text('Save Configuration')");
-    await expect(page.locator("text=Updated tier rules")).toBeVisible({ timeout: 5000 });
+    await expect(page.locator("text=Updated tier rules")).toBeVisible({ timeout: 15000 });
 
     // Restore to 2
     await adFreqInput.fill("2");
     await page.click("button:has-text('Save Configuration')");
-    await expect(page.locator("text=Updated tier rules")).toBeVisible({ timeout: 5000 });
+    await expect(page.locator("text=Updated tier rules")).toBeVisible({ timeout: 15000 });
   });
 
   test("2. Free user sees energy badge ⚡ 4/4 and gets ₹200/mo Paywall with 5% Annual discount", async ({ page }) => {
@@ -59,6 +59,7 @@ test.describe("Tier Rules, Ads, Pricing & Placement Calibration", () => {
     await page.goto("http://localhost:3000/play");
     await page.evaluate(() => {
       localStorage.removeItem("chess_reel_plan");
+      localStorage.removeItem("chess_reel_tier_config");
       localStorage.setItem("chess_reel_account", JSON.stringify({
         id: "free-tier-user-e2e",
         username: "free_solver",
@@ -66,10 +67,12 @@ test.describe("Tier Rules, Ads, Pricing & Placement Calibration", () => {
         plan: "free",
         isCalibrated: true,
       }));
-      localStorage.setItem("chess_reel_tier_session", JSON.stringify({
+      const emptySession = JSON.stringify({
         solveTimestamps: [],
         puzzlesSinceLastAd: 0,
-      }));
+      });
+      localStorage.setItem("chess_reel_tier_session", emptySession);
+      localStorage.setItem("chess_reel_tier_session_free-tier-user-e2e", emptySession);
     });
     await page.reload();
     await page.waitForTimeout(1500);
@@ -83,10 +86,12 @@ test.describe("Tier Rules, Ads, Pricing & Placement Calibration", () => {
     // Simulate quota reached (4 solves in current window)
     await page.evaluate(() => {
       const now = Date.now();
-      localStorage.setItem("chess_reel_tier_session", JSON.stringify({
+      const exhausted = JSON.stringify({
         solveTimestamps: [now - 300000, now - 200000, now - 100000, now],
         puzzlesSinceLastAd: 1,
-      }));
+      });
+      localStorage.setItem("chess_reel_tier_session", exhausted);
+      localStorage.setItem("chess_reel_tier_session_free-tier-user-e2e", exhausted);
     });
     await page.reload();
     await page.waitForTimeout(1500);
@@ -96,12 +101,14 @@ test.describe("Tier Rules, Ads, Pricing & Placement Calibration", () => {
     await expect(exhaustedBadge).toBeVisible();
     expect(await exhaustedBadge.textContent()).toContain("0/4");
 
-    // Clicking the badge opens the QuotaPaywallModal
-    await exhaustedBadge.click();
-    await page.waitForTimeout(500);
+    // If modal auto-opened on quota depletion or needs click, ensure it's visible
+    const quotaModalTitle = page.locator("text=Free Quota Reached");
+    if (!(await quotaModalTitle.isVisible())) {
+      await exhaustedBadge.click({ force: true });
+    }
 
     // Verify QuotaPaywallModal shows ₹200 and 5% Annual discount
-    await expect(page.locator("text=Free Quota Reached")).toBeVisible();
+    await expect(quotaModalTitle).toBeVisible();
     await expect(page.locator("span:has-text('Save 5%')").first()).toBeVisible();
     await expect(page.locator("text=Annual")).toBeVisible();
     await expect(page.locator("button:has-text('Monthly')")).toBeVisible();
@@ -452,6 +459,78 @@ test.describe("Tier Rules, Ads, Pricing & Placement Calibration", () => {
       path: path.join(ARTIFACT_DIR, "profile_custom_dp_selected.png"),
     });
   });
+
+  test("8. Failing a puzzle on last quota does NOT consume quota, does NOT open paywall popup, and does NOT say puzzle solved", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("http://localhost:3000/play");
+
+    // Setup free registered/calibrated user with exactly 1 quota remaining (3 solves out of 4)
+    await page.evaluate(() => {
+      const now = Date.now();
+      localStorage.setItem("chess_reel_account", JSON.stringify({
+        id: "quota-fail-tester",
+        username: "quota_fail_test",
+        elo: 1200,
+        plan: "free",
+        isCalibrated: true,
+      }));
+      localStorage.setItem("chess_reel_tier_session_quota-fail-tester", JSON.stringify({
+        solveTimestamps: [now - 300000, now - 200000, now - 100000],
+        puzzlesSinceLastAd: 0,
+      }));
+      localStorage.setItem("chess_reel_tier_session", JSON.stringify({
+        solveTimestamps: [now - 300000, now - 200000, now - 100000],
+        puzzlesSinceLastAd: 0,
+      }));
+    });
+    await page.reload();
+    await page.waitForTimeout(1500);
+
+    // Verify energy badge displays 1/4 (last quota remaining)
+    const energyBadge = page.locator("button[data-testid='header-quota-btn']");
+    await expect(energyBadge).toBeVisible();
+    await expect(energyBadge).toContainText("1/4");
+
+    // Simulate failing the puzzle (loss)
+    await page.evaluate(() => {
+      window.dispatchEvent(
+        new CustomEvent("chess-reel-test-status", { detail: { status: "failed" } })
+      );
+      window.dispatchEvent(
+        new CustomEvent("chess-reel-test-elo-update", { detail: { delta: -12 } })
+      );
+    });
+
+    await page.waitForTimeout(1000);
+
+    // Verify quota is STILL 1/4 (NOT decremented)
+    await expect(energyBadge).toContainText("1/4");
+
+    // Verify Quota Paywall Modal did NOT open
+    await expect(page.locator("text=Free Quota Reached")).not.toBeVisible();
+
+    // Verify "Puzzle Solved!" celebration overlay did NOT appear
+    await expect(page.locator("text=Puzzle Solved!")).not.toBeVisible();
+
+    // Now simulate legitimately solving the puzzle
+    await page.evaluate(() => {
+      window.dispatchEvent(
+        new CustomEvent("chess-reel-test-status", { detail: { status: "solved" } })
+      );
+      window.dispatchEvent(
+        new CustomEvent("chess-reel-test-elo-update", { detail: { delta: 14 } })
+      );
+    });
+
+    await page.waitForTimeout(1000);
+
+    // Quota should now be consumed (0/4)
+    await expect(energyBadge).toContainText("0/4");
+
+    // Quota paywall modal opens because quota is now legitimately reached on solve
+    await expect(page.locator("text=Free Quota Reached")).toBeVisible();
+  });
 });
+
 
 

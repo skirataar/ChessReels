@@ -32,7 +32,7 @@ export async function PATCH(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { freePuzzleLimit, freeWindowHours, adFrequencyPuzzles, proMonthlyPrice } = body;
+    const { freePuzzleLimit, freeWindowHours, adFrequencyPuzzles, proMonthlyPrice, annualDiscountPercent } = body;
 
     const updated = await updateTierConfig({
       freePuzzleLimit:
@@ -43,6 +43,8 @@ export async function PATCH(request: NextRequest) {
         adFrequencyPuzzles !== undefined ? Number(adFrequencyPuzzles) : undefined,
       proMonthlyPrice:
         proMonthlyPrice !== undefined ? Number(proMonthlyPrice) : undefined,
+      annualDiscountPercent:
+        annualDiscountPercent !== undefined ? Number(annualDiscountPercent) : undefined,
     });
 
     return NextResponse.json({

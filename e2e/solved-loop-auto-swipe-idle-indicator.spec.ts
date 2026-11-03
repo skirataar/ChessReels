@@ -91,9 +91,10 @@ test.describe("Solved Loop Fix, Auto-Swipe Setting & 7-Second Idle Indicator", (
     await page.getByRole("button", { name: "Sign In" }).click();
     await page.waitForURL(/\/play/, { timeout: 10000 });
 
-    // Open Profile Modal
-    await expect(page.getByTestId("header-profile-btn")).toBeVisible({ timeout: 10000 });
-    await page.getByTestId("header-profile-btn").click();
+    // Open Profile / Settings via bottom navigation dock
+    const profileBtn = page.getByTestId("bottom-nav-profile");
+    await expect(profileBtn).toBeVisible({ timeout: 10000 });
+    await profileBtn.click();
     await expect(page.getByRole("dialog")).toBeVisible({ timeout: 5000 });
 
     // Verify Auto-advance toggle is present
@@ -181,11 +182,71 @@ test.describe("Solved Loop Fix, Auto-Swipe Setting & 7-Second Idle Indicator", (
       window.localStorage.setItem("chess_reel_auto_advance", "1");
       window.dispatchEvent(new Event("auto-advance-updated"));
       window.dispatchEvent(
-        new CustomEvent("chess-reel-test-status", { detail: { status: "failed" } })
+        new CustomEvent("chess-reel-test-status", { detail: { status: "solved" } })
       );
     });
 
     await page.waitForTimeout(1000);
     await expect(indicator).not.toBeVisible();
+  });
+
+  test("4. Idle swipe indicator does NOT start or appear on failed/playing puzzles, strictly only on solved", async ({
+    page,
+    request,
+  }) => {
+    const username = `nosolve_${Date.now().toString().slice(-8)}`;
+    await request.post("/api/user/account", {
+      data: {
+        username,
+        password: "password123",
+        displayName: "NoSolve Idle Tester",
+        elo: 1400,
+        startingElo: 1400,
+      },
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Sign In" }).click();
+    await page.fill('input[placeholder="Username or email"]', username);
+    await page.fill('input[placeholder="Password"]', "password123");
+    await page.getByRole("button", { name: "Sign In" }).click();
+    await page.waitForURL(/\/play/, { timeout: 10000 });
+
+    // Wait for chessboard to be rendered
+    await expect(page.getByTestId("chessboard-container")).toBeVisible({ timeout: 10000 });
+
+    // Auto-advance is OFF
+    await page.evaluate(() => {
+      window.localStorage.setItem("chess_reel_auto_advance", "0");
+      window.dispatchEvent(new Event("auto-advance-updated"));
+    });
+
+    const indicator = page.getByTestId("idle-swipe-indicator");
+    await expect(indicator).not.toBeVisible();
+
+    // Trigger status = "failed" with auto-advance OFF
+    await page.evaluate(() => {
+      window.dispatchEvent(
+        new CustomEvent("chess-reel-test-status", { detail: { status: "failed" } })
+      );
+    });
+
+    // Wait over 7 seconds (e.g. 7.5s) and verify indicator NEVER appears for failed puzzle
+    await page.waitForTimeout(7500);
+    await expect(indicator).not.toBeVisible();
+
+    // Now trigger status = "solved"
+    await page.evaluate(() => {
+      window.dispatchEvent(
+        new CustomEvent("chess-reel-test-status", { detail: { status: "solved" } })
+      );
+    });
+
+    // Immediately after solve, indicator shouldn't show yet
+    await expect(indicator).not.toBeVisible();
+
+    // After 7 seconds from solve, indicator appears
+    await expect(indicator).toBeVisible({ timeout: 10000 });
+    await expect(indicator).toContainText("Swipe up for next puzzle");
   });
 });

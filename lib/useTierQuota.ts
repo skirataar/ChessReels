@@ -36,7 +36,7 @@ function getInitialTierState(effectivePro: boolean, userId?: string) {
   if (typeof window !== "undefined") {
     try {
       const storageKey = getTierStorageKey(userId);
-      const raw = window.localStorage.getItem(storageKey);
+      const raw = window.localStorage.getItem(storageKey) || window.localStorage.getItem("chess_reel_tier_session");
       if (raw) {
         const parsed: LocalTierSession = JSON.parse(raw);
         const now = Date.now();
@@ -171,7 +171,7 @@ export function useTierQuota(
     const storageKey = getTierStorageKey(userId);
     const syncSession = () => {
       try {
-        const raw = window.localStorage.getItem(storageKey);
+        const raw = window.localStorage.getItem(storageKey) || window.localStorage.getItem("chess_reel_tier_session");
         if (raw) {
           const parsed: LocalTierSession = JSON.parse(raw);
           setPuzzlesSinceLastAd(parsed.puzzlesSinceLastAd || 0);
@@ -222,7 +222,7 @@ export function useTierQuota(
           let localValidTimestamps: number[] = [];
           try {
             if (typeof window !== "undefined") {
-              const raw = window.localStorage.getItem(storageKey);
+              const raw = window.localStorage.getItem(storageKey) || window.localStorage.getItem("chess_reel_tier_session");
               if (raw) {
                 const parsed: LocalTierSession = JSON.parse(raw);
                 localValidTimestamps = (parsed.solveTimestamps || []).filter((t) => now - t < windowMs);
@@ -253,10 +253,15 @@ export function useTierQuota(
     syncWithServer();
   }, [syncWithServer]);
 
-  // Record a completed puzzle: checks quota & ad threshold
+  // Record a completed puzzle: checks quota & ad threshold (only for solved puzzles)
   const recordPuzzlePlayed = useCallback(
     (isWin: boolean): { shouldShowAd: boolean; quotaReached: boolean } => {
       if (isPro) {
+        return { shouldShowAd: false, quotaReached: false };
+      }
+
+      // Quota only counts for SOLVED puzzles. Failed or incomplete attempts do NOT consume quota.
+      if (!isWin) {
         return { shouldShowAd: false, quotaReached: false };
       }
 

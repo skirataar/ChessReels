@@ -236,6 +236,7 @@ export function PlayView({
 
   // Account switch detection: tracks previous userId to wipe stale queues and cached state
   const previousUserIdRef = useRef<string | null>(null);
+  const handleEloUpdateRef = useRef<(newElo: number, change: number, isWin?: boolean) => void>(() => {});
 
   // Daily streak, solve combo & puzzle totals tracking
   const {
@@ -293,23 +294,12 @@ export function PlayView({
       }
     };
     const handleTestElo = (e: Event) => {
-      const customEvent = e as CustomEvent<{ delta: number; newElo?: number }>;
+      const customEvent = e as CustomEvent<{ delta: number; newElo?: number; isWin?: boolean }>;
       if (customEvent.detail?.delta !== undefined) {
         const delta = customEvent.detail.delta;
         const targetElo = customEvent.detail.newElo ?? (currentEloRef.current + delta);
-        setCurrentElo(targetElo);
-        currentEloRef.current = targetElo;
-        setLastEloChange(delta);
-        triggerEloDeltaBadge(delta);
-        try {
-          if (typeof window !== "undefined") {
-            window.localStorage.setItem(ELO_STORAGE_KEY, targetElo.toString());
-            if (userAccount) {
-              const updated = { ...userAccount, elo: targetElo };
-              window.localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(updated));
-            }
-          }
-        } catch {}
+        const isWin = customEvent.detail.isWin !== undefined ? customEvent.detail.isWin : delta > 0;
+        handleEloUpdateRef.current(targetElo, delta, isWin);
       }
     };
     window.addEventListener("open-quota-paywall", handleOpenPaywall);
@@ -941,7 +931,10 @@ export function PlayView({
     }
 
     // 2. Continuous Ranked Play: Free Tier Quota (4 puzzles / 4h) and Ads (every 2 puzzles) start HERE
-    const { shouldShowAd, quotaReached } = recordPuzzlePlayed(change > 0);
+    // Quota and ads ONLY count when the puzzle was actually solved (won)
+    if (won) {
+      recordPuzzlePlayed(true);
+    }
 
     // Standard Continuous Reel Mode
     setCurrentElo(newElo);
@@ -968,6 +961,10 @@ export function PlayView({
 
     prefetchPuzzles(newElo, 5, userAccount?.id || guestId).catch(() => {});
   };
+
+  useEffect(() => {
+    handleEloUpdateRef.current = handleEloUpdate;
+  });
 
   // Reset rating back to 800
   const handleResetElo = () => {
@@ -1198,6 +1195,10 @@ export function PlayView({
             {/* Flush Free Tier Quota, Calibration, or PRO Indicator */}
             {!hasMounted ? (
               <button
+                onClick={() => {
+                  setPaywallReason("quota");
+                  setIsQuotaModalOpen(true);
+                }}
                 data-testid="header-quota-btn"
                 suppressHydrationWarning
                 className="flex items-center gap-1 text-[11px] font-bold transition-all cursor-pointer opacity-80"
@@ -1255,17 +1256,6 @@ export function PlayView({
               title="Global Standings & Friends"
             >
               <Trophy className="w-3.5 h-3.5" />
-            </button>
-
-            {/* Profile Button */}
-            <button
-              onClick={() => setActiveTab("profile")}
-              aria-label="Profile"
-              data-testid="header-profile-btn"
-              className="w-7 h-7 rounded-full hover:bg-[#22201e] flex items-center justify-center text-[#a3a3a3] hover:text-[#c29b78] transition-colors cursor-pointer"
-              title="Profile & Settings"
-            >
-              <User className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
@@ -1394,6 +1384,7 @@ export function PlayView({
               mode="ranked"
               isPro={isPro}
               canGoPrev={currentIndex > 0}
+              currentIndex={currentIndex}
               slideDirection={slideDirection}
               onModeChange={(m) => {
                 if (m === "practice") {
@@ -1483,7 +1474,6 @@ export function PlayView({
         onClose={() => {
           setIsAdOpen(false);
           if (!canPlay && !isPro) {
-            setPuzzleStatus("solved");
             setPaywallReason("quota");
             setIsQuotaModalOpen(true);
           } else {
@@ -1500,7 +1490,6 @@ export function PlayView({
         onClose={() => {
           setIsQuotaModalOpen(false);
           if (!canPlay && !isPro && !isCalibrating) {
-            setPuzzleStatus("solved");
             if (!currentPuzzle) {
               const lastSolvedRaw =
                 typeof window !== "undefined"
@@ -1511,6 +1500,7 @@ export function PlayView({
                   const p = JSON.parse(lastSolvedRaw);
                   setQueue((prev) => [p, ...prev]);
                   setCurrentIndex(0);
+                  setPuzzleStatus("solved");
                 } catch {}
               }
             }

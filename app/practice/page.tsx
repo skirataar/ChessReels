@@ -566,12 +566,7 @@ export default function PracticePage() {
       {/* 4. Purchase Paywall Modal for Practice Mode */}
       <QuotaPaywallModal
         isOpen={isPaywallOpen}
-        onClose={() => {
-          setIsPaywallOpen(false);
-          if (!isPro) {
-            router.push("/play");
-          }
-        }}
+        onClose={() => setIsPaywallOpen(false)}
         onUpgradeToPro={upgradeToPro}
         resetsInMs={0}
         proPrice={proPrice}
