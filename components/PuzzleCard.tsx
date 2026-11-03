@@ -54,9 +54,21 @@ export interface PuzzleData {
 
 export type PuzzleStatus = "loading" | "playing" | "solved" | "failed";
 
+export interface SavedPuzzleState {
+  status: "solved" | "failed";
+  moveHistory: string[];
+  viewMoveIndex: number;
+  eloDelta?: number;
+}
+
 export interface PuzzleCardProps {
   puzzle: PuzzleData | null;
   status: PuzzleStatus;
+  savedState?: SavedPuzzleState;
+  onSavePuzzleState?: (puzzleId: string, state: SavedPuzzleState) => void;
+  isAlreadyRated?: boolean;
+  ratedPuzzleIds?: Set<string>;
+  onMarkRated?: (puzzleId: string) => void;
   currentElo: number;
   guestId?: string;
   streak?: number;
@@ -73,10 +85,42 @@ export interface PuzzleCardProps {
   slideDirection?: "next" | "prev";
   onModeChange?: (mode: "ranked" | "practice") => void;
   onStatusChange: (status: PuzzleStatus) => void;
-  onEloUpdate: (newElo: number, change: number, isWin?: boolean) => void;
+  onEloUpdate: (newElo: number, change: number, isWin?: boolean, puzzleId?: string) => void;
   onNextPuzzle: () => void;
   onPrevPuzzle?: () => void;
   onOpenStats?: () => void;
+}
+
+export function computeSolvedHistory(puzzle: PuzzleData | null | undefined): string[] {
+  if (!puzzle || !puzzle.fen || !puzzle.moves) return [];
+  const movesArray = puzzle.moves.trim().split(/\s+/);
+  const solvedGame = new Chess(puzzle.fen);
+  let startIndex = 0;
+  if (movesArray.length % 2 === 0 && movesArray.length > 0) {
+    try {
+      solvedGame.move({
+        from: movesArray[0].slice(0, 2),
+        to: movesArray[0].slice(2, 4),
+        promotion: movesArray[0].length === 5 ? movesArray[0][4].toLowerCase() : undefined,
+      });
+      startIndex = 1;
+    } catch {}
+  }
+  const history: string[] = [solvedGame.fen()];
+  for (let i = startIndex; i < movesArray.length; i++) {
+    const uci = movesArray[i];
+    if (uci) {
+      try {
+        solvedGame.move({
+          from: uci.slice(0, 2),
+          to: uci.slice(2, 4),
+          promotion: uci.length === 5 ? uci[4].toLowerCase() : undefined,
+        });
+        history.push(solvedGame.fen());
+      } catch {}
+    }
+  }
+  return history;
 }
 
 export function computePuzzleInitialState(puzzle: PuzzleData | null | undefined) {
@@ -174,6 +218,11 @@ export function useIsDesktopPointer(): boolean {
 export function PuzzleCard({
   puzzle,
   status,
+  savedState,
+  onSavePuzzleState,
+  isAlreadyRated,
+  ratedPuzzleIds,
+  onMarkRated,
   currentElo,
   guestId,
   streak = 0,
@@ -198,11 +247,46 @@ export function PuzzleCard({
   const isDesktopPointer = useIsDesktopPointer();
   const [boardTheme] = useBoardTheme();
   const initialPuzzleState = computePuzzleInitialState(puzzle);
-  const [fen, setFen] = useState<string>(initialPuzzleState.fen);
-  // Move history for stepping back (<) and forward (>) through current puzzle moves
-  const [moveHistory, setMoveHistory] = useState<string[]>(() => [initialPuzzleState.fen]);
-  const [viewMoveIndex, setViewMoveIndex] = useState<number>(0);
+
+  const initialSolvedHistory =
+    (savedState?.status === "solved" || status === "solved") &&
+    (!savedState?.moveHistory || savedState.moveHistory.length === 0)
+      ? computeSolvedHistory(puzzle)
+      : null;
+
+  const resolvedInitialHistory =
+    savedState?.moveHistory && savedState.moveHistory.length > 0
+      ? savedState.moveHistory
+      : initialSolvedHistory || [initialPuzzleState.fen];
+
+  const resolvedInitialViewIndex =
+    savedState?.viewMoveIndex !== undefined
+      ? savedState.viewMoveIndex
+      : (savedState?.status === "solved" || status === "solved")
+      ? resolvedInitialHistory.length - 1
+      : 0;
+
+  const [moveHistory, setMoveHistory] = useState<string[]>(resolvedInitialHistory);
+  const [viewMoveIndex, setViewMoveIndex] = useState<number>(resolvedInitialViewIndex);
+  const [fen, setFen] = useState<string>(
+    resolvedInitialHistory[resolvedInitialViewIndex] || initialPuzzleState.fen
+  );
   const displayFen = moveHistory[viewMoveIndex] ?? fen;
+
+  const ratedPuzzleIdsRef = useRef<Set<string>>(new Set(ratedPuzzleIds || []));
+  useEffect(() => {
+    if (ratedPuzzleIds) {
+      ratedPuzzleIds.forEach((id) => ratedPuzzleIdsRef.current.add(id));
+    }
+  }, [ratedPuzzleIds]);
+
+  const isPreviouslyCompleted = Boolean(
+    savedState?.status === "solved" ||
+    isAlreadyRated ||
+    (puzzle?.id && (ratedPuzzleIds?.has(puzzle.id) || ratedPuzzleIdsRef.current.has(puzzle.id)))
+  );
+
+  const [isReviewMode, setIsReviewMode] = useState<boolean>(() => isPreviouslyCompleted);
 
   const handleStepBack = useCallback(() => {
     haptics.tap();
@@ -346,12 +430,27 @@ export function PuzzleCard({
     return () => window.removeEventListener("auto-advance-updated", syncAuto);
   }, []);
 
-  const gameRef = useRef<Chess | null>(initialPuzzleState.game);
+  const initialGameFen = resolvedInitialHistory[resolvedInitialViewIndex] || initialPuzzleState.fen;
+  const gameRef = useRef<Chess | null>(
+    (savedState?.status === "solved" || status === "solved")
+      ? (() => {
+          try {
+            return new Chess(initialGameFen);
+          } catch {
+            return initialPuzzleState.game;
+          }
+        })()
+      : initialPuzzleState.game
+  );
   const autoNextTimerRef = useRef<NodeJS.Timeout | null>(null);
   const mistakeTimerRef = useRef<NodeJS.Timeout | null>(null);
   const toastTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const hasPenalizedRef = useRef<boolean>(false);
-  const hasWonRef = useRef<boolean>(false);
+  const hasPenalizedRef = useRef<boolean>(
+    Boolean(savedState?.status === "failed" || (puzzle?.id && (ratedPuzzleIds?.has(puzzle.id) || isAlreadyRated)))
+  );
+  const hasWonRef = useRef<boolean>(
+    Boolean(savedState?.status === "solved" || (puzzle?.id && (ratedPuzzleIds?.has(puzzle.id) || isAlreadyRated)))
+  );
 
   // Stable refs for callbacks & props to prevent puzzle re-initialization loops
   const onStatusChangeRef = useRef(onStatusChange);
@@ -453,6 +552,14 @@ export function PuzzleCard({
           setFen(solvedGame.fen());
           setMoveHistory(history);
           setViewMoveIndex(history.length - 1);
+          setPlayerTurnMessage("Solved");
+          if (puzzle) {
+            onSavePuzzleState?.(puzzle.id, {
+              status: "solved",
+              moveHistory: history,
+              viewMoveIndex: history.length - 1,
+            });
+          }
         }
         if (isCalibration) {
           if (customEvent.detail.status === "solved") {
@@ -460,6 +567,13 @@ export function PuzzleCard({
           } else if (customEvent.detail.status === "failed") {
             setPlacementFeedback("incorrect");
           }
+        }
+        if (customEvent.detail.status === "failed" && puzzle) {
+          onSavePuzzleState?.(puzzle.id, {
+            status: "failed",
+            moveHistory,
+            viewMoveIndex,
+          });
         }
         onStatusChangeRef.current(customEvent.detail.status);
       }
@@ -511,24 +625,20 @@ export function PuzzleCard({
     async (result: "win" | "loss") => {
       if (!puzzle) return;
 
-      // Always record puzzle history even during calibration mode
-      fetch("/api/user/update-elo", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          puzzleRating: puzzle.rating,
-          currentUserElo: currentElo,
-          result,
-          guestId,
-          puzzleId: puzzle.id,
-          dailyStreak: streak,
-        }),
-      }).catch(() => {});
-
-      if (isCalibration) {
-        onEloUpdate(currentElo, result === "win" ? 1 : -1, result === "win");
+      // Strict Idempotency Guard:
+      // If in review mode, already rated, or in ratedPuzzleIds, never update Elo
+      if (
+        isReviewMode ||
+        isAlreadyRated ||
+        ratedPuzzleIds?.has(puzzle.id) ||
+        ratedPuzzleIdsRef.current.has(puzzle.id)
+      ) {
         return;
       }
+
+      // Immediately add puzzle.id to ratedPuzzleIds on the very first completion attempt (win or loss)
+      ratedPuzzleIdsRef.current.add(puzzle.id);
+      onMarkRated?.(puzzle.id);
 
       try {
         const response = await fetch("/api/user/update-elo", {
@@ -546,23 +656,38 @@ export function PuzzleCard({
 
         if (response.ok) {
           const data = await response.json();
+          if (data.alreadyRated) {
+            return;
+          }
+          if (isCalibration) {
+            onEloUpdate(currentElo, result === "win" ? 1 : -1, result === "win", puzzle.id);
+            return;
+          }
           if (typeof data.newElo === "number") {
-            onEloUpdate(data.newElo, data.eloChange ?? 0, result === "win");
+            onEloUpdate(data.newElo, data.eloChange ?? 0, result === "win", puzzle.id);
           } else {
             const delta = result === "win" ? 10 : -10;
-            onEloUpdate(currentElo + delta, delta, result === "win");
+            onEloUpdate(currentElo + delta, delta, result === "win", puzzle.id);
           }
         } else {
+          if (isCalibration) {
+            onEloUpdate(currentElo, result === "win" ? 1 : -1, result === "win", puzzle.id);
+            return;
+          }
           const delta = result === "win" ? 10 : -10;
-          onEloUpdate(currentElo + delta, delta, result === "win");
+          onEloUpdate(currentElo + delta, delta, result === "win", puzzle.id);
         }
       } catch (err) {
         console.error("Failed to update Elo:", err);
+        if (isCalibration) {
+          onEloUpdate(currentElo, result === "win" ? 1 : -1, result === "win", puzzle.id);
+          return;
+        }
         const delta = result === "win" ? 10 : -10;
-        onEloUpdate(currentElo + delta, delta, result === "win");
+        onEloUpdate(currentElo + delta, delta, result === "win", puzzle.id);
       }
     },
-    [puzzle, currentElo, guestId, isCalibration, onEloUpdate]
+    [puzzle, currentElo, guestId, isCalibration, onEloUpdate, isReviewMode, isAlreadyRated, ratedPuzzleIds, streak, onMarkRated]
   );
 
   // Initialize or reset puzzle game state
@@ -606,41 +731,33 @@ export function PuzzleCard({
         : initialTurn === "w" ? "white" : "black";
     setBoardOrientation(playerColor);
 
-    // If puzzle was opened in solved state (e.g. review or replaying solved puzzle)
-    if (statusRef.current === "solved") {
-      const solvedGame = new Chess(puzzle.fen);
-      let startIndex = 0;
-      if (movesArray.length % 2 === 0 && movesArray.length > 0) {
-        try {
-          solvedGame.move({
-            from: movesArray[0].slice(0, 2),
-            to: movesArray[0].slice(2, 4),
-            promotion: movesArray[0].length === 5 ? movesArray[0][4].toLowerCase() : undefined,
-          });
-          startIndex = 1;
-        } catch {}
+    // If puzzle was opened in solved state (e.g. review or revisiting solved puzzle)
+    if (savedState?.status === "solved" || statusRef.current === "solved") {
+      let history =
+        savedState?.moveHistory && savedState.moveHistory.length > 0
+          ? savedState.moveHistory
+          : computeSolvedHistory(puzzle);
+
+      const viewIdx =
+        savedState?.viewMoveIndex !== undefined
+          ? savedState.viewMoveIndex
+          : history.length - 1;
+      const targetFen = history[viewIdx] || history[history.length - 1];
+
+      try {
+        gameRef.current = new Chess(targetFen);
+      } catch {
+        gameRef.current = new Chess();
       }
-      const history: string[] = [solvedGame.fen()];
-      for (let i = startIndex; i < movesArray.length; i++) {
-        const uci = movesArray[i];
-        if (uci) {
-          try {
-            solvedGame.move({
-              from: uci.slice(0, 2),
-              to: uci.slice(2, 4),
-              promotion: uci.length === 5 ? uci[4].toLowerCase() : undefined,
-            });
-            history.push(solvedGame.fen());
-          } catch {}
-        }
-      }
-      gameRef.current = solvedGame;
-      setFen(solvedGame.fen());
+      setFen(targetFen);
       setMoveHistory(history);
-      setViewMoveIndex(history.length - 1);
+      setViewMoveIndex(viewIdx);
       setCurrentMoveIndex(movesArray.length);
       setIsReviewing(true);
-      setPlayerTurnMessage("Puzzle Solved");
+      setIsReviewMode(true);
+      hasWonRef.current = true;
+      hasPenalizedRef.current = true;
+      setPlayerTurnMessage("Solved");
       return;
     }
 
@@ -680,7 +797,7 @@ export function PuzzleCard({
     setViewMoveIndex(0);
     setCurrentMoveIndex(startIndex);
     onStatusChangeRef.current("playing");
-  }, [puzzle]);
+  }, [puzzle, savedState]);
 
   // Retry handler: resets board, clears all error states, allows trying again without API refetch
   // QOL: If incorrect on step x+1 (currentMoveIndex > solutionStartIndex), progress up to step x is preserved!
@@ -701,7 +818,6 @@ export function PuzzleCard({
       }
 
       setAutoNextCountdown(null);
-      setIsReviewing(false);
       setMistakeFeedback(null);
       setIsShaking(false);
       setIsFlashingRed(false);
@@ -712,58 +828,20 @@ export function PuzzleCard({
       const movesArray = puzzle.moves.trim().split(/\s+/);
       setAllMoves(movesArray);
 
-      // If puzzle is already marked solved (e.g. reviewing previously solved puzzle under paywall):
-      if (status === "solved") {
-        const initialTurn = new Chess(puzzle.fen).turn();
-        const playerColor: "white" | "black" =
-          movesArray.length % 2 === 0 && movesArray.length > 0
-            ? initialTurn === "w" ? "black" : "white"
-            : initialTurn === "w" ? "white" : "black";
-        setBoardOrientation(playerColor);
+      // If puzzle was already completed, visited, or rated, retry runs in Practice / Review Mode
+      const isAlreadyCompleted =
+        status === "solved" ||
+        savedState?.status === "solved" ||
+        isAlreadyRated ||
+        Boolean(puzzle?.id && (ratedPuzzleIds?.has(puzzle.id) || ratedPuzzleIdsRef.current.has(puzzle.id)));
 
-        const solvedGame = new Chess(puzzle.fen);
-        let startIndex = 0;
-        if (movesArray.length % 2 === 0 && movesArray.length > 0) {
-          try {
-            solvedGame.move({
-              from: movesArray[0].slice(0, 2),
-              to: movesArray[0].slice(2, 4),
-              promotion: movesArray[0].length === 5 ? movesArray[0][4].toLowerCase() : undefined,
-            });
-            startIndex = 1;
-          } catch {}
-        }
-        const history: string[] = [solvedGame.fen()];
-        for (let i = startIndex; i < movesArray.length; i++) {
-          const uci = movesArray[i];
-          if (uci) {
-            try {
-              solvedGame.move({
-                from: uci.slice(0, 2),
-                to: uci.slice(2, 4),
-                promotion: uci.length === 5 ? uci[4].toLowerCase() : undefined,
-              });
-              history.push(solvedGame.fen());
-            } catch (e) {
-              console.error("Error replaying solved moves:", e);
-            }
-          }
-        }
-
-        gameRef.current = solvedGame;
-        setFen(solvedGame.fen());
-        setMoveHistory(history);
-        setViewMoveIndex(history.length - 1);
-        setCurrentMoveIndex(movesArray.length);
-        setIsReviewing(true);
-        setPlayerTurnMessage("Puzzle Solved");
-        return;
+      if (isAlreadyCompleted) {
+        setIsReviewMode(true);
       }
+      setIsReviewing(false);
 
-      // QOL Step Preservation:
-      // If user made a mistake on step x+1 (currentMoveIndex > solutionStartIndex) and did not explicitly request full restart:
-      // restore board state to step x+1, keeping the completed x moves intact!
-      if (!resetToStart && currentMoveIndex > solutionStartIndex) {
+      // QOL Step Preservation (only during live playing attempt when mistake was made at step > 1 and not explicit full reset):
+      if (!resetToStart && !isAlreadyCompleted && currentMoveIndex > solutionStartIndex) {
         const restoredGame = new Chess(puzzle.fen);
         let startIndex = 0;
         if (movesArray.length % 2 === 0 && movesArray.length > 0) {
@@ -803,7 +881,7 @@ export function PuzzleCard({
         return;
       }
 
-      // Otherwise, standard full reset to initial puzzle position (Step 1)
+      // Otherwise, standard full reset to initial puzzle position (with opponent blunder applied)
       const newGame = new Chess(puzzle.fen);
       gameRef.current = newGame;
 
@@ -845,7 +923,7 @@ export function PuzzleCard({
       setCurrentMoveIndex(initStartIndex);
       onStatusChange("playing");
     },
-    [puzzle, status, currentMoveIndex, solutionStartIndex, onStatusChange, showToast]
+    [puzzle, status, savedState, isAlreadyRated, ratedPuzzleIds, currentMoveIndex, solutionStartIndex, onStatusChange]
   );
 
   useEffect(() => {
@@ -860,7 +938,7 @@ export function PuzzleCard({
 
   // Handle celebratory confetti and auto-advance timer on solve
   useEffect(() => {
-    if (status !== "solved" || isCalibration) return;
+    if (status !== "solved" || isCalibration || isReviewMode) return;
 
     // 1. Triumphant multi-stage Confetti celebration
     try {
@@ -1047,9 +1125,16 @@ export function PuzzleCard({
           });
           setPlacementFeedback("incorrect");
           onStatusChange("failed");
-          if (!hasPenalizedRef.current) {
+          if (!hasPenalizedRef.current && !isReviewMode && !isAlreadyRated && (!puzzle || !ratedPuzzleIds?.has(puzzle.id))) {
             hasPenalizedRef.current = true;
             sendEloResult("loss");
+          }
+          if (puzzle) {
+            onSavePuzzleState?.(puzzle.id, {
+              status: "failed",
+              moveHistory,
+              viewMoveIndex,
+            });
           }
           if (placementTransitionTimerRef.current) {
             clearTimeout(placementTransitionTimerRef.current);
@@ -1061,9 +1146,16 @@ export function PuzzleCard({
         }
 
         // Penalize Elo once per puzzle and record in PuzzleHistory
-        if (!hasPenalizedRef.current) {
+        if (!hasPenalizedRef.current && !isReviewMode && !isAlreadyRated && (!puzzle || !ratedPuzzleIds?.has(puzzle.id))) {
           hasPenalizedRef.current = true;
           sendEloResult("loss");
+        }
+        if (puzzle) {
+          onSavePuzzleState?.(puzzle.id, {
+            status: "failed",
+            moveHistory,
+            viewMoveIndex,
+          });
         }
 
         // QOL: Increment retries count for this puzzle
@@ -1116,7 +1208,17 @@ export function PuzzleCard({
         sounds.playSuccess();
         haptics.success();
         onStatusChange("solved");
-        if (!hasWonRef.current) {
+
+        const updatedHistory = [...moveHistory, playerFen];
+        if (puzzle) {
+          onSavePuzzleState?.(puzzle.id, {
+            status: "solved",
+            moveHistory: updatedHistory,
+            viewMoveIndex: updatedHistory.length - 1,
+          });
+        }
+
+        if (!hasWonRef.current && !isReviewMode && !isAlreadyRated && (!puzzle || !ratedPuzzleIds?.has(puzzle.id))) {
           hasWonRef.current = true;
           sendEloResult("win");
         }
@@ -1172,7 +1274,19 @@ export function PuzzleCard({
             sounds.playSuccess();
             haptics.success();
             onStatusChange("solved");
-            if (!hasWonRef.current) {
+
+            if (puzzle) {
+              setMoveHistory((currentHist) => {
+                onSavePuzzleState?.(puzzle.id, {
+                  status: "solved",
+                  moveHistory: currentHist,
+                  viewMoveIndex: currentHist.length - 1,
+                });
+                return currentHist;
+              });
+            }
+
+            if (!hasWonRef.current && !isReviewMode && !isAlreadyRated && (!puzzle || !ratedPuzzleIds?.has(puzzle.id))) {
               hasWonRef.current = true;
               sendEloResult("win");
             }
@@ -2102,7 +2216,7 @@ export function PuzzleCard({
 
           {/* Solved Celebration Hero Overlay */}
           <AnimatePresence>
-            {status === "solved" && !isReviewing && !isCalibration && (
+            {status === "solved" && !isReviewing && !isCalibration && !isReviewMode && (
               <motion.div
                 initial={{ scale: 0.85, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
@@ -2434,17 +2548,32 @@ export function PuzzleCard({
           className="w-full flex items-center justify-between pt-1 text-[13px] tracking-tight font-medium"
         >
           <div data-testid="puzzle-turn-indicator" className="flex items-center gap-1.5">
-            <span
-              className={`w-2.5 h-2.5 rounded-full ring-1 shadow-sm shrink-0 transition-transform ${
-                boardOrientation === "white"
-                  ? "bg-white ring-neutral-400 shadow-white/30"
-                  : "bg-neutral-900 ring-neutral-600 shadow-black/80"
-              }`}
-            />
-            <span className="font-bold text-[#f5f2eb]">{playerTurnMessage}</span>
-            <span className="text-[#78716c] tabular-nums">
-              • Step {currentStep} of {totalPlayerMoves}
-            </span>
+            {status === "solved" ? (
+              <>
+                <CheckCircle2 className="w-3.5 h-3.5 text-[#10b981] shrink-0 stroke-[2.25]" />
+                <span className="font-bold text-[#10b981]">Solved</span>
+                {isReviewMode && (
+                  <span className="text-[12px] text-[#78716c] font-normal">• Review Mode</span>
+                )}
+              </>
+            ) : (
+              <>
+                <span
+                  className={`w-2.5 h-2.5 rounded-full ring-1 shadow-sm shrink-0 transition-transform ${
+                    boardOrientation === "white"
+                      ? "bg-white ring-neutral-400 shadow-white/30"
+                      : "bg-neutral-900 ring-neutral-600 shadow-black/80"
+                  }`}
+                />
+                <span className="font-bold text-[#f5f2eb]">{playerTurnMessage}</span>
+                <span className="text-[#78716c] tabular-nums">
+                  • Step {currentStep} of {totalPlayerMoves}
+                </span>
+                {isReviewMode && (
+                  <span className="text-[12px] text-[#78716c] font-normal">• Review</span>
+                )}
+              </>
+            )}
           </div>
 
           <div className="flex items-center">

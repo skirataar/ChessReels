@@ -12,6 +12,7 @@ import {
   PuzzleCard,
   PuzzleData,
   PuzzleStatus,
+  SavedPuzzleState,
 } from "@/components/PuzzleCard";
 import { LeaderboardModal } from "@/components/LeaderboardModal";
 import { ProfileModal } from "@/components/ProfileModal";
@@ -39,6 +40,8 @@ const GUEST_ID_KEY = "chess_reel_guest_id";
 const ELO_STORAGE_KEY = "chess_reel_elo";
 const ACCOUNT_STORAGE_KEY = "chess_reel_account";
 const SOLVED_STORAGE_KEY = "chess_reel_solved_ids";
+const RATED_STORAGE_KEY = "chess_reel_rated_puzzle_ids";
+const PUZZLE_STATES_KEY = "chess_reel_puzzle_states";
 
 export interface UserAccount {
   id: string;
@@ -204,6 +207,87 @@ export function PlayView({
     return new Set<string>();
   });
 
+  // Per-puzzle completion state persisted in session state (and synced to solvedPuzzleIds)
+  const [puzzleStates, setPuzzleStates] = useState<Record<string, SavedPuzzleState>>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const raw = window.sessionStorage.getItem(PUZZLE_STATES_KEY);
+        if (raw) return JSON.parse(raw);
+      } catch {}
+    }
+    return {};
+  });
+
+  const puzzleStatesRef = useRef<Record<string, SavedPuzzleState>>(puzzleStates);
+  useEffect(() => {
+    puzzleStatesRef.current = puzzleStates;
+    if (typeof window !== "undefined") {
+      try {
+        window.sessionStorage.setItem(PUZZLE_STATES_KEY, JSON.stringify(puzzleStates));
+      } catch {}
+    }
+  }, [puzzleStates]);
+
+  const handleSavePuzzleState = useCallback((puzzleId: string, state: SavedPuzzleState) => {
+    if (!puzzleId) return;
+    setPuzzleStates((prev) => ({
+      ...prev,
+      [puzzleId]: state,
+    }));
+    if (state.status === "solved") {
+      setSolvedPuzzleIds((prev) => {
+        if (prev.has(puzzleId)) return prev;
+        const next = new Set(prev);
+        next.add(puzzleId);
+        return next;
+      });
+    }
+  }, []);
+
+  const countedQuotaPuzzleIdsRef = useRef<Set<string>>(new Set());
+
+  // Strict idempotency guard: ratedPuzzleIds tracking every puzzle.id that has already triggered an Elo or streak calculation
+  const [ratedPuzzleIds, setRatedPuzzleIds] = useState<Set<string>>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const raw = window.localStorage.getItem(RATED_STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) return new Set(parsed);
+        }
+        const solvedRaw = window.localStorage.getItem(SOLVED_STORAGE_KEY);
+        if (solvedRaw) {
+          const parsed = JSON.parse(solvedRaw);
+          if (Array.isArray(parsed)) return new Set(parsed);
+        }
+      } catch {}
+    }
+    return new Set<string>();
+  });
+
+  const ratedPuzzleIdsRef = useRef<Set<string>>(ratedPuzzleIds);
+  useEffect(() => {
+    ratedPuzzleIdsRef.current = ratedPuzzleIds;
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem(
+          RATED_STORAGE_KEY,
+          JSON.stringify(Array.from(ratedPuzzleIds))
+        );
+      } catch {}
+    }
+  }, [ratedPuzzleIds]);
+
+  const markPuzzleRated = useCallback((puzzleId: string) => {
+    if (!puzzleId) return;
+    setRatedPuzzleIds((prev) => {
+      if (prev.has(puzzleId)) return prev;
+      const next = new Set(prev);
+      next.add(puzzleId);
+      return next;
+    });
+  }, []);
+
   // Puzzle feed queue state & active pointer for bi-directional swiping.
   // Initialized to empty array so no hardcoded placeholder puzzles render before real API puzzles arrive.
   const [queue, setQueue] = useState<PuzzleData[]>([]);
@@ -236,7 +320,7 @@ export function PlayView({
 
   // Account switch detection: tracks previous userId to wipe stale queues and cached state
   const previousUserIdRef = useRef<string | null>(null);
-  const handleEloUpdateRef = useRef<(newElo: number, change: number, isWin?: boolean) => void>(() => {});
+  const handleEloUpdateRef = useRef<(newElo: number, change: number, isWin?: boolean, puzzleId?: string) => void>(() => {});
 
   // Daily streak, solve combo & puzzle totals tracking
   const {
@@ -294,12 +378,19 @@ export function PlayView({
       }
     };
     const handleTestElo = (e: Event) => {
-      const customEvent = e as CustomEvent<{ delta: number; newElo?: number; isWin?: boolean }>;
+      const customEvent = e as CustomEvent<{ delta: number; newElo?: number; isWin?: boolean; puzzleId?: string; bypassGuard?: boolean }>;
       if (customEvent.detail?.delta !== undefined) {
         const delta = customEvent.detail.delta;
         const targetElo = customEvent.detail.newElo ?? (currentEloRef.current + delta);
         const isWin = customEvent.detail.isWin !== undefined ? customEvent.detail.isWin : delta > 0;
-        handleEloUpdateRef.current(targetElo, delta, isWin);
+        const pId = customEvent.detail.puzzleId;
+        if (!customEvent.detail.bypassGuard && pId && ratedPuzzleIdsRef.current.has(pId)) {
+          return;
+        }
+        if (pId) {
+          markPuzzleRated(pId);
+        }
+        handleEloUpdateRef.current(targetElo, delta, isWin, pId);
       }
     };
     window.addEventListener("open-quota-paywall", handleOpenPaywall);
@@ -634,14 +725,31 @@ export function PlayView({
           scheduleFailedPuzzleReinsertion(puzzle, currentIndex);
         }
       } else if (status === "solved") {
-        // Zero mistakes on first attempt -> permanently mark solved for this session
-        if (!failedAttemptPuzzleIdsRef.current.has(puzzle.id)) {
-          setSolvedPuzzleIds((prev) => {
-            const next = new Set(prev);
-            next.add(puzzle.id);
-            return next;
-          });
+        setPuzzleStates((prev) => {
+          if (prev[puzzle.id]?.status === "solved") return prev;
+          return {
+            ...prev,
+            [puzzle.id]: {
+              status: "solved",
+              moveHistory: prev[puzzle.id]?.moveHistory || [],
+              viewMoveIndex: prev[puzzle.id]?.viewMoveIndex || 0,
+            },
+          };
+        });
+
+        // Continuous Ranked Play: consume free tier quota on genuine solve (only once per puzzle ID)
+        if (!isCalibrating && !solvedPuzzleIdsRef.current.has(puzzle.id) && !countedQuotaPuzzleIdsRef.current.has(puzzle.id)) {
+          countedQuotaPuzzleIdsRef.current.add(puzzle.id);
+          recordPuzzlePlayed(true);
         }
+
+        // Permanently mark solved for this session
+        setSolvedPuzzleIds((prev) => {
+          if (prev.has(puzzle.id)) return prev;
+          const next = new Set(prev);
+          next.add(puzzle.id);
+          return next;
+        });
       }
     },
     [queue, currentIndex, scheduleFailedPuzzleReinsertion]
@@ -681,37 +789,26 @@ export function PlayView({
       prefetchPuzzles(elo, 5, targetUserId).catch(() => {});
     }
 
-    // 1. Scan ahead in the active queue for the next valid puzzle that is NOT currentId and NOT already solved
-    let foundUpcomingIndex = -1;
-    for (let i = currentIndex + 1; i < queue.length; i++) {
-      const candidate = queue[i];
-      if (candidate && candidate.id !== currentId && !currentSolved.has(candidate.id)) {
-        foundUpcomingIndex = i;
-        break;
+    // 1. If user previously navigated backward in the feed, advance to the existing next puzzle in history
+    if (currentIndex + 1 < queue.length) {
+      const nextIndex = currentIndex + 1;
+      const nextP = queue[nextIndex];
+      setSlideDirection("next");
+      setCurrentIndex(nextIndex);
+      if (nextP && puzzleStatesRef.current[nextP.id]) {
+        setPuzzleStatus(puzzleStatesRef.current[nextP.id].status);
+      } else {
+        setPuzzleStatus("playing");
       }
-    }
-
-    if (foundUpcomingIndex !== -1) {
-      // If there are duplicate or already solved puzzles between currentIndex and foundUpcomingIndex, collapse them
-      if (foundUpcomingIndex > currentIndex + 1) {
-        const validPuzzle = queue[foundUpcomingIndex];
-        setQueue((prev) => {
-          const nextQ = [...prev];
-          nextQ.splice(currentIndex + 1, foundUpcomingIndex - currentIndex, validPuzzle);
-          return nextQ;
-        });
-      }
-      setCurrentIndex(currentIndex + 1);
-      setPuzzleStatus("playing");
       return;
     }
 
-    // 2. No upcoming valid puzzle in memory; pop from local cache or fetch fresh
+    // 2. No upcoming puzzle in active queue; pop from local cache or fetch fresh
     let nextPuzzle: PuzzleData | null = null;
     while (true) {
       const popped = popNextPuzzle(targetUserId);
       if (!popped) break;
-      if (popped.id !== currentId && !currentSolved.has(popped.id)) {
+      if (popped.id !== currentId && !currentSolved.has(popped.id) && !ratedPuzzleIdsRef.current.has(popped.id)) {
         nextPuzzle = popped;
         break;
       }
@@ -734,7 +831,7 @@ export function PlayView({
         const data = await res.json();
         const arr: PuzzleData[] = Array.isArray(data) ? data : [data];
         const validBatch = arr.filter(
-          (p) => p && p.id !== currentId && !currentSolved.has(p.id)
+          (p) => p && p.id !== currentId && !currentSolved.has(p.id) && !ratedPuzzleIdsRef.current.has(p.id)
         );
 
         if (validBatch.length > 0) {
@@ -766,11 +863,17 @@ export function PlayView({
   // Swipe Down / Previous Puzzle navigation
   const goToPrevPuzzle = useCallback(() => {
     if (currentIndex > 0) {
+      const prevIndex = currentIndex - 1;
+      const prevPuzzle = queue[prevIndex];
       setSlideDirection("prev");
-      setCurrentIndex((prev) => prev - 1);
-      setPuzzleStatus("playing");
+      setCurrentIndex(prevIndex);
+      if (prevPuzzle && puzzleStatesRef.current[prevPuzzle.id]) {
+        setPuzzleStatus(puzzleStatesRef.current[prevPuzzle.id].status);
+      } else {
+        setPuzzleStatus("playing");
+      }
     }
-  }, [currentIndex]);
+  }, [currentIndex, queue]);
 
   // Initial puzzle fetch on mount: wait until user session is loaded
   const initialFetchDoneRef = useRef(false);
@@ -838,7 +941,14 @@ export function PlayView({
   }, [hasMounted, userAccount?.id, canPlay, isPro, isCalibrating, setIsQuotaModalOpen]);
 
   // Handle Elo update and placement test logic
-  const handleEloUpdate = (newElo: number, change: number, isWin?: boolean) => {
+  const handleEloUpdate = (newElo: number, change: number, isWin?: boolean, puzzleId?: string) => {
+    const activeId = puzzleId || currentPuzzle?.id;
+    const isAlreadyRated = Boolean(activeId && ratedPuzzleIdsRef.current.has(activeId) && !isCalibrating);
+
+    if (!isAlreadyRated && activeId) {
+      markPuzzleRated(activeId);
+    }
+
     const won = isWin !== undefined ? isWin : change > 0;
     recordPuzzlePlay(won ? "win" : "loss");
 
@@ -932,8 +1042,14 @@ export function PlayView({
 
     // 2. Continuous Ranked Play: Free Tier Quota (4 puzzles / 4h) and Ads (every 2 puzzles) start HERE
     // Quota and ads ONLY count when the puzzle was actually solved (won)
-    if (won) {
+    if (won && activeId && !isCalibrating && !solvedPuzzleIdsRef.current.has(activeId) && !countedQuotaPuzzleIdsRef.current.has(activeId)) {
+      countedQuotaPuzzleIdsRef.current.add(activeId);
       recordPuzzlePlayed(true);
+    }
+
+    // Strict Elo Idempotency Guard: do not alter Elo or streak if this puzzle was already rated
+    if (isAlreadyRated) {
+      return;
     }
 
     // Standard Continuous Reel Mode
@@ -1372,6 +1488,11 @@ export function PlayView({
               key={`${currentPuzzle.id}-${currentIndex}`}
               puzzle={currentPuzzle}
               status={puzzleStatus}
+              savedState={currentPuzzle ? puzzleStates[currentPuzzle.id] : undefined}
+              onSavePuzzleState={handleSavePuzzleState}
+              isAlreadyRated={currentPuzzle ? ratedPuzzleIds.has(currentPuzzle.id) : false}
+              ratedPuzzleIds={ratedPuzzleIds}
+              onMarkRated={markPuzzleRated}
               currentElo={currentElo}
               guestId={userAccount?.id || guestId}
               streak={dailyStreak}

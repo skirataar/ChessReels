@@ -66,6 +66,30 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(calculated);
     }
 
+    // Strict Backend Idempotency Guard: check if a solve record for (userId, puzzleId) already exists
+    if (puzzleId && targetUserId) {
+      const priorHistory = await prisma.puzzleHistory.findUnique({
+        where: {
+          userId_puzzleId: {
+            userId: targetUserId,
+            puzzleId,
+          },
+        },
+      });
+
+      if (priorHistory) {
+        return NextResponse.json({
+          alreadyRated: true,
+          currentElo: existing.elo,
+          newElo: existing.elo,
+          eloChange: 0,
+          userId: targetUserId,
+          streak: existing.streak ?? 0,
+          peakElo: existing.peakElo ?? 800,
+        });
+      }
+    }
+
     // Record in PuzzleHistory for anti-repetition tracking
     if (puzzleId && targetUserId) {
       await prisma.puzzleHistory
@@ -150,6 +174,7 @@ export async function POST(request: NextRequest) {
       });
 
       return NextResponse.json({
+        alreadyRated: false,
         newElo: updatedUser.elo,
         eloChange,
         expectedScore: Number(E.toFixed(4)),
@@ -164,6 +189,7 @@ export async function POST(request: NextRequest) {
         dbError
       );
       return NextResponse.json({
+        alreadyRated: false,
         newElo,
         eloChange,
         expectedScore: Number(E.toFixed(4)),
