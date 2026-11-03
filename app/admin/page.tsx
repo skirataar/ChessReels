@@ -905,8 +905,9 @@ export default function AdminPage() {
                                   {user.displayName || user.username || "Registered User"}
                                 </span>
                                 {user.plan === "premium" && (
-                                  <span className="p-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-bold">
-                                    👑 PRO
+                                  <span className="p-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-bold flex items-center gap-1">
+                                    <Sparkles className="w-3.5 h-3.5 text-[#c29b78] inline-block shrink-0" strokeWidth={1.5} />
+                                    <span>PRO</span>
                                   </span>
                                 )}
                               </div>
@@ -1027,13 +1028,14 @@ export default function AdminPage() {
                     setUserFilter("pro");
                     setUserPage(1);
                   }}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 flex items-center gap-1 ${
                     userFilter === "pro"
                       ? "bg-amber-400 text-zinc-950"
                       : "bg-zinc-950 text-zinc-400 hover:text-white border border-zinc-800"
                   }`}
                 >
-                  👑 Pro Members
+                  <Sparkles className="w-3.5 h-3.5 text-[#c29b78] inline-block shrink-0" strokeWidth={1.5} />
+                  <span>Pro Members</span>
                 </button>
 
                 <button
@@ -1203,8 +1205,8 @@ export default function AdminPage() {
                               >
                                 {user.plan === "premium" ? (
                                   <>
-                                    <Crown className="w-3 h-3 text-amber-400" />
-                                    <span>👑 PRO MEMBER</span>
+                                    <Sparkles className="w-3.5 h-3.5 text-[#c29b78] inline-block shrink-0" strokeWidth={1.5} />
+                                    <span>PRO MEMBER</span>
                                   </>
                                 ) : (
                                   <span>FREE (ADS)</span>
@@ -1405,7 +1407,7 @@ export default function AdminPage() {
                     <span className="text-xs font-bold text-amber-300 uppercase tracking-wider">
                       Pro Pricing & Annual Discount
                     </span>
-                    <Crown className="w-4 h-4 text-amber-400" />
+                    <Sparkles className="w-3.5 h-3.5 text-[#c29b78] inline-block shrink-0" strokeWidth={1.5} />
                   </div>
                   <p className="text-xs text-zinc-400 mb-4">
                     Monthly billing price and annual plan discount percentage for Pro tier subscribers.

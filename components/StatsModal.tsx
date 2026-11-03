@@ -11,6 +11,7 @@ import {
 import {
   Zap,
   Flame,
+  Snowflake,
   CheckCircle2,
   XCircle,
   BarChart2,
@@ -23,6 +24,7 @@ interface StatsModalProps {
   onClose: () => void;
   currentElo: number;
   dailyStreak: number;
+  streakFreezes?: number;
   combo?: number;
   bestCombo?: number;
   totalSolved: number;
@@ -34,6 +36,7 @@ export function StatsModal({
   onClose,
   currentElo,
   dailyStreak,
+  streakFreezes = 0,
   combo = 0,
   bestCombo = 0,
   totalSolved,
@@ -92,7 +95,17 @@ export function StatsModal({
               <span className="text-[11px] font-semibold text-[#bbcabf] uppercase tracking-wider">
                 Daily Streak
               </span>
-              <Flame className="w-4 h-4 text-[#ffb95f]" />
+              <div className="flex items-center gap-1.5">
+                <div
+                  data-testid="stats-freeze-indicator"
+                  className="flex items-center gap-1 text-xs font-medium text-sky-400/90"
+                  title="Earned every 7-day streak • Protects up to 2 missed days"
+                >
+                  <Snowflake className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.5} />
+                  <span>{streakFreezes}/2</span>
+                </div>
+                <Flame className="w-4 h-4 text-[#ffb95f]" />
+              </div>
             </div>
             <div className="text-xl font-black text-[#ffb95f] tracking-tight">
               {dailyStreak} {dailyStreak === 1 ? "Day" : "Days"}

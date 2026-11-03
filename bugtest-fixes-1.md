@@ -12,4 +12,4 @@
 
 - Also go thru the streaks issue if its fixed, add a streak freeze that freezes max 2 days. and they earn streak freezes by having perfect week streaks
 
-- Remove continue as Guest instances, just have the sign in / Sign Up page, They must create an account to use. 
+- Add a feature that allows you to go back to the swipe up next puzzle, swipe down prev puzzle, also remove the feature of drawing lines on phones keep only on laptop

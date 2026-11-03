@@ -46,6 +46,11 @@ export function BottomNav() {
   const [isLandingShowing, setIsLandingShowing] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [userAccount, setUserAccount] = useState<any>(null);
+  const [avatarError, setAvatarError] = useState<boolean>(false);
+
+  useEffect(() => {
+    setAvatarError(false);
+  }, [userAccount]);
 
   useEffect(() => {
     const handleLandingVisibility = (e: Event) => {
@@ -129,6 +134,11 @@ export function BottomNav() {
       );
       return;
     }
+    if (href === "/stats" && (pathname === "/play" || pathname === "/")) {
+      e.preventDefault();
+      window.dispatchEvent(new Event("open-profile-modal"));
+      return;
+    }
     if (href === "/practice" && !isPro) {
       e.preventDefault();
       window.dispatchEvent(
@@ -153,6 +163,9 @@ export function BottomNav() {
                 (item.href === "/play" && (pathname === "/" || pathname === "/play") && !isSettingsOpen) ||
                 (item.href === "/practice" && pathname === "/practice" && !isSettingsOpen) ||
                 (item.href === "/stats" && (pathname === "/stats" || pathname === "/profile") && !isSettingsOpen);
+
+              const isProfile = item.name === "Profile";
+              const userImage = userAccount?.image || userAccount?.avatarUrl || userAccount?.avatar;
 
               return (
                 <Link
@@ -180,14 +193,31 @@ export function BottomNav() {
                         : "text-[#a3a3a3] hover:text-[#f5f5f5]"
                     }`}
                   >
-                    <div className="relative">
-                      <Icon
-                        className={`w-4 h-4 transition-transform duration-200 ${
-                          isActive
-                            ? "stroke-[2.5] text-[#c29b78] fill-[#c29b78]/20"
-                            : "stroke-[2] text-[#a3a3a3] group-hover:text-[#f5f5f5]"
-                        }`}
-                      />
+                    <div className="relative flex items-center justify-center">
+                      {isProfile ? (
+                        userImage && !avatarError ? (
+                          <img
+                            src={userImage}
+                            alt="Profile"
+                            onError={() => setAvatarError(true)}
+                            className={`w-6 h-6 rounded-full object-cover ${
+                              isActive
+                                ? "ring-1.5 ring-[#c29b78] ring-offset-1 ring-offset-[#0a0908]"
+                                : "opacity-75"
+                            }`}
+                          />
+                        ) : (
+                          <User className="w-5 h-5" strokeWidth={1.5} />
+                        )
+                      ) : (
+                        <Icon
+                          className={`w-4 h-4 transition-transform duration-200 ${
+                            isActive
+                              ? "stroke-[2.5] text-[#c29b78] fill-[#c29b78]/20"
+                              : "stroke-[2] text-[#a3a3a3] group-hover:text-[#f5f5f5]"
+                          }`}
+                        />
+                      )}
                       {hasMounted && item.href === "/practice" && !isPro && (
                         <span
                           data-testid="bottom-nav-practice-lock"

@@ -22,15 +22,16 @@ import { StatsModal } from "@/components/StatsModal";
 import { UserAvatar } from "@/components/UserAvatar";
 import { AdModal } from "@/components/AdModal";
 import { QuotaPaywallModal } from "@/components/QuotaPaywallModal";
-import { popNextPuzzle, prefetchPuzzles } from "@/lib/puzzleCache";
+import { popNextPuzzle, prefetchPuzzles, getStoredQueue } from "@/lib/puzzleCache";
 import { useStreak, resetStreakStats } from "@/lib/useStreak";
 import { useTierQuota } from "@/lib/useTierQuota";
 import { clearGuestLocalSession, isGuestAccount } from "@/lib/guestAccount";
-import { RefreshCw, WifiOff, UserPlus, BarChart2, Trophy, Zap, Flame, Crown, Sparkles, User } from "lucide-react";
+import { RefreshCw, WifiOff, UserPlus, BarChart2, Trophy, Zap, Flame, Crown, Sparkles, User, Snowflake } from "lucide-react";
 
 const GUEST_ID_KEY = "chess_reel_guest_id";
 const ELO_STORAGE_KEY = "chess_reel_elo";
 const ACCOUNT_STORAGE_KEY = "chess_reel_account";
+const SOLVED_STORAGE_KEY = "chess_reel_solved_ids";
 
 export interface UserAccount {
   id: string;
@@ -129,9 +130,40 @@ export function PlayView({
     return 800;
   });
   const [lastEloChange, setLastEloChange] = useState<number | null>(null);
-  const [currentPuzzle, setCurrentPuzzle] = useState<PuzzleData | null>(
-    FALLBACK_PUZZLES[0]
-  );
+
+  // Spaced-repetition: solved puzzle IDs (persisted so zero-mistake solves never re-appear)
+  const [solvedPuzzleIds, setSolvedPuzzleIds] = useState<Set<string>>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const raw = window.localStorage.getItem(SOLVED_STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) return new Set(parsed);
+        }
+      } catch {}
+    }
+    return new Set<string>();
+  });
+
+  // Puzzle feed queue state & active pointer for bi-directional swiping
+  const [queue, setQueue] = useState<PuzzleData[]>(() => {
+    if (typeof window !== "undefined") {
+      const stored = getStoredQueue();
+      if (stored.length > 0) return stored;
+    }
+    return FALLBACK_PUZZLES;
+  });
+  const [currentIndex, setCurrentIndex] = useState<number>(0);
+  const [slideDirection, setSlideDirection] = useState<"next" | "prev">("next");
+
+  // Active puzzle derived from queue and currentIndex
+  const currentPuzzle = queue[currentIndex] || null;
+
+  // Track attempt mistakes: tracks IDs that experienced a mistake during their current attempt
+  const failedAttemptPuzzleIdsRef = useRef<Set<string>>(new Set());
+  // Tracks `${puzzle.id}#${currentIndex}` so failure re-insertion is only scheduled once per attempt
+  const scheduledReinsertionsRef = useRef<Set<string>>(new Set());
+
   const [puzzleStatus, setPuzzleStatus] = useState<PuzzleStatus>("playing");
   const [streak, setStreak] = useState<number>(0);
   const [activeTab, setActiveTab] = useState<"reels" | "rank" | "profile">("reels");
@@ -152,6 +184,8 @@ export function PlayView({
   // Daily streak, solve combo & puzzle totals tracking
   const {
     dailyStreak,
+    streakFreezes,
+    perfectWeekCounter,
     combo,
     bestCombo,
     totalSolved,
@@ -192,11 +226,16 @@ export function PlayView({
       setAuthModalGoogle(false);
       setIsAuthModalOpen(true);
     };
+    const handleOpenProfile = () => {
+      setActiveTab("profile");
+    };
     window.addEventListener("open-quota-paywall", handleOpenPaywall);
     window.addEventListener("open-auth-modal", handleOpenAuth);
+    window.addEventListener("open-profile-modal", handleOpenProfile);
     return () => {
       window.removeEventListener("open-quota-paywall", handleOpenPaywall);
       window.removeEventListener("open-auth-modal", handleOpenAuth);
+      window.removeEventListener("open-profile-modal", handleOpenProfile);
     };
   }, [setIsQuotaModalOpen]);
 
@@ -394,9 +433,112 @@ export function PlayView({
       }
   }, []);
 
-  // Fetch next puzzle: checks local buffer queue first, falls back to API.
-  const fetchNextPuzzle = useCallback(async () => {
-    // If free user has exhausted their quota window, block advance and show paywall (placement test exempt)
+  // Sync solved puzzle IDs to localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem(
+          SOLVED_STORAGE_KEY,
+          JSON.stringify(Array.from(solvedPuzzleIds))
+        );
+      } catch {}
+    }
+  }, [solvedPuzzleIds]);
+
+  // When currentIndex changes, prepare fresh mistake tracking for this puzzle
+  useEffect(() => {
+    const p = queue[currentIndex];
+    if (p) {
+      failedAttemptPuzzleIdsRef.current.delete(p.id);
+    }
+  }, [currentIndex, queue]);
+
+  // Spaced-Repetition: Schedule clean reset copy of failed puzzle at offset = 10 + floor(rand * 5)
+  const scheduleFailedPuzzleReinsertion = useCallback(
+    async (failedPuzzle: PuzzleData, fromIndex: number) => {
+      const offset = 10 + Math.floor(Math.random() * 5); // 10..14
+      const cleanResetCopy: PuzzleData = { ...failedPuzzle };
+      const currentGap = queue.length - fromIndex;
+
+      if (currentGap <= 10) {
+        try {
+          const elo = currentEloRef.current;
+          const targetUserId = userAccount?.id || guestId;
+          const userParam = targetUserId ? `&userId=${encodeURIComponent(targetUserId)}` : "";
+          const needed = Math.max(10, fromIndex + offset + 2 - queue.length);
+          const fetchCount = Math.min(10, Math.max(5, needed));
+
+          const res = await fetch(`/api/puzzle/random?elo=${elo}&count=${fetchCount}${userParam}`);
+          let newBatch: PuzzleData[] = [];
+          if (res.ok) {
+            const data = await res.json();
+            const arr: PuzzleData[] = Array.isArray(data) ? data : [data];
+            newBatch = arr.filter((p) => p && !solvedPuzzleIds.has(p.id));
+          }
+
+          if (newBatch.length === 0) {
+            newBatch = FALLBACK_PUZZLES.filter((p) => !solvedPuzzleIds.has(p.id));
+          }
+
+          setQueue((prevQueue) => {
+            const extended = [...prevQueue, ...newBatch];
+            const insertIndex = Math.min(fromIndex + offset, extended.length);
+            const updated = [...extended];
+            updated.splice(insertIndex, 0, cleanResetCopy);
+            return updated;
+          });
+        } catch {
+          setQueue((prevQueue) => {
+            const extended = [...prevQueue, ...FALLBACK_PUZZLES];
+            const insertIndex = Math.min(fromIndex + offset, extended.length);
+            const updated = [...extended];
+            updated.splice(insertIndex, 0, cleanResetCopy);
+            return updated;
+          });
+        }
+      } else {
+        setQueue((prevQueue) => {
+          const insertIndex = Math.min(fromIndex + offset, prevQueue.length);
+          const updated = [...prevQueue];
+          updated.splice(insertIndex, 0, cleanResetCopy);
+          return updated;
+        });
+      }
+    },
+    [queue.length, userAccount?.id, guestId, solvedPuzzleIds]
+  );
+
+  // Status Change Handler with Solved & Failed Rules
+  const handleStatusChange = useCallback(
+    (status: PuzzleStatus) => {
+      setPuzzleStatus(status);
+      const puzzle = queue[currentIndex];
+      if (!puzzle) return;
+
+      if (status === "failed") {
+        const attemptKey = `${puzzle.id}#${currentIndex}`;
+        failedAttemptPuzzleIdsRef.current.add(puzzle.id);
+
+        if (!scheduledReinsertionsRef.current.has(attemptKey)) {
+          scheduledReinsertionsRef.current.add(attemptKey);
+          scheduleFailedPuzzleReinsertion(puzzle, currentIndex);
+        }
+      } else if (status === "solved") {
+        // Zero mistakes on first attempt -> permanently mark solved for this session
+        if (!failedAttemptPuzzleIdsRef.current.has(puzzle.id)) {
+          setSolvedPuzzleIds((prev) => {
+            const next = new Set(prev);
+            next.add(puzzle.id);
+            return next;
+          });
+        }
+      }
+    },
+    [queue, currentIndex, scheduleFailedPuzzleReinsertion]
+  );
+
+  // Swipe Up / Next Puzzle navigation
+  const goToNextPuzzle = useCallback(async () => {
     if (!canPlay && !isPro && !isCalibrating) {
       if (!currentPuzzle) {
         const lastSolvedRaw =
@@ -405,12 +547,16 @@ export function PlayView({
             : null;
         if (lastSolvedRaw) {
           try {
-            setCurrentPuzzle(JSON.parse(lastSolvedRaw));
+            const p = JSON.parse(lastSolvedRaw);
+            setQueue((prev) => [p, ...prev]);
+            setCurrentIndex(0);
           } catch {
-            setCurrentPuzzle(FALLBACK_PUZZLES[0]);
+            setQueue([FALLBACK_PUZZLES[0]]);
+            setCurrentIndex(0);
           }
         } else {
-          setCurrentPuzzle(FALLBACK_PUZZLES[0]);
+          setQueue([FALLBACK_PUZZLES[0]]);
+          setCurrentIndex(0);
         }
       }
       setPuzzleStatus("solved");
@@ -419,45 +565,70 @@ export function PlayView({
       return;
     }
 
-    setPuzzleStatus("loading");
-    const elo = currentEloRef.current;
-    const targetUserId = userAccount?.id || guestId;
+    setSlideDirection("next");
+    const nextIndex = currentIndex + 1;
 
-    // 1. Check local prefetch queue (Offline buffer)
-    const cachedPuzzle = popNextPuzzle();
-    if (cachedPuzzle) {
-      setCurrentPuzzle(cachedPuzzle);
-      setPuzzleStatus("playing");
+    // Buffer management: prefetch & pull ahead when within 3 puzzles of queue end
+    if (nextIndex >= queue.length - 3) {
+      const elo = currentEloRef.current;
+      const targetUserId = userAccount?.id || guestId;
       prefetchPuzzles(elo, 5, targetUserId).catch(() => {});
-      return;
+
+      const cached = popNextPuzzle();
+      if (cached && !solvedPuzzleIds.has(cached.id)) {
+        setQueue((prev) => [...prev, cached]);
+      }
     }
 
-    // 2. If queue is empty, fetch directly from API
-    try {
-      const userParam = targetUserId ? `&userId=${encodeURIComponent(targetUserId)}` : "";
-      const res = await fetch(`/api/puzzle/random?elo=${elo}${userParam}`);
-      if (res.ok) {
-        const data = (await res.json()) as PuzzleData;
-        setCurrentPuzzle(data);
-        setPuzzleStatus("playing");
-        prefetchPuzzles(elo, 5, targetUserId).catch(() => {});
-      } else {
-        console.warn("No puzzle returned from API, using curated fallback.");
-        const fallback =
-          FALLBACK_PUZZLES[fallbackIndexRef.current % FALLBACK_PUZZLES.length];
-        fallbackIndexRef.current += 1;
-        setCurrentPuzzle(fallback);
-        setPuzzleStatus("playing");
-      }
-    } catch (err) {
-      console.error("Failed to fetch next puzzle from API:", err);
+    if (nextIndex < queue.length) {
+      setCurrentIndex(nextIndex);
+      setPuzzleStatus("playing");
+    } else {
+      setPuzzleStatus("loading");
+      try {
+        const elo = currentEloRef.current;
+        const targetUserId = userAccount?.id || guestId;
+        const userParam = targetUserId ? `&userId=${encodeURIComponent(targetUserId)}` : "";
+        const res = await fetch(`/api/puzzle/random?elo=${elo}${userParam}`);
+        if (res.ok) {
+          const data = (await res.json()) as PuzzleData;
+          if (data && !solvedPuzzleIds.has(data.id)) {
+            setQueue((prev) => [...prev, data]);
+            setCurrentIndex(nextIndex);
+            setPuzzleStatus("playing");
+            return;
+          }
+        }
+      } catch {}
+
       const fallback =
         FALLBACK_PUZZLES[fallbackIndexRef.current % FALLBACK_PUZZLES.length];
       fallbackIndexRef.current += 1;
-      setCurrentPuzzle(fallback);
+      setQueue((prev) => [...prev, fallback]);
+      setCurrentIndex(nextIndex);
       setPuzzleStatus("playing");
     }
-  }, [userAccount?.id, guestId, canPlay, isPro, isCalibrating, setIsQuotaModalOpen]);
+  }, [
+    canPlay,
+    isPro,
+    isCalibrating,
+    currentPuzzle,
+    currentIndex,
+    queue.length,
+    userAccount?.id,
+    guestId,
+    solvedPuzzleIds,
+    setIsQuotaModalOpen,
+  ]);
+
+  // Swipe Down / Previous Puzzle navigation
+  const goToPrevPuzzle = useCallback(() => {
+    if (currentIndex > 0) {
+      setSlideDirection("prev");
+      setCurrentIndex((prev) => prev - 1);
+      setPuzzleStatus("playing");
+    }
+  }, [currentIndex]);
 
   // Initial puzzle fetch on mount
   const initialFetchDoneRef = useRef(false);
@@ -465,8 +636,35 @@ export function PlayView({
     if (canPlay || isPro || isCalibrating) {
       if (!initialFetchDoneRef.current) {
         initialFetchDoneRef.current = true;
-        fetchNextPuzzle();
-        prefetchPuzzles(currentEloRef.current, 5, userAccount?.id || guestId).catch(() => {});
+        const elo = currentEloRef.current;
+        const targetUserId = userAccount?.id || guestId;
+        const userParam = targetUserId ? `&userId=${encodeURIComponent(targetUserId)}` : "";
+
+        // Check local prefetch buffer first
+        const cached = popNextPuzzle();
+        if (cached && !solvedPuzzleIds.has(cached.id)) {
+          setQueue([cached]);
+          setCurrentIndex(0);
+          setPuzzleStatus("playing");
+          prefetchPuzzles(elo, 5, targetUserId).catch(() => {});
+          return;
+        }
+
+        fetch(`/api/puzzle/random?elo=${elo}&count=5${userParam}`)
+          .then((res) => (res.ok ? res.json() : null))
+          .then((data) => {
+            if (data) {
+              const arr: PuzzleData[] = Array.isArray(data) ? data : [data];
+              const filtered = arr.filter((p) => p && !solvedPuzzleIds.has(p.id));
+              if (filtered.length > 0) {
+                setQueue(filtered);
+                setCurrentIndex(0);
+                setPuzzleStatus("playing");
+              }
+            }
+          })
+          .catch(() => {});
+        prefetchPuzzles(elo, 5, targetUserId).catch(() => {});
       }
     } else {
       // Free user paywalled on mount/refresh: show previous solved puzzle and do not advance
@@ -477,19 +675,23 @@ export function PlayView({
             : null;
         if (lastSolvedRaw) {
           try {
-            setCurrentPuzzle(JSON.parse(lastSolvedRaw));
+            const p = JSON.parse(lastSolvedRaw);
+            setQueue([p]);
+            setCurrentIndex(0);
           } catch {
-            setCurrentPuzzle(FALLBACK_PUZZLES[0]);
+            setQueue([FALLBACK_PUZZLES[0]]);
+            setCurrentIndex(0);
           }
         } else {
-          setCurrentPuzzle(FALLBACK_PUZZLES[0]);
+          setQueue([FALLBACK_PUZZLES[0]]);
+          setCurrentIndex(0);
         }
         setPuzzleStatus("solved");
         setPaywallReason("quota");
         setIsQuotaModalOpen(true);
       }
     }
-  }, [fetchNextPuzzle, userAccount?.id, guestId, canPlay, isPro, isCalibrating]);
+  }, [userAccount?.id, guestId, canPlay, isPro, isCalibrating, solvedPuzzleIds, setIsQuotaModalOpen]);
 
   // Handle Elo update and placement test logic
   const handleEloUpdate = (newElo: number, change: number, isWin?: boolean) => {
@@ -580,7 +782,7 @@ export function PlayView({
         } catch {}
       }
 
-      fetchNextPuzzle();
+      goToNextPuzzle();
       return;
     }
 
@@ -617,6 +819,7 @@ export function PlayView({
     setCurrentElo(800);
     setStreak(0);
     setLastEloChange(null);
+    setCurrentIndex(0);
     try {
       if (typeof window !== "undefined") {
         window.localStorage.setItem(ELO_STORAGE_KEY, "800");
@@ -642,7 +845,21 @@ export function PlayView({
         }
       }
     } catch {}
-    fetchNextPuzzle();
+    setQueue(FALLBACK_PUZZLES);
+    setPuzzleStatus("playing");
+    fetch(`/api/puzzle/random?elo=800&count=5`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data) {
+          const arr: PuzzleData[] = Array.isArray(data) ? data : [data];
+          const filtered = arr.filter((p) => p && !solvedPuzzleIds.has(p.id));
+          if (filtered.length > 0) {
+            setQueue(filtered);
+            setCurrentIndex(0);
+          }
+        }
+      })
+      .catch(() => {});
   };
 
   // Handle successful account creation or sign-in
@@ -677,7 +894,20 @@ export function PlayView({
 
     setIsQuotaModalOpen(false);
     setPuzzleStatus("playing");
-    fetchNextPuzzle();
+    setCurrentIndex(0);
+    fetch(`/api/puzzle/random?elo=${user.elo || 800}&count=5&userId=${encodeURIComponent(user.id)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data) {
+          const arr: PuzzleData[] = Array.isArray(data) ? data : [data];
+          const filtered = arr.filter((p) => p && !solvedPuzzleIds.has(p.id));
+          if (filtered.length > 0) {
+            setQueue(filtered);
+            setCurrentIndex(0);
+          }
+        }
+      })
+      .catch(() => {});
   };
 
   // Sign out handler
@@ -697,6 +927,7 @@ export function PlayView({
         window.localStorage.removeItem("chess_reel_best_streak");
         window.localStorage.removeItem("chess_reel_user_elo");
         window.localStorage.removeItem("chess_reel_elo");
+        window.localStorage.removeItem(SOLVED_STORAGE_KEY);
         window.localStorage.removeItem("chess_reel_tier_session");
         window.localStorage.removeItem("chess_reel_tier_session_guest");
         if (oldUserId) {
@@ -710,6 +941,9 @@ export function PlayView({
         window.dispatchEvent(new Event("tier-session-updated"));
       }
     } catch {}
+    setSolvedPuzzleIds(new Set());
+    setQueue(FALLBACK_PUZZLES);
+    setCurrentIndex(0);
     setActiveTab("reels");
     router.push("/");
   };
@@ -857,6 +1091,17 @@ export function PlayView({
               <span suppressHydrationWarning>{dailyStreak}</span>
             </div>
 
+            {/* Streak Freeze Badge */}
+            <div
+              data-testid="header-freeze-indicator"
+              suppressHydrationWarning
+              className="flex items-center gap-1 text-xs font-medium text-sky-400/90 cursor-help"
+              title="Earned every 7-day streak • Protects up to 2 missed days"
+            >
+              <Snowflake className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.5} />
+              <span suppressHydrationWarning>{streakFreezes}/2</span>
+            </div>
+
             {/* Flush Solve Combo */}
             {hasMounted && combo >= 2 && (
               <div
@@ -886,11 +1131,12 @@ export function PlayView({
             ) : isPro ? (
               <div
                 suppressHydrationWarning
-                className="flex items-center gap-1 text-[11px] font-black text-amber-300"
+                className="flex items-center gap-1 text-[11px] font-black text-[#c29b78]"
                 title="Pro Member: Unlimited Puzzles & 0 Ads"
                 data-testid="header-pro-badge"
               >
-                <span>👑 PRO</span>
+                <Sparkles className="w-3.5 h-3.5 text-[#c29b78] inline-block shrink-0" strokeWidth={1.5} />
+                <span>PRO</span>
               </div>
             ) : isCalibrating ? (
               <div
@@ -929,21 +1175,6 @@ export function PlayView({
               title="Global Standings & Friends"
             >
               <Trophy className="w-3.5 h-3.5" />
-            </button>
-
-            {/* Profile & Settings Button */}
-            <button
-              onClick={() => setActiveTab("profile")}
-              aria-label="User profile and settings"
-              data-testid="header-profile-btn"
-              className="w-7 h-7 rounded-full hover:ring-1 hover:ring-[#c29b78]/50 flex items-center justify-center text-[#a3a3a3] hover:text-[#c29b78] transition-all cursor-pointer overflow-hidden border border-white/10"
-              title="Profile & Settings"
-            >
-              <UserAvatar
-                avatar={userAccount?.avatar}
-                fallback="♟"
-                className="w-full h-full flex items-center justify-center text-xs font-bold bg-[#22201e]"
-              />
             </button>
           </div>
         </div>
@@ -1050,14 +1281,14 @@ export function PlayView({
                     }}
                     className="px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-amber-400 to-[#c29b78] hover:from-amber-300 hover:to-[#dfba94] text-zinc-950 text-[10px] font-black uppercase tracking-wider shrink-0 flex items-center gap-1 shadow-sm cursor-pointer"
                   >
-                    <Crown className="w-3 h-3 text-zinc-950" />
+                    <Sparkles className="w-3.5 h-3.5 text-[#c29b78] inline-block shrink-0" strokeWidth={1.5} />
                     <span>Pro</span>
                   </button>
                 </div>
               </div>
             )}
             <PuzzleCard
-              key={currentPuzzle.id}
+              key={`${currentPuzzle.id}-${currentIndex}`}
               puzzle={currentPuzzle}
               status={puzzleStatus}
               currentElo={currentElo}
@@ -1071,6 +1302,8 @@ export function PlayView({
               calibrationStep={currentCalibrationStep}
               mode="ranked"
               isPro={isPro}
+              canGoPrev={currentIndex > 0}
+              slideDirection={slideDirection}
               onModeChange={(m) => {
                 if (m === "practice") {
                   if (!isPro) {
@@ -1081,9 +1314,10 @@ export function PlayView({
                   }
                 }
               }}
-              onStatusChange={setPuzzleStatus}
+              onStatusChange={handleStatusChange}
               onEloUpdate={handleEloUpdate}
-              onNextPuzzle={fetchNextPuzzle}
+              onNextPuzzle={goToNextPuzzle}
+              onPrevPuzzle={goToPrevPuzzle}
               onOpenStats={() => setIsStatsModalOpen(true)}
             />
           </div>
@@ -1107,6 +1341,7 @@ export function PlayView({
         currentElo={currentElo}
         streak={dailyStreak}
         dailyStreak={dailyStreak}
+        streakFreezes={streakFreezes}
         solveStreak={combo}
         guestId={guestId}
         userAccount={userAccount}
@@ -1144,6 +1379,7 @@ export function PlayView({
         onClose={() => setIsStatsModalOpen(false)}
         currentElo={currentElo}
         dailyStreak={dailyStreak}
+        streakFreezes={streakFreezes}
         combo={combo}
         bestCombo={bestCombo}
         totalSolved={totalSolved}
@@ -1160,7 +1396,7 @@ export function PlayView({
             setPaywallReason("quota");
             setIsQuotaModalOpen(true);
           } else {
-            fetchNextPuzzle();
+            goToNextPuzzle();
           }
         }}
         onUpgradeToPro={upgradeToPro}
@@ -1181,24 +1417,28 @@ export function PlayView({
                   : null;
               if (lastSolvedRaw) {
                 try {
-                  setCurrentPuzzle(JSON.parse(lastSolvedRaw));
+                  const p = JSON.parse(lastSolvedRaw);
+                  setQueue((prev) => [p, ...prev]);
+                  setCurrentIndex(0);
                 } catch {
-                  setCurrentPuzzle(FALLBACK_PUZZLES[0]);
+                  setQueue([FALLBACK_PUZZLES[0]]);
+                  setCurrentIndex(0);
                 }
               } else {
-                setCurrentPuzzle(FALLBACK_PUZZLES[0]);
+                setQueue([FALLBACK_PUZZLES[0]]);
+                setCurrentIndex(0);
               }
             }
           } else {
             setPuzzleStatus("playing");
-            fetchNextPuzzle();
+            goToNextPuzzle();
           }
         }}
         onUpgradeToPro={async () => {
           await upgradeToPro();
           setIsQuotaModalOpen(false);
           setPuzzleStatus("playing");
-          fetchNextPuzzle();
+          goToNextPuzzle();
         }}
         resetsInMs={resetsInMs}
         limit={windowLimit}

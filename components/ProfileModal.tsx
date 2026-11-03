@@ -27,11 +27,14 @@ import {
   EyeOff,
   AlertCircle,
   Play,
+  ArrowLeft,
+  Snowflake,
 } from "lucide-react";
 import { sounds } from "@/lib/audio";
 import { getTier } from "./LeaderboardModal";
 import { UserAvatar } from "@/components/UserAvatar";
 import { CURATED_AVATARS, compressImageFile, persistAvatar } from "@/lib/avatarUpload";
+import { PuzzleCard, PuzzleData, PuzzleStatus } from "@/components/PuzzleCard";
 
 export interface ProfileModalProps {
   isOpen: boolean;
@@ -39,6 +42,7 @@ export interface ProfileModalProps {
   currentElo: number;
   streak: number;
   dailyStreak?: number;
+  streakFreezes?: number;
   solveStreak?: number;
   guestId: string;
   userAccount?: {
@@ -64,6 +68,7 @@ export function ProfileModal({
   currentElo,
   streak,
   dailyStreak = 0,
+  streakFreezes = 0,
   solveStreak = 0,
   guestId,
   userAccount,
@@ -74,6 +79,10 @@ export function ProfileModal({
 }: ProfileModalProps) {
   const [activeTab, setActiveTab] = useState<"profile" | "saved">("profile");
   const [bookmarks, setBookmarks] = useState<string[]>([]);
+  const [activeSavedPuzzle, setActiveSavedPuzzle] = useState<PuzzleData | null>(null);
+  const [savedPuzzleStatus, setSavedPuzzleStatus] = useState<PuzzleStatus>("playing");
+  const [savedPuzzlesMap, setSavedPuzzlesMap] = useState<Record<string, PuzzleData>>({});
+  const [, setLoadingPuzzleId] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [showResetConfirm, setShowResetConfirm] = useState<boolean>(false);
   const [peakElo, setPeakElo] = useState<number>(currentElo);
@@ -98,6 +107,13 @@ export function ProfileModal({
   const getBookmarkStorageKey = () => {
     return userAccount?.id ? `chess_reel_bookmarks_${userAccount.id}` : "chess_reel_bookmarks";
   };
+
+  useEffect(() => {
+    if (!isOpen) {
+      setActiveSavedPuzzle(null);
+      setSavedPuzzleStatus("playing");
+    }
+  }, [isOpen]);
 
   // Sync isolated account data strictly for the currently authenticated user
   useEffect(() => {
@@ -138,12 +154,119 @@ export function ProfileModal({
         setBookmarks([]);
       }
 
+      // 6. Per-user saved full puzzles
+      const pKey = userAccount?.id ? `chess_reel_saved_puzzles_${userAccount.id}` : "chess_reel_saved_puzzles";
+      let rawSaved = window.localStorage.getItem(pKey);
+      if (!rawSaved && userAccount?.id) {
+        const legacySaved = window.localStorage.getItem("chess_reel_saved_puzzles");
+        if (legacySaved) {
+          rawSaved = legacySaved;
+          window.localStorage.setItem(pKey, legacySaved);
+        }
+      }
+      if (rawSaved) {
+        try {
+          setSavedPuzzlesMap(JSON.parse(rawSaved));
+        } catch {
+          setSavedPuzzlesMap({});
+        }
+      } else {
+        setSavedPuzzlesMap({});
+      }
+
       // Mute state
       setIsMuted(sounds.getIsMuted());
     } catch (e) {
       console.warn("Error accessing profile data:", e);
     }
   }, [isOpen, currentElo, streak, userAccount]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleBookmarksUpdate = () => {
+      try {
+        const bKey = getBookmarkStorageKey();
+        const raw = window.localStorage.getItem(bKey) || window.localStorage.getItem("chess_reel_bookmarks");
+        if (raw) setBookmarks(JSON.parse(raw));
+
+        const pKey = userAccount?.id ? `chess_reel_saved_puzzles_${userAccount.id}` : "chess_reel_saved_puzzles";
+        const pRaw = window.localStorage.getItem(pKey) || window.localStorage.getItem("chess_reel_saved_puzzles");
+        if (pRaw) setSavedPuzzlesMap(JSON.parse(pRaw));
+      } catch {}
+    };
+    window.addEventListener("bookmarks-updated", handleBookmarksUpdate);
+    return () => window.removeEventListener("bookmarks-updated", handleBookmarksUpdate);
+  }, [userAccount?.id]);
+
+  const openSavedPuzzle = async (puzzleOrId: PuzzleData | string) => {
+    if (typeof puzzleOrId === "object" && puzzleOrId && puzzleOrId.fen && puzzleOrId.moves) {
+      setActiveSavedPuzzle(puzzleOrId);
+      setSavedPuzzleStatus("playing");
+      return;
+    }
+
+    const puzzleId = typeof puzzleOrId === "string" ? puzzleOrId : (puzzleOrId as any)?.id;
+    if (!puzzleId) return;
+
+    if (savedPuzzlesMap[puzzleId] && savedPuzzlesMap[puzzleId].fen && savedPuzzlesMap[puzzleId].moves) {
+      setActiveSavedPuzzle(savedPuzzlesMap[puzzleId]);
+      setSavedPuzzleStatus("playing");
+      return;
+    }
+
+    setLoadingPuzzleId(puzzleId);
+    try {
+      const res = await fetch(`/api/puzzle/random?id=${encodeURIComponent(puzzleId)}`);
+      if (res.ok) {
+        const data = await res.json();
+        const loadedPuzzle = data.puzzle || data;
+        if (loadedPuzzle && loadedPuzzle.fen && loadedPuzzle.moves) {
+          setActiveSavedPuzzle(loadedPuzzle);
+          setSavedPuzzleStatus("playing");
+          const nextMap = { ...savedPuzzlesMap, [puzzleId]: loadedPuzzle };
+          setSavedPuzzlesMap(nextMap);
+          const pKey = userAccount?.id ? `chess_reel_saved_puzzles_${userAccount.id}` : "chess_reel_saved_puzzles";
+          window.localStorage.setItem(pKey, JSON.stringify(nextMap));
+          window.localStorage.setItem("chess_reel_saved_puzzles", JSON.stringify(nextMap));
+          setLoadingPuzzleId(null);
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to load puzzle from API:", e);
+    }
+
+    // Fallback to Lichess public API
+    try {
+      const lichessRes = await fetch(`https://lichess.org/api/puzzle/${puzzleId}`);
+      if (lichessRes.ok) {
+        const data = await lichessRes.json();
+        const lichessPuzzle: PuzzleData = {
+          id: data.puzzle.id,
+          fen: data.game.fen,
+          moves: data.puzzle.solution.join(" "),
+          rating: data.puzzle.rating,
+          ratingDeviation: 0,
+          popularity: 100,
+          nbPlays: data.puzzle.plays || 1000,
+          themes: (data.puzzle.themes || []).join(" "),
+          gameUrl: `https://lichess.org/${data.game.id}`,
+          openingTags: "",
+        };
+        setActiveSavedPuzzle(lichessPuzzle);
+        setSavedPuzzleStatus("playing");
+        const nextMap = { ...savedPuzzlesMap, [puzzleId]: lichessPuzzle };
+        setSavedPuzzlesMap(nextMap);
+        const pKey = userAccount?.id ? `chess_reel_saved_puzzles_${userAccount.id}` : "chess_reel_saved_puzzles";
+        window.localStorage.setItem(pKey, JSON.stringify(nextMap));
+        window.localStorage.setItem("chess_reel_saved_puzzles", JSON.stringify(nextMap));
+      }
+    } catch (e) {
+      console.warn("Failed to load from lichess:", e);
+    } finally {
+      setLoadingPuzzleId(null);
+    }
+  };
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -187,6 +310,19 @@ export function ProfileModal({
         const bKey = getBookmarkStorageKey();
         window.localStorage.setItem(bKey, JSON.stringify(updated));
         window.localStorage.setItem("chess_reel_bookmarks", JSON.stringify(updated));
+
+        const pKey = userAccount?.id ? `chess_reel_saved_puzzles_${userAccount.id}` : "chess_reel_saved_puzzles";
+        const rawSaved = window.localStorage.getItem(pKey) || window.localStorage.getItem("chess_reel_saved_puzzles");
+        if (rawSaved) {
+          try {
+            const map = JSON.parse(rawSaved);
+            delete map[idToRemove];
+            window.localStorage.setItem(pKey, JSON.stringify(map));
+            window.localStorage.setItem("chess_reel_saved_puzzles", JSON.stringify(map));
+            setSavedPuzzlesMap(map);
+          } catch {}
+        }
+
         window.dispatchEvent(new Event("bookmarks-updated"));
       }
     } catch (e) {
@@ -267,12 +403,73 @@ export function ProfileModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
       <div
-        className="w-full max-w-md max-h-[92vh] flex flex-col rounded-2xl bg-[#151413] border border-white/10 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 text-[#f5f5f5]"
+        className={`w-full ${
+          activeSavedPuzzle ? "max-w-md h-[92vh]" : "max-w-md max-h-[92vh]"
+        } flex flex-col rounded-2xl bg-[#151413] border border-white/10 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 text-[#f5f5f5]`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="profile-title"
       >
-        {/* Header */}
+        {activeSavedPuzzle ? (
+          <div className="flex flex-col h-full w-full overflow-y-auto">
+            {/* Top-left "← Back to Saved" header bar */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-[#22201e] shrink-0 sticky top-0 z-30">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveSavedPuzzle(null);
+                  setSavedPuzzleStatus("playing");
+                }}
+                data-testid="back-to-saved-btn"
+                className="flex items-center gap-1.5 text-xs font-semibold text-[#c29b78] hover:text-[#d4b08f] transition-colors cursor-pointer py-1.5 px-2 rounded-lg hover:bg-white/5 active:scale-95"
+              >
+                <ArrowLeft className="w-4 h-4 shrink-0" />
+                <span>← Back to Saved</span>
+              </button>
+
+              <div className="text-xs text-[#a3a3a3] font-mono flex items-center gap-2">
+                <span className="text-white font-semibold">#{activeSavedPuzzle.id}</span>
+                <span>•</span>
+                <span>{activeSavedPuzzle.rating} Elo</span>
+              </div>
+
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close profile"
+                className="w-7 h-7 rounded-full flex items-center justify-center text-[#a3a3a3] hover:text-[#f5f5f5] bg-[#1a1918] hover:bg-[#2d2a28] transition-colors cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* In-App Interactive Chessboard Reel/Modal View */}
+            <div className="p-2 sm:p-4 flex-1 flex flex-col items-center justify-center">
+              <PuzzleCard
+                key={`saved-${activeSavedPuzzle.id}`}
+                puzzle={activeSavedPuzzle}
+                status={savedPuzzleStatus}
+                currentElo={currentElo}
+                guestId={userAccount?.id || guestId}
+                streak={streak}
+                lastEloChange={null}
+                mode="practice"
+                isPro={true}
+                canPlay={true}
+                onStatusChange={(status) => {
+                  setSavedPuzzleStatus(status);
+                }}
+                onEloUpdate={() => {}}
+                onNextPuzzle={() => {
+                  setActiveSavedPuzzle(null);
+                  setSavedPuzzleStatus("playing");
+                }}
+              />
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Header */}
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/10 bg-[#22201e]/90 backdrop-blur-sm shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-[#c29b78]/15 border border-[#c29b78]/30 flex items-center justify-center text-[#c29b78]">
@@ -360,46 +557,68 @@ export function ProfileModal({
               </div>
             ) : (
               <div className="space-y-2">
-                {bookmarks.map((puzzleId, index) => (
-                  <div
-                    key={puzzleId}
-                    className="flex items-center justify-between p-3 rounded-xl bg-[#201e1d] border border-white/10 hover:border-[#c29b78]/40 transition-all shadow-sm group"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-8 h-8 rounded-lg bg-[#c29b78]/15 border border-[#c29b78]/30 flex items-center justify-center text-[#c29b78] font-mono font-bold text-xs shrink-0">
-                        #{index + 1}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="text-xs font-bold text-white font-mono flex items-center gap-1.5">
-                          <span>Puzzle #{puzzleId}</span>
+                {bookmarks.map((puzzleId, index) => {
+                  const pData = savedPuzzlesMap[puzzleId];
+                  return (
+                    <div
+                      key={puzzleId}
+                      data-testid={`saved-puzzle-${puzzleId}`}
+                      onClick={() => openSavedPuzzle(pData || puzzleId)}
+                      className="flex items-center justify-between p-3 rounded-xl bg-[#201e1d] border border-white/10 hover:border-[#c29b78]/40 active:scale-[0.99] transition-all shadow-sm group cursor-pointer"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-8 h-8 rounded-lg bg-[#c29b78]/15 border border-[#c29b78]/30 flex items-center justify-center text-[#c29b78] font-mono font-bold text-xs shrink-0 group-hover:bg-[#c29b78]/25 transition-colors">
+                          #{index + 1}
                         </div>
-                        <p className="text-[10px] text-[#a3a3a3] truncate">
-                          Tactical checkmate &amp; combination pattern
-                        </p>
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold text-white font-mono flex items-center gap-1.5">
+                            <span>Puzzle #{puzzleId}</span>
+                            {pData?.rating && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-[#c29b78] border border-white/10 font-sans">
+                                {pData.rating} Elo
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-[#a3a3a3] truncate">
+                            {pData?.themes
+                              ? pData.themes.split(" ").slice(0, 3).join(", ")
+                              : "Tactical checkmate & combination pattern"}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => openSavedPuzzle(pData || puzzleId)}
+                          title="Play saved puzzle"
+                          className="p-2 rounded-lg text-[#c29b78] hover:text-[#d4af37] hover:bg-white/5 transition-colors cursor-pointer flex items-center gap-1 text-xs font-semibold"
+                        >
+                          <Play className="w-3.5 h-3.5 fill-[#c29b78]" />
+                          <span className="hidden sm:inline text-[11px]">Play</span>
+                        </button>
+                        <a
+                          href={`https://lichess.org/training/${puzzleId}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          title="Analyze on Lichess"
+                          className="p-2 rounded-lg text-[#a3a3a3] hover:text-[#c29b78] hover:bg-white/5 transition-colors cursor-pointer flex items-center gap-1 text-xs font-semibold"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline text-[11px]">Analyze</span>
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveBookmark(puzzleId)}
+                          title="Remove bookmark"
+                          className="p-2 rounded-lg text-[#a3a3a3] hover:text-red-400 hover:bg-white/5 transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </div>
-
-                    <div className="flex items-center gap-1 shrink-0">
-                      <a
-                        href={`https://lichess.org/training/${puzzleId}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        title="Analyze on Lichess"
-                        className="p-2 rounded-lg text-[#a3a3a3] hover:text-[#c29b78] hover:bg-white/5 transition-colors cursor-pointer flex items-center gap-1 text-xs font-semibold"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline text-[11px]">Analyze</span>
-                      </a>
-                      <button
-                        onClick={() => handleRemoveBookmark(puzzleId)}
-                        title="Remove bookmark"
-                        className="p-2 rounded-lg text-[#a3a3a3] hover:text-red-400 hover:bg-white/5 transition-colors cursor-pointer"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -586,7 +805,17 @@ export function ProfileModal({
                 <div className="p-3 rounded-xl bg-[#22201e] border border-white/10 flex flex-col justify-between shadow-sm">
                   <div className="flex items-center justify-between text-[#a3a3a3] mb-1">
                     <span className="text-[10px] font-bold uppercase tracking-wider">Daily Streak</span>
-                    <Flame className="w-4 h-4 text-amber-400 fill-amber-400" />
+                    <div className="flex items-center gap-2">
+                      <div
+                        data-testid="profile-freeze-indicator"
+                        className="flex items-center gap-1 text-xs font-medium text-sky-400/90 cursor-help"
+                        title="Earned every 7-day streak • Protects up to 2 missed days"
+                      >
+                        <Snowflake className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.5} />
+                        <span>{streakFreezes}/2</span>
+                      </div>
+                      <Flame className="w-4 h-4 text-amber-400 fill-amber-400" />
+                    </div>
                   </div>
                   <div className="text-2xl font-black text-amber-400 tracking-tight font-mono">
                     {dailyStreak} <span className="text-xs font-semibold text-[#a3a3a3]">{dailyStreak === 1 ? "day" : "days"}</span>
@@ -636,7 +865,7 @@ export function ProfileModal({
             <div className="p-3.5 rounded-xl bg-gradient-to-r from-[#22201e] via-[#2a2724] to-[#22201e] border border-[#c29b78]/40 shadow-lg space-y-2.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
-                  <Crown className="w-4 h-4 text-[#c29b78]" />
+                  <Sparkles className="w-4 h-4 text-[#c29b78]" />
                   <span className="text-xs font-black uppercase tracking-wider text-[#f5f5f5]">
                     Membership Plan
                   </span>
@@ -648,7 +877,14 @@ export function ProfileModal({
                       : "bg-white/5 text-[#a3a3a3] border-white/10"
                   }`}
                 >
-                  {isUpgraded ? "⭐ PRO ACTIVE" : "FREE TIER"}
+                  {isUpgraded ? (
+                    <span className="flex items-center gap-1">
+                      <Sparkles className="w-3.5 h-3.5 text-[#151413] inline-block shrink-0" strokeWidth={1.5} />
+                      <span>PRO ACTIVE</span>
+                    </span>
+                  ) : (
+                    "FREE TIER"
+                  )}
                 </span>
               </div>
 
@@ -897,6 +1133,8 @@ export function ProfileModal({
             Done
           </button>
         </div>
+          </>
+        )}
       </div>
     </div>
   );

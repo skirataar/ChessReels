@@ -6,6 +6,20 @@ import type { Puzzle } from "@/lib/generated/prisma/client";
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
+    const idParam = searchParams.get("id");
+    if (idParam) {
+      try {
+        const singlePuzzle = await prisma.puzzle.findUnique({
+          where: { id: idParam },
+        });
+        if (singlePuzzle) {
+          return NextResponse.json(singlePuzzle);
+        }
+      } catch (err) {
+        console.error("Failed to query puzzle by ID:", err);
+      }
+    }
+
     const eloParam = searchParams.get("elo");
     const minRatingParam = searchParams.get("minRating");
     const maxRatingParam = searchParams.get("maxRating");

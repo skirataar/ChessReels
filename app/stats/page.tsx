@@ -9,6 +9,7 @@ import { AuthModal } from "@/components/AuthModal";
 import {
   Trophy,
   Flame,
+  Snowflake,
   CheckCircle2,
   XCircle,
   Clock,
@@ -29,7 +30,11 @@ import {
   Sparkles,
   Check,
   X,
+  Palette,
+  Settings,
 } from "lucide-react";
+import { SettingsModal } from "@/components/SettingsModal";
+import { BOARD_THEMES, useBoardTheme } from "@/lib/boardThemes";
 import {
   ResponsiveContainer,
   BarChart,
@@ -51,6 +56,7 @@ export default function ProfileStatsPage() {
   const router = useRouter();
   const {
     dailyStreak,
+    streakFreezes,
     combo,
     bestCombo,
     totalSolved,
@@ -69,6 +75,8 @@ export default function ProfileStatsPage() {
   const [isDpPickerOpen, setIsDpPickerOpen] = useState<boolean>(false);
   const [isUploadingDp, setIsUploadingDp] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  const [boardTheme, setBoardTheme] = useBoardTheme();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [weeklyData, setWeeklyData] = useState<DayData[]>([
@@ -218,6 +226,26 @@ export default function ProfileStatsPage() {
     setIsMuted(next);
   };
 
+  const handleUpgradePro = async () => {
+    try {
+      localStorage.setItem("chess_reel_plan", "premium");
+      setIsPro(true);
+      window.dispatchEvent(new Event("plan-updated"));
+      if (userAccount?.id) {
+        await fetch("/api/user/upgrade", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: userAccount.id, plan: "premium" }),
+        });
+      }
+      setToastMessage("Upgraded to Pro successfully!");
+      setTimeout(() => setToastMessage(null), 3000);
+    } catch {
+      setToastMessage("Upgrade failed. Please try again.");
+      setTimeout(() => setToastMessage(null), 3000);
+    }
+  };
+
   const totalAttempts = totalSolved + totalFailed;
   const accuracy =
     totalAttempts > 0 ? Math.round((totalSolved / totalAttempts) * 100) : 0;
@@ -257,11 +285,18 @@ export default function ProfileStatsPage() {
         <span
           className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${
             isPro
-              ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
+              ? "bg-[#c29b78]/15 text-[#c29b78] border-[#c29b78]/30"
               : "bg-white/5 text-[#a3a3a3] border-white/10"
           }`}
         >
-          {isPro ? "👑 PRO ACTIVE" : "FREE TIER"}
+          {isPro ? (
+            <span className="flex items-center gap-1">
+              <Sparkles className="w-3.5 h-3.5 text-[#c29b78] inline-block shrink-0" strokeWidth={1.5} />
+              <span>PRO ACTIVE</span>
+            </span>
+          ) : (
+            "FREE TIER"
+          )}
         </span>
       </header>
 
@@ -448,13 +483,23 @@ export default function ProfileStatsPage() {
               <p className="text-[10px] text-[#a3a3a3]">Consecutive days trained</p>
             </div>
           </div>
-          <div className="text-right">
-            <span className="text-2xl font-black text-[#c29b78]">
-              {dailyStreak}
-            </span>
-            <span className="text-xs text-[#a3a3a3] ml-1">
-              {dailyStreak === 1 ? "Day" : "Days"}
-            </span>
+          <div className="flex items-center gap-3">
+            <div
+              data-testid="profile-freeze-indicator"
+              className="flex items-center gap-1 text-xs font-medium text-sky-400/90 cursor-help"
+              title="Earned every 7-day streak • Protects up to 2 missed days"
+            >
+              <Snowflake className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.5} />
+              <span>{streakFreezes}/2</span>
+            </div>
+            <div className="text-right">
+              <span className="text-2xl font-black text-[#c29b78]">
+                {dailyStreak}
+              </span>
+              <span className="text-xs text-[#a3a3a3] ml-1">
+                {dailyStreak === 1 ? "Day" : "Days"}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -594,12 +639,88 @@ export default function ProfileStatsPage() {
         </div>
       </section>
 
-      {/* 5. Preferences & Settings */}
-      <section className="bg-[#22201e] border border-white/10 rounded-3xl p-4 shadow-xl">
-        <h3 className="text-xs font-bold uppercase tracking-wider text-[#a3a3a3] mb-3">
-          App Preferences
+      {/* 5. Settings & Account List Section */}
+      <section className="bg-[#22201e] border border-white/10 rounded-3xl p-4 shadow-xl space-y-4">
+        <h3 className="text-xs font-bold uppercase tracking-wider text-[#a3a3a3]">
+          Settings &amp; Account
         </h3>
-        <div className="flex items-center justify-between">
+
+        {/* Pro Upgrade Trigger */}
+        <div className="p-3.5 rounded-2xl bg-gradient-to-r from-[#2a2622] to-[#1c1a18] border border-[#c29b78]/30 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-[#c29b78]/15 border border-[#c29b78]/30 flex items-center justify-center text-[#c29b78] shrink-0">
+              <Sparkles className="w-4 h-4 text-[#c29b78]" strokeWidth={1.5} />
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs font-bold text-[#f5f5f5] flex items-center gap-1.5">
+                <span>{isPro ? "Pro Membership Active" : "DoomChess Pro"}</span>
+                {isPro && (
+                  <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-[#c29b78]/20 text-[#c29b78] border border-[#c29b78]/40">
+                    ACTIVE
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-[#a3a3a3] truncate">
+                {isPro ? "Unlimited puzzles, 0 ads, Stockfish analysis" : "Unlock infinite tactical training & zero ads"}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={isPro ? () => setIsSettingsOpen(true) : handleUpgradePro}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+              isPro
+                ? "bg-[#151413] text-[#a3a3a3] border border-white/10 hover:text-white"
+                : "bg-[#c29b78] hover:bg-[#d4b08f] text-[#0a0908] shadow-md shadow-[#c29b78]/20"
+            }`}
+          >
+            {isPro ? "Manage" : "Upgrade"}
+          </button>
+        </div>
+
+        {/* Theme / Board Preferences */}
+        <div className="space-y-2 pt-2 border-t border-white/5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Palette className="w-4 h-4 text-[#c29b78]" />
+              <span className="text-xs font-bold text-[#f5f5f5]">Theme &amp; Board Preferences</span>
+            </div>
+            <span className="text-[11px] font-mono text-[#c29b78] font-bold">
+              {boardTheme.name}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2 pt-1">
+            {BOARD_THEMES.map((theme) => {
+              const isSelected = boardTheme.id === theme.id;
+              return (
+                <button
+                  key={theme.id}
+                  type="button"
+                  onClick={() => setBoardTheme(theme.id)}
+                  className={`p-2 rounded-xl border flex flex-col items-center gap-1.5 transition-all cursor-pointer ${
+                    isSelected
+                      ? "bg-[#c29b78]/15 border-[#c29b78] ring-1 ring-[#c29b78]"
+                      : "bg-[#151413] border-white/5 hover:border-white/20"
+                  }`}
+                >
+                  <div className="w-10 h-10 rounded-lg overflow-hidden grid grid-cols-2 grid-rows-2 border border-black/40 shrink-0">
+                    <div style={{ backgroundColor: theme.light }} />
+                    <div style={{ backgroundColor: theme.dark }} />
+                    <div style={{ backgroundColor: theme.dark }} />
+                    <div style={{ backgroundColor: theme.light }} />
+                  </div>
+                  <span className={`text-[10px] font-medium truncate w-full text-center ${isSelected ? "text-[#f5f5f5] font-bold" : "text-[#a3a3a3]"}`}>
+                    {theme.name.split(" ")[0]}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Audio / SFX Preference */}
+        <div className="flex items-center justify-between pt-2 border-t border-white/5">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-xl bg-[#151413] text-[#c29b78] border border-white/5">
               {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
@@ -620,7 +741,49 @@ export default function ProfileStatsPage() {
             {isMuted ? "Muted" : "Active"}
           </button>
         </div>
+
+        {/* Account Settings / Edit Profile Trigger */}
+        <div className="flex items-center justify-between pt-2 border-t border-white/5">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-[#151413] text-[#c29b78] border border-white/5">
+              <Settings className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-white">Account Settings</div>
+              <div className="text-[11px] text-[#a3a3a3]">Username, display name &amp; gameplay</div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsSettingsOpen(true)}
+            className="px-3 py-1.5 rounded-xl text-xs font-bold bg-[#151413] hover:bg-[#2d2a28] text-white border border-white/10 transition-colors cursor-pointer"
+          >
+            Manage
+          </button>
+        </div>
+
+        {/* Sign Out Button */}
+        {userAccount && (
+          <div className="pt-2 border-t border-white/5">
+            <button
+              type="button"
+              onClick={handleSignOut}
+              className="w-full py-2.5 px-3 rounded-xl bg-[#151413] hover:bg-rose-950/30 border border-white/10 hover:border-rose-800/40 text-[#a3a3a3] hover:text-rose-400 font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>Sign Out of Account</span>
+            </button>
+          </div>
+        )}
       </section>
+
+      {/* Settings Modal */}
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        userAccount={userAccount}
+        onSignOut={handleSignOut}
+      />
 
       {/* Auth Modal for Sign in / Account creation */}
       <AuthModal

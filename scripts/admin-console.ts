@@ -92,7 +92,7 @@ async function listUsers() {
         Username: `@${u.username || "n/a"}`,
         Email: u.email || "n/a",
         Rating: `${u.elo} Elo`,
-        Plan: u.plan === "premium" ? "👑 PRO ($9.99)" : "FREE",
+        Plan: u.plan === "premium" ? "PRO ($9.99)" : "FREE",
         Streak: `${u.streak}d 🔥`,
       }))
     );

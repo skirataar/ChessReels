@@ -65,10 +65,13 @@ export interface PuzzleCardProps {
   isPro?: boolean;
   canPlay?: boolean;
   isPaywallOpen?: boolean;
+  canGoPrev?: boolean;
+  slideDirection?: "next" | "prev";
   onModeChange?: (mode: "ranked" | "practice") => void;
   onStatusChange: (status: PuzzleStatus) => void;
   onEloUpdate: (newElo: number, change: number, isWin?: boolean) => void;
   onNextPuzzle: () => void;
+  onPrevPuzzle?: () => void;
   onOpenStats?: () => void;
 }
 
@@ -144,6 +147,26 @@ export function getPuzzleTagline(puzzle: PuzzleData | null | undefined, turn?: "
   return "Find the winning move";
 }
 
+export function useIsDesktopPointer(): boolean {
+  const [isDesktopPointer, setIsDesktopPointer] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia("(pointer: fine) and (min-width: 768px)").matches;
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mediaQuery = window.matchMedia("(pointer: fine) and (min-width: 768px)");
+    const handler = (e: MediaQueryListEvent) => {
+      setIsDesktopPointer(e.matches);
+    };
+    setIsDesktopPointer(mediaQuery.matches);
+    mediaQuery.addEventListener("change", handler);
+    return () => mediaQuery.removeEventListener("change", handler);
+  }, []);
+
+  return isDesktopPointer;
+}
+
 export function PuzzleCard({
   puzzle,
   status,
@@ -158,12 +181,16 @@ export function PuzzleCard({
   isPro = false,
   canPlay = true,
   isPaywallOpen = false,
+  canGoPrev = false,
+  slideDirection = "next",
   onModeChange,
   onStatusChange,
   onEloUpdate,
   onNextPuzzle,
+  onPrevPuzzle,
   onOpenStats,
 }: PuzzleCardProps) {
+  const isDesktopPointer = useIsDesktopPointer();
   const [boardTheme] = useBoardTheme();
   const initialPuzzleState = computePuzzleInitialState(puzzle);
   const [fen, setFen] = useState<string>(initialPuzzleState.fen);
@@ -233,7 +260,8 @@ export function PuzzleCard({
   const [hintActive, setHintActive] = useState<boolean>(false);
   const [hintUsed, setHintUsed] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const isHintGlowing = retryCount >= 3 && !hintUsed && status === "playing";
+  const isHintGlowing =
+    retryCount >= 3 && !hintUsed && (status === "playing" || status === "failed");
 
   const formatLikes = (num: number): string => {
     if (num >= 1000) {
@@ -697,7 +725,11 @@ export function PuzzleCard({
   // Unified move executor for both Drag-and-Drop and Click-to-Move
   const executeUserMove = useCallback(
     (sourceSquare: string, targetSquare: string | null): boolean => {
-      if (status !== "playing" || !targetSquare || !gameRef.current) {
+      if (
+        (status !== "playing" && status !== "failed") ||
+        !targetSquare ||
+        !gameRef.current
+      ) {
         return false;
       }
 
@@ -774,7 +806,7 @@ export function PuzzleCard({
 
         // Auto-retry: piece snaps back to previous state and board remains interactive!
         setFen(game.fen());
-        onStatusChange("playing");
+        onStatusChange("failed");
 
         return false;
       }
@@ -841,7 +873,7 @@ export function PuzzleCard({
     [status, allMoves, currentMoveIndex, onStatusChange, sendEloResult]
   );
 
-  // Drag and drop drop handler - strictly locked when status !== 'playing'
+  // Drag and drop drop handler - strictly locked when status !== 'playing' && status !== 'failed'
   const handlePieceDrop = ({
     sourceSquare,
     targetSquare,
@@ -850,13 +882,13 @@ export function PuzzleCard({
     targetSquare: string | null;
   }): boolean => {
     isPieceDragRef.current = false;
-    if (status !== "playing") return false;
+    if (status !== "playing" && status !== "failed") return false;
     return executeUserMove(sourceSquare, targetSquare);
   };
 
   // Click-to-move / Tap-to-move handler
   const handleSquareClick = ({ square }: { square: string }) => {
-    if (status !== "playing" || !gameRef.current) return;
+    if ((status !== "playing" && status !== "failed") || !gameRef.current) return;
     const game = gameRef.current;
     const myColor = boardOrientation === "white" ? "w" : "b";
 
@@ -969,18 +1001,30 @@ export function PuzzleCard({
       const userKey = guestId ? `chess_reel_bookmarks_${guestId}` : "chess_reel_bookmarks";
       const saved = localStorage.getItem(userKey) || localStorage.getItem("chess_reel_bookmarks");
       let ids: string[] = saved ? JSON.parse(saved) : [];
+
+      const puzzlesKey = guestId ? `chess_reel_saved_puzzles_${guestId}` : "chess_reel_saved_puzzles";
+      const savedPuzzlesRaw = localStorage.getItem(puzzlesKey) || localStorage.getItem("chess_reel_saved_puzzles");
+      let savedPuzzlesMap: Record<string, PuzzleData> = {};
+      try {
+        if (savedPuzzlesRaw) savedPuzzlesMap = JSON.parse(savedPuzzlesRaw);
+      } catch {}
+
       if (ids.includes(puzzle.id)) {
         ids = ids.filter((id) => id !== puzzle.id);
+        delete savedPuzzlesMap[puzzle.id];
         setIsBookmarked(false);
         showToast("Bookmark removed");
       } else {
         ids.push(puzzle.id);
         ids = Array.from(new Set(ids));
+        savedPuzzlesMap[puzzle.id] = puzzle;
         setIsBookmarked(true);
         showToast("Puzzle saved to bookmarks!");
       }
       localStorage.setItem(userKey, JSON.stringify(ids));
       localStorage.setItem("chess_reel_bookmarks", JSON.stringify(ids));
+      localStorage.setItem(puzzlesKey, JSON.stringify(savedPuzzlesMap));
+      localStorage.setItem("chess_reel_saved_puzzles", JSON.stringify(savedPuzzlesMap));
       window.dispatchEvent(new Event("bookmarks-updated"));
     } catch {}
   };
@@ -1065,7 +1109,7 @@ export function PuzzleCard({
 
   // Bottom Action: Trigger Tactical Hint
   const handleTriggerHint = () => {
-    if (status !== "playing") return;
+    if (status !== "playing" && status !== "failed") return;
     haptics.tap();
     const expectedMove = allMoves[currentMoveIndex];
     if (!expectedMove) return;
@@ -1153,6 +1197,27 @@ export function PuzzleCard({
     }, 180);
   }, [isExiting, onNextPuzzle, canPlay, isPro, isPaywallOpen]);
 
+  // Trigger previous puzzle advance with smooth reel downward slide
+  const triggerSwipePrev = useCallback(() => {
+    if (!canGoPrev || !onPrevPuzzle) {
+      setDragY(0);
+      return;
+    }
+    if (isExiting) return;
+    setIsExiting(true);
+    setDragY(360);
+    haptics.tap();
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+    }
+    setTimeout(() => {
+      onPrevPuzzle();
+      if (typeof window !== "undefined") {
+        window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+      }
+    }, 180);
+  }, [canGoPrev, isExiting, onPrevPuzzle]);
+
   // User drawn arrows state (synced with react-chessboard options.arrows)
   const [touchArrows, setTouchArrows] = useState<Array<{ startSquare: string; endSquare: string; color: string }>>([]);
   const touchArrowStartRef = useRef<{ square: string; x: number; y: number } | null>(null);
@@ -1164,6 +1229,7 @@ export function PuzzleCard({
   }, [fen, puzzle?.id]);
 
   const handleBoardTouchStart = (e: React.TouchEvent) => {
+    if (!isDesktopPointer) return;
     const target = e.target as HTMLElement | null;
     const isPiece = Boolean(target?.closest("[data-piece]") || target?.closest(".piece"));
     if (e.touches.length === 2 || (!isPiece && e.touches.length === 1)) {
@@ -1178,6 +1244,7 @@ export function PuzzleCard({
   };
 
   const handleBoardTouchMove = (e: React.TouchEvent) => {
+    if (!isDesktopPointer) return;
     if (!touchArrowStartRef.current) return;
     const touch = e.touches[0];
     const elem = document.elementFromPoint(touch.clientX, touch.clientY);
@@ -1188,6 +1255,7 @@ export function PuzzleCard({
   };
 
   const handleBoardTouchEnd = () => {
+    if (!isDesktopPointer) return;
     if (touchArrowStartRef.current && touchArrowCurrentRef.current) {
       const start = touchArrowStartRef.current.square;
       const end = touchArrowCurrentRef.current;
@@ -1226,15 +1294,15 @@ export function PuzzleCard({
       return;
     }
 
-    // 2. Ignore if touch started anywhere on or inside the chessboard container (piece moves, square clicks, line drawing)
-    if (target?.closest("[data-testid='chessboard-container']")) {
+    // 2. On desktop pointer devices, ignore touches inside chessboard container so mouse/drawing works undisturbed
+    if (isDesktopPointer && target?.closest("[data-testid='chessboard-container']")) {
       touchStartRef.current = null;
       return;
     }
 
     // 3. Ignore if touch started on a chess piece while puzzle is actively being played
     if (
-      status === "playing" &&
+      (status === "playing" || status === "failed") &&
       (target?.closest("[data-piece]") ||
         target?.closest(".piece") ||
         isPieceDragRef.current)
@@ -1263,11 +1331,15 @@ export function PuzzleCard({
         e.preventDefault();
       }
       setIsSwiping(true);
-      // Upward drag tracks 1:1; downward pull has elastic rubber-band resistance
       if (deltaY < 0) {
         setDragY(deltaY);
       } else {
-        setDragY(deltaY * 0.3);
+        if (canGoPrev) {
+          setDragY(deltaY);
+        } else {
+          // If currentIndex === 0, apply subtle rubber-band resistance
+          setDragY(deltaY * 0.25);
+        }
       }
     }
   };
@@ -1282,21 +1354,22 @@ export function PuzzleCard({
     touchStartRef.current = null;
     setIsSwiping(false);
 
-    // Swipe Up: dragged up by 35px OR quick flick upwards (deltaY < -15 && velocityY < -0.3)
-    if (deltaY < -35 || (deltaY < -15 && velocityY < -0.3)) {
+    // Swipe Up (Next Puzzle): deltaY < -50 px OR upward flick velocity
+    if (deltaY < -50 || (deltaY < -20 && velocityY < -0.3)) {
       triggerSwipeNext();
       return;
     }
 
-    // Pull Down: pulled down by 55px OR quick flick downwards (deltaY > 25 && velocityY > 0.35)
-    if (deltaY > 55 || (deltaY > 25 && velocityY > 0.35)) {
-      haptics.tap();
-      setDragY(0);
-      if (typeof window !== "undefined") {
-        window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+    // Swipe Down (Previous Puzzle): deltaY > 50 px OR downward flick velocity
+    if (deltaY > 50 || (deltaY > 20 && velocityY > 0.35)) {
+      if (canGoPrev) {
+        triggerSwipePrev();
+        return;
+      } else {
+        // Rubber-band snap back to 0
+        setDragY(0);
+        return;
       }
-      handleRetry();
-      return;
     }
 
     // Released without crossing threshold: snap crisply back to center (0)
@@ -1323,9 +1396,9 @@ export function PuzzleCard({
 
     const target = e.target as HTMLElement | null;
     if (target?.closest("button, a, input, select, [role='button'], [data-interactive]")) return;
-    // Chessboard NEVER triggers reel swipe (moving pieces, clicking squares, drawing lines/arrows)
-    if (target?.closest("[data-testid='chessboard-container']")) return;
-    if (status === "playing" && (target?.closest("[data-piece]") || target?.closest(".piece"))) return;
+    // On desktop pointer devices, chessboard NEVER triggers reel swipe
+    if (isDesktopPointer && target?.closest("[data-testid='chessboard-container']")) return;
+    if ((status === "playing" || status === "failed") && (target?.closest("[data-piece]") || target?.closest(".piece"))) return;
 
     isMouseDownRef.current = true;
     touchStartRef.current = {
@@ -1346,7 +1419,11 @@ export function PuzzleCard({
         if (deltaY < 0) {
           setDragY(deltaY);
         } else {
-          setDragY(deltaY * 0.3);
+          if (canGoPrev) {
+            setDragY(deltaY);
+          } else {
+            setDragY(deltaY * 0.25);
+          }
         }
       }
     };
@@ -1364,15 +1441,18 @@ export function PuzzleCard({
       touchStartRef.current = null;
       setIsSwiping(false);
 
-      if (deltaY < -35 || (deltaY < -15 && velocityY < -0.3)) {
+      if (deltaY < -50 || (deltaY < -20 && velocityY < -0.3)) {
         triggerSwipeNext();
         return;
       }
-      if (deltaY > 55 || (deltaY > 25 && velocityY > 0.35)) {
-        haptics.tap();
-        setDragY(0);
-        handleRetry();
-        return;
+      if (deltaY > 50 || (deltaY > 20 && velocityY > 0.35)) {
+        if (canGoPrev) {
+          triggerSwipePrev();
+          return;
+        } else {
+          setDragY(0);
+          return;
+        }
       }
       setDragY(0);
     };
@@ -1383,13 +1463,13 @@ export function PuzzleCard({
       window.removeEventListener("mousemove", handleWindowMouseMove);
       window.removeEventListener("mouseup", handleWindowMouseUp);
     };
-  }, [isExiting, triggerSwipeNext, handleRetry]);
+  }, [isExiting, canGoPrev, triggerSwipeNext, triggerSwipePrev]);
 
-  // Wheel / Trackpad Scroll to advance / retry
+  // Wheel / Trackpad Scroll to advance / prev
   const handleWheel = (e: React.WheelEvent) => {
     if (isExiting) return;
     const target = e.target as HTMLElement | null;
-    if (target?.closest("[data-testid='chessboard-container']")) return;
+    if (isDesktopPointer && target?.closest("[data-testid='chessboard-container']")) return;
     const now = Date.now();
     if (now - lastWheelTimeRef.current < 500) return;
 
@@ -1398,12 +1478,15 @@ export function PuzzleCard({
       triggerSwipeNext();
     } else if (e.deltaY < -45) {
       lastWheelTimeRef.current = now;
-      haptics.tap();
-      handleRetry();
+      if (canGoPrev) {
+        triggerSwipePrev();
+      } else {
+        setDragY(0);
+      }
     }
   };
 
-  // Keyboard navigation shortcuts: ArrowDown / PageDown = Next Reel, ArrowUp / PageUp = Retry
+  // Keyboard navigation shortcuts: ArrowDown / PageDown = Next Reel, ArrowUp / PageUp = Prev Reel
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const activeEl = document.activeElement;
@@ -1414,18 +1497,23 @@ export function PuzzleCard({
         triggerSwipeNext();
       } else if (e.key === "ArrowUp" || e.key === "PageUp") {
         e.preventDefault();
-        handleRetry();
+        if (canGoPrev) {
+          triggerSwipePrev();
+        }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [triggerSwipeNext, handleRetry]);
+  }, [canGoPrev, triggerSwipeNext, triggerSwipePrev]);
 
   const puzzleTagline = getPuzzleTagline(puzzle, boardOrientation);
 
   return (
     <motion.div
-      initial={{ y: 50, opacity: 0 }}
+      initial={{
+        y: slideDirection === "prev" ? "-100%" : "100%",
+        opacity: 0,
+      }}
       animate={{
         y: dragY,
         opacity: isExiting ? 0 : Math.max(0.35, 1 - Math.abs(dragY) / 450),
@@ -1524,7 +1612,9 @@ export function PuzzleCard({
           onTouchMove={handleBoardTouchMove}
           onTouchEnd={handleBoardTouchEnd}
           onContextMenu={(e) => e.preventDefault()}
-          className={`relative w-full h-full aspect-square overflow-hidden flex flex-col justify-between transition-all duration-300 touch-none ${
+          className={`relative w-full h-full aspect-square overflow-hidden flex flex-col justify-between transition-all duration-300 ${
+            isDesktopPointer ? "touch-none" : ""
+          } ${
             isShaking ? "animate-board-shake" : ""
           }`}
         >
@@ -1534,8 +1624,8 @@ export function PuzzleCard({
                 id: "chess-reel-active-board",
                 position: fen,
                 boardOrientation: boardOrientation,
-                allowDragging: status === "playing",
-                canDragPiece: () => status === "playing",
+                allowDragging: status === "playing" || status === "failed",
+                canDragPiece: () => status === "playing" || status === "failed",
                 onPieceDrop: (args) => {
                   setTouchArrows([]);
                   return handlePieceDrop(args);
@@ -1587,10 +1677,10 @@ export function PuzzleCard({
                 dropSquareStyle: {
                   boxShadow: "inset 0 0 1px 3px rgba(194, 155, 120, 0.9)",
                 },
-                allowDrawingArrows: true,
+                allowDrawingArrows: isDesktopPointer,
                 clearArrowsOnClick: true,
                 clearArrowsOnPositionChange: true,
-                arrows: touchArrows,
+                arrows: isDesktopPointer ? touchArrows : [],
                 arrowOptions: {
                   ...defaultArrowOptions,
                   color: "#c29b78",
@@ -1818,7 +1908,7 @@ export function PuzzleCard({
             {/* Hint Button */}
             <button
               onClick={handleTriggerHint}
-              disabled={status !== "playing"}
+              disabled={status !== "playing" && status !== "failed"}
               aria-label="Hint"
               data-testid="hint-btn"
               title={isHintGlowing ? "Need help? Click for a hint!" : "Highlight tactical move"}
