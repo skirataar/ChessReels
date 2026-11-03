@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Play, Target, User, Lock, Settings } from "lucide-react";
 import { motion } from "framer-motion";
 import { SettingsModal } from "@/components/SettingsModal";
+import { isGuestAccount } from "@/lib/guestAccount";
 
 interface NavItem {
   name: string;
@@ -69,16 +70,23 @@ export function BottomNav() {
       try {
         const plan = window.localStorage.getItem("chess_reel_plan");
         const accRaw = window.localStorage.getItem("chess_reel_account");
-        const guestId = window.localStorage.getItem("chess_reel_guest_id");
         let accPlan: string | undefined;
+        let registered = false;
         if (accRaw) {
           try {
             const parsed = JSON.parse(accRaw);
-            setUserAccount(parsed);
-            accPlan = parsed?.plan;
+            if (isGuestAccount(parsed)) {
+              setUserAccount(null);
+            } else {
+              setUserAccount(parsed);
+              accPlan = parsed?.plan;
+              registered = Boolean(parsed?.id);
+            }
           } catch {}
+        } else {
+          setUserAccount(null);
         }
-        setIsAuthenticated(Boolean(accRaw || guestId));
+        setIsAuthenticated(registered);
         setIsPro(plan === "premium" || accPlan === "premium");
       } catch {
         setIsAuthenticated(false);

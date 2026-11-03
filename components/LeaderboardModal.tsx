@@ -506,7 +506,7 @@ export function LeaderboardModal({
               {!userAccount && (
                 <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-between gap-2">
                   <div className="text-[11px] text-amber-200">
-                    You are in Guest mode. Create an account to permanently save your friends and rank!
+                    Sign in or create an account to save your friends and rank.
                   </div>
                   {onOpenAuth && (
                     <button

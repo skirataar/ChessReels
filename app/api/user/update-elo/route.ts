@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { isGuestUserId } from "@/lib/guestAccount";
 
 interface UpdateEloBody {
   puzzleRating?: number;
@@ -38,7 +39,32 @@ export async function POST(request: NextRequest) {
     const eloChange = Math.round(K * (S - E));
     const newElo = Math.max(100, currentUserElo + eloChange);
 
-    const targetUserId = guestId ?? userId ?? "guest-user";
+    const targetUserId = userId || guestId || "";
+    const calculated = {
+      newElo,
+      eloChange,
+      expectedScore: Number(E.toFixed(4)),
+      actualScore: S,
+      userId: targetUserId || null,
+    };
+
+    if (!targetUserId || isGuestUserId(targetUserId)) {
+      return NextResponse.json(calculated);
+    }
+
+    const existing = await prisma.user.findUnique({
+      where: { id: targetUserId },
+    });
+    const isRegistered =
+      existing &&
+      (Boolean(existing.email) ||
+        Boolean(existing.googleId) ||
+        Boolean(existing.passwordHash)) &&
+      existing.displayName !== "Guest Tactician";
+
+    if (!isRegistered) {
+      return NextResponse.json(calculated);
+    }
 
     // Record in PuzzleHistory for anti-repetition tracking
     if (puzzleId && targetUserId) {
@@ -66,26 +92,30 @@ export async function POST(request: NextRequest) {
         });
     }
 
-    // Attempt to persist for user/guest in DB
+    // Persist Elo for registered accounts only
     try {
-      const existing = await prisma.user.findUnique({
-        where: { id: targetUserId },
-      });
-
       // Calculate true calendar daily streak (days of training, NOT consecutive puzzle wins)
+      // Priority: use client-provided dailyStreak (from useStreak.ts which tracks localStorage accurately)
+      // Fallback: compute from puzzle history, excluding the current puzzle being submitted
       let nextStreak = existing?.streak ?? 0;
       if (typeof dailyStreak === "number" && dailyStreak > 0) {
+        // Client sends the already-computed daily streak — most accurate source
         nextStreak = dailyStreak;
       } else {
         const now = new Date();
         const todayStr = now.toISOString().slice(0, 10);
+        // Exclude the current puzzleId so we look at the PREVIOUS session's most recent entry
         const lastHistory = await prisma.puzzleHistory.findFirst({
-          where: { userId: targetUserId },
+          where: {
+            userId: targetUserId,
+            ...(puzzleId ? { puzzleId: { not: puzzleId } } : {}),
+          },
           orderBy: { solvedAt: "desc" },
           select: { solvedAt: true },
         });
 
         if (!lastHistory) {
+          // First ever puzzle — start streak at 1
           nextStreak = 1;
         } else {
           const lastDateStr = lastHistory.solvedAt.toISOString().slice(0, 10);
@@ -94,10 +124,13 @@ export async function POST(request: NextRequest) {
           const diffDays = Math.floor((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24));
 
           if (diffDays === 0) {
+            // Already played today — keep existing streak (at least 1)
             nextStreak = Math.max(1, existing?.streak ?? 1);
           } else if (diffDays === 1) {
+            // Played yesterday — extend streak
             nextStreak = (existing?.streak ?? 0) + 1;
           } else {
+            // Gap > 1 day — reset streak to 1
             nextStreak = 1;
           }
         }
@@ -106,16 +139,9 @@ export async function POST(request: NextRequest) {
       const nextBestStreak = Math.max(existing?.bestStreak ?? 0, nextStreak);
       const nextPeakElo = Math.max(existing?.peakElo ?? 800, newElo);
 
-      const updatedUser = await prisma.user.upsert({
+      const updatedUser = await prisma.user.update({
         where: { id: targetUserId },
-        update: {
-          elo: newElo,
-          peakElo: nextPeakElo,
-          streak: nextStreak,
-          bestStreak: nextBestStreak,
-        },
-        create: {
-          id: targetUserId,
+        data: {
           elo: newElo,
           peakElo: nextPeakElo,
           streak: nextStreak,

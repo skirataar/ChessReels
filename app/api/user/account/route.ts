@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { hashPassword } from "@/lib/auth";
+import { isGuestUserId } from "@/lib/guestAccount";
 
 export async function POST(request: NextRequest) {
   try {
@@ -78,8 +79,8 @@ export async function POST(request: NextRequest) {
 
     let user;
 
-    // If guestId is provided and exists in DB, upgrade the user without inheriting guest Elo
-    if (guestId) {
+    // If a prior registered row exists under this id, upgrade it without inheriting guest Elo
+    if (guestId && !isGuestUserId(guestId)) {
       const guestUser = await prisma.user.findUnique({
         where: { id: guestId },
       });
@@ -194,6 +195,9 @@ export async function GET(request: NextRequest) {
         calibrationStep: true,
         plan: true,
         createdAt: true,
+        email: true,
+        googleId: true,
+        passwordHash: true,
       },
     });
 
@@ -201,7 +205,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "User not found." }, { status: 404 });
     }
 
-    return NextResponse.json({ user });
+    const isGuest =
+      isGuestUserId(user.id) ||
+      user.displayName === "Guest Tactician" ||
+      (!user.email && !user.googleId && !user.passwordHash);
+    if (isGuest) {
+      return NextResponse.json({ error: "User not found." }, { status: 404 });
+    }
+
+    const { email: _email, googleId: _googleId, passwordHash: _passwordHash, ...safeUser } = user;
+
+    return NextResponse.json({ user: safeUser });
   } catch (error) {
     console.error("Failed to fetch user:", error);
     return NextResponse.json(

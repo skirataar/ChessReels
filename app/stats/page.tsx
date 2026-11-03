@@ -40,6 +40,7 @@ import {
 } from "recharts";
 import { sounds } from "@/lib/audio";
 import { CURATED_AVATARS, compressImageFile, persistAvatar } from "@/lib/avatarUpload";
+import { clearGuestLocalSession, isGuestAccount } from "@/lib/guestAccount";
 
 interface DayData {
   day: string;
@@ -57,7 +58,7 @@ export default function ProfileStatsPage() {
   } = useStreak();
 
   const [currentElo, setCurrentElo] = useState<number>(800);
-  const [userName, setUserName] = useState<string>("Guest Tactician");
+  const [userName, setUserName] = useState<string>("Tactician");
   const [userHandle, setUserHandle] = useState<string>("");
   const [userAvatar, setUserAvatar] = useState<string | undefined>(undefined);
   const [isPro, setIsPro] = useState<boolean>(false);
@@ -94,6 +95,11 @@ export default function ProfileStatsPage() {
 
       if (savedAccount) {
         const parsed = JSON.parse(savedAccount);
+        if (isGuestAccount(parsed)) {
+          clearGuestLocalSession();
+          router.replace("/");
+          return;
+        }
         setUserAccount(parsed);
         if (parsed.displayName || parsed.username) {
           setUserName(parsed.displayName || parsed.username);
@@ -416,10 +422,10 @@ export default function ProfileStatsPage() {
           </div>
         )}
 
-        {/* Guest prompt if not signed in */}
+        {/* Account prompt */}
         {!userAccount && (
           <div className="mt-3 pt-3 border-t border-white/5 flex items-center justify-between text-xs text-[#a3a3a3]">
-            <span>Save your rating &amp; streaks permanently</span>
+            <span>Sign in to save your rating and streaks</span>
             <button
               onClick={() => setIsAuthOpen(true)}
               className="text-[#c29b78] font-bold hover:underline cursor-pointer"

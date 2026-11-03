@@ -41,6 +41,7 @@ test.describe("Landing Page & No-Guest Access Auth Flow", () => {
     await expect(page.locator("button:has-text('Create Account')")).toBeVisible();
 
     // 5. Verify NO guest buttons or pricing tables exist
+    await expect(page.locator("text=Explore feed as guest")).not.toBeVisible();
     await expect(page.locator("text=Instant Guest Play")).not.toBeVisible();
     await expect(page.locator("text=Play Free with Ads")).not.toBeVisible();
     await expect(page.locator("text=Free Tier")).not.toBeVisible();
@@ -86,6 +87,32 @@ test.describe("Landing Page & No-Guest Access Auth Flow", () => {
 
     // Should have redirected to / (or /play landing)
     await expect(page.locator("button:has-text('Continue with Google')")).toBeVisible();
+  });
+
+  test("3b. Existing guest sessions are ejected to the sign-up page", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("http://localhost:3000/play");
+    await page.evaluate(() => {
+      localStorage.setItem(
+        "chess_reel_account",
+        JSON.stringify({
+          id: "guest_999",
+          username: "tactician_4242",
+          displayName: "Guest Tactician",
+          elo: 1000,
+          isCalibrated: true,
+          plan: "free",
+        })
+      );
+      localStorage.setItem("chess_reel_guest_id", "guest_999");
+    });
+    await page.reload();
+    await page.waitForURL("**/");
+    await expect(page.locator("text=Explore feed as guest")).not.toBeVisible();
+    const account = await page.evaluate(() => localStorage.getItem("chess_reel_account"));
+    expect(account).toBeNull();
   });
 
   test("4. Logging out from an authenticated account redirects to Landing Page, NOT a guest account", async ({

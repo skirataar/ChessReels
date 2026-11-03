@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { useTierQuota } from "@/lib/useTierQuota";
 import { QuotaPaywallModal } from "@/components/QuotaPaywallModal";
+import { clearGuestLocalSession, isGuestAccount } from "@/lib/guestAccount";
 
 interface PracticeTheme {
   id: string;
@@ -75,7 +76,10 @@ export default function PracticePage() {
     if (typeof window !== "undefined") {
       try {
         const raw = window.localStorage.getItem("chess_reel_account");
-        if (raw) return JSON.parse(raw);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (!isGuestAccount(parsed)) return parsed;
+        }
       } catch {}
     }
     return null;
@@ -88,6 +92,11 @@ export default function PracticePage() {
       const raw = window.localStorage.getItem("chess_reel_account");
       if (raw) {
         const parsed = JSON.parse(raw);
+        if (isGuestAccount(parsed)) {
+          clearGuestLocalSession();
+          router.replace("/");
+          return;
+        }
         setAccount(parsed);
         if (parsed?.id) {
           fetch(`/api/user/account?userId=${encodeURIComponent(parsed.id)}`)
@@ -104,9 +113,12 @@ export default function PracticePage() {
             })
             .catch(() => {});
         }
+      } else {
+        router.replace("/");
+        return;
       }
     } catch {}
-  }, []);
+  }, [router]);
 
   const {
     isPro,

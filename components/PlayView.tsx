@@ -25,6 +25,7 @@ import { QuotaPaywallModal } from "@/components/QuotaPaywallModal";
 import { popNextPuzzle, prefetchPuzzles } from "@/lib/puzzleCache";
 import { useStreak, resetStreakStats } from "@/lib/useStreak";
 import { useTierQuota } from "@/lib/useTierQuota";
+import { clearGuestLocalSession, isGuestAccount } from "@/lib/guestAccount";
 import { RefreshCw, WifiOff, UserPlus, BarChart2, Trophy, Zap, Flame, Crown, Sparkles, User } from "lucide-react";
 
 const GUEST_ID_KEY = "chess_reel_guest_id";
@@ -36,6 +37,8 @@ export interface UserAccount {
   username: string;
   displayName?: string;
   avatar?: string;
+  email?: string;
+  googleId?: string;
   elo: number;
   isCalibrated: boolean;
   calibrationStep: number;
@@ -43,6 +46,19 @@ export interface UserAccount {
   peakElo?: number;
   streak?: number;
   bestStreak?: number;
+}
+
+function readRegisteredAccount(): UserAccount | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(ACCOUNT_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.id || isGuestAccount(parsed)) return null;
+    return parsed as UserAccount;
+  } catch {
+    return null;
+  }
 }
 
 // Curated fallbacks in case the database is empty or offline with empty cache
@@ -97,15 +113,7 @@ export function PlayView({
   initialShowLanding?: boolean;
 } = {}) {
   const router = useRouter();
-  const [guestId, setGuestId] = useState<string>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const saved = window.localStorage.getItem(GUEST_ID_KEY);
-        if (saved) return saved;
-      } catch {}
-    }
-    return "guest-user";
-  });
+  const [guestId, setGuestId] = useState<string>("");
   const [currentElo, setCurrentElo] = useState<number>(() => {
     if (typeof window !== "undefined") {
       try {
@@ -129,17 +137,9 @@ export function PlayView({
   const [activeTab, setActiveTab] = useState<"reels" | "rank" | "profile">("reels");
 
   // Account, Friends & Placement Calibration States
-  const [userAccount, setUserAccount] = useState<UserAccount | null>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const raw = window.localStorage.getItem(ACCOUNT_STORAGE_KEY);
-        return raw ? JSON.parse(raw) : null;
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  });
+  const [userAccount, setUserAccount] = useState<UserAccount | null>(() =>
+    readRegisteredAccount()
+  );
   const [showLanding, setShowLanding] = useState<boolean>(initialShowLanding);
   const [authModalTab, setAuthModalTab] = useState<"register" | "login">("register");
   const [authModalGoogle, setAuthModalGoogle] = useState<boolean>(false);
@@ -236,14 +236,36 @@ export function PlayView({
         const raw = window.localStorage.getItem(ACCOUNT_STORAGE_KEY);
         if (raw) {
           const parsed = JSON.parse(raw);
+          if (isGuestAccount(parsed)) {
+            clearGuestLocalSession();
+            setUserAccount(null);
+            router.replace("/");
+            return;
+          }
           setUserAccount(parsed);
           if (parsed.elo) setCurrentElo(parsed.elo);
+        } else {
+          setUserAccount(null);
         }
       } catch {}
     };
     window.addEventListener("account-updated", handleAccountSync);
     return () => window.removeEventListener("account-updated", handleAccountSync);
-  }, []);
+  }, [router]);
+
+  useEffect(() => {
+    if (!hasMounted) return;
+    try {
+      const raw = window.localStorage.getItem(ACCOUNT_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (isGuestAccount(parsed) || (userAccount && isGuestAccount(userAccount))) {
+        clearGuestLocalSession();
+        setUserAccount(null);
+        router.replace("/");
+      }
+    } catch {}
+  }, [hasMounted, userAccount, router]);
 
   // Initialize persistent guest ID, saved account, and saved Elo from localStorage
   // Sync landing visibility to hide/show dock
@@ -262,16 +284,9 @@ export function PlayView({
     if (typeof window === "undefined") return;
 
       try {
-        // 1. Guest ID
-        let savedGuestId = window.localStorage.getItem(GUEST_ID_KEY);
-        if (!savedGuestId) {
-          savedGuestId =
-            typeof crypto !== "undefined" && crypto.randomUUID
-              ? crypto.randomUUID()
-              : `guest-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-          window.localStorage.setItem(GUEST_ID_KEY, savedGuestId);
-        }
-        setGuestId(savedGuestId);
+        window.localStorage.removeItem(GUEST_ID_KEY);
+        window.localStorage.removeItem("chess_reel_preview_guest");
+        setGuestId("");
 
         // 2. Check for Google OAuth callback user cookie & URL params
         if (typeof document !== "undefined") {
@@ -284,7 +299,7 @@ export function PlayView({
               } catch {}
               const oauthUser = JSON.parse(raw);
               document.cookie = "chess_reel_oauth_user=; path=/; max-age=0";
-              if (oauthUser && oauthUser.id) {
+              if (oauthUser && oauthUser.id && !isGuestAccount(oauthUser)) {
                 document.cookie = `chess_reel_session=${encodeURIComponent(oauthUser.id)}; path=/; max-age=${60 * 60 * 24 * 30}`;
                 window.localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(oauthUser));
                 if (oauthUser.elo) {
@@ -301,9 +316,13 @@ export function PlayView({
                 if (window.location.search.includes("google_auth=success")) {
                   window.history.replaceState({}, document.title, window.location.pathname);
                 }
+              } else {
+                clearGuestLocalSession();
+                router.replace("/");
               }
-            } catch (err) {
-              console.warn("Could not parse OAuth user cookie:", err);
+            } catch {
+              clearGuestLocalSession();
+              router.replace("/");
             }
           }
 
@@ -325,22 +344,24 @@ export function PlayView({
         if (savedAccountRaw) {
           try {
             const parsed = JSON.parse(savedAccountRaw);
-            if (parsed && parsed.id) {
+            if (parsed && parsed.id && !isGuestAccount(parsed)) {
               setUserAccount(parsed);
               if (parsed.elo) {
                 setCurrentElo(parsed.elo);
               }
-              // Sync fresh profile from server in background
               fetch(`/api/user/account?userId=${encodeURIComponent(parsed.id)}`)
                 .then((res) => (res.ok ? res.json() : null))
                 .then((data) => {
                   if (data?.user) {
+                    if (isGuestAccount(data.user)) {
+                      clearGuestLocalSession();
+                      setUserAccount(null);
+                      router.replace("/");
+                      return;
+                    }
                     setUserAccount(data.user);
                     if (data.user.elo) setCurrentElo(data.user.elo);
-                    window.localStorage.setItem(
-                      ACCOUNT_STORAGE_KEY,
-                      JSON.stringify(data.user)
-                    );
+                    window.localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(data.user));
                     if (data.user.plan) {
                       window.localStorage.setItem("chess_reel_plan", data.user.plan);
                       window.dispatchEvent(new Event("plan-updated"));
@@ -348,10 +369,25 @@ export function PlayView({
                   }
                 })
                 .catch(() => {});
+            } else {
+              clearGuestLocalSession();
+              setUserAccount(null);
+              setShowLanding(false);
+              router.replace("/");
+              return;
             }
-          } catch {}
+          } catch {
+            clearGuestLocalSession();
+            setUserAccount(null);
+            setShowLanding(false);
+            router.replace("/");
+            return;
+          }
         } else {
-          setShowLanding(true);
+          clearGuestLocalSession();
+          setUserAccount(null);
+          setShowLanding(false);
+          router.replace("/");
         }
       } catch (e) {
         console.warn("Storage access restricted:", e);
@@ -701,7 +737,7 @@ export function PlayView({
         <LandingPage
           onContinueWithGoogle={() => {
             const returnUrl = encodeURIComponent("/play");
-            window.location.href = `/api/auth/google?guestId=${encodeURIComponent(guestId)}&returnUrl=${returnUrl}`;
+            window.location.href = `/api/auth/google?returnUrl=${returnUrl}`;
           }}
           onOpenRegister={() => {
             setAuthModalTab("register");

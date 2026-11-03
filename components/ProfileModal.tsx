@@ -283,7 +283,7 @@ export function ProfileModal({
                 {userAccount?.displayName || (userAccount ? `@${userAccount.username}` : "Tactics Profile")}
               </h2>
               <p className="text-[11px] text-[#a3a3a3] font-medium font-mono">
-                {userAccount ? `@${userAccount.username}` : "Guest Tactician"}
+                {userAccount ? `@${userAccount.username}` : "Account required"}
               </p>
             </div>
           </div>
@@ -540,13 +540,13 @@ export function ProfileModal({
                     </div>
                     <div>
                       <div className="text-sm font-bold text-white flex items-center gap-1.5">
-                        <span>Guest Tactician</span>
+                        <span>Sign in required</span>
                         <span className="text-[10px] text-amber-400 bg-amber-400/10 px-1.5 py-0.2 rounded border border-amber-400/20 font-bold">
-                          Unsaved
+                          Account only
                         </span>
                       </div>
                       <div className="text-[11px] text-[#a3a3a3] font-mono">
-                        Guest ID: #{guestId.slice(0, 10)}...
+                        Create or sign into an account to use DoomChess.
                       </div>
                     </div>
                   </div>

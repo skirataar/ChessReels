@@ -8,7 +8,6 @@ interface LandingPageProps {
   onContinueWithGoogle?: () => void;
   onOpenRegister?: (prefill?: string) => void;
   onOpenLogin: () => void;
-  onPreviewAsGuest?: () => void;
   onClose?: () => void;
 }
 

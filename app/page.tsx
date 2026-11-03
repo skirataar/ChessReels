@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ArrowRight, Check, LogIn } from "lucide-react";
 import { BOARD_THEMES, BoardTheme, setStoredBoardTheme, getStoredBoardTheme } from "@/lib/boardThemes";
+import { clearGuestLocalSession, isGuestAccount } from "@/lib/guestAccount";
 
 // --- Types ---
 type FlowStep = "gate" | "step-elo" | "step-goal" | "step-board" | "auth";
@@ -581,6 +582,20 @@ export default function RootPage() {
 
       const hasAccount = window.localStorage.getItem("chess_reel_account");
       if (hasAccount) {
+        try {
+          const parsed = JSON.parse(hasAccount);
+          if (isGuestAccount(parsed)) {
+            clearGuestLocalSession();
+            setStep("auth");
+            setAuthMode("signup");
+            return;
+          }
+        } catch {
+          clearGuestLocalSession();
+          setStep("auth");
+          setAuthMode("signup");
+          return;
+        }
         router.replace("/play");
         return;
       }
@@ -699,26 +714,6 @@ export default function RootPage() {
     const skillLevel = skill.skillLevel;
     const eloParam = `&startingElo=${startingElo}&targetElo=${targetElo}&theme=${encodeURIComponent(selectedTheme.id)}`;
     window.location.href = `/api/auth/google?mode=${mode}&skillLevel=${skillLevel}${eloParam}&returnUrl=${returnUrl}`;
-  };
-
-  // Handle direct guest access
-  const handleGuestEnter = () => {
-    saveCalibrationToStorage();
-    const guestAccount = {
-      id: `guest_${Date.now()}`,
-      username: `tactician_${Math.floor(1000 + Math.random() * 9000)}`,
-      displayName: "Guest Tactician",
-      avatar: "♟",
-      elo: startingElo,
-      isCalibrated: true,
-      calibrationStep: 6,
-      plan: "free",
-    };
-    window.localStorage.setItem("chess_reel_account", JSON.stringify(guestAccount));
-    window.localStorage.setItem("chess_reel_username", guestAccount.username);
-    window.localStorage.setItem("chess_reel_elo", String(startingElo));
-    window.dispatchEvent(new Event("account-updated"));
-    router.push("/play");
   };
 
   // Handle username/password account creation or login
@@ -1571,10 +1566,9 @@ export default function RootPage() {
                   )}
                 </div>
 
-                {/* Bottom Mode Switch & Guest Bypass */}
+                {/* Bottom Mode Switch */}
                 {!pendingGoogleUser && (
-                  <div className="w-full pt-3 pb-2 text-center space-y-2 shrink-0">
-                  <div>
+                  <div className="w-full pt-3 pb-2 text-center shrink-0">
                     <button
                       type="button"
                       onClick={() => {
@@ -1594,17 +1588,6 @@ export default function RootPage() {
                       )}
                     </button>
                   </div>
-
-                  <div>
-                    <button
-                      type="button"
-                      onClick={handleGuestEnter}
-                      className="text-[11px] text-stone-500 hover:text-stone-300 transition-colors cursor-pointer"
-                    >
-                      Explore feed as guest →
-                    </button>
-                  </div>
-                </div>
               )}
               </motion.div>
             )}

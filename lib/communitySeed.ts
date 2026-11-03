@@ -65,10 +65,80 @@ export async function getRegisteredUsers() {
   });
 }
 
+const GUEST_USER_WHERE = {
+  OR: [
+    { id: { startsWith: "guest_" } },
+    { id: { startsWith: "guest-" } },
+    { id: "guest-user" },
+    { displayName: "Guest Tactician" },
+    {
+      AND: [
+        { email: null },
+        { googleId: null },
+        { passwordHash: null },
+        { username: null },
+      ],
+    },
+    {
+      AND: [
+        { email: null },
+        { googleId: null },
+        { passwordHash: null },
+        { username: { startsWith: "tactician_" } },
+      ],
+    },
+  ],
+};
+
+/**
+ * Delete anonymous guest rows and their puzzle history / likes.
+ */
+export async function purgeGuestUsers(): Promise<number> {
+  const guests = await prisma.user.findMany({
+    where: GUEST_USER_WHERE,
+    select: { id: true },
+  });
+  const ids = guests.map((g) => g.id);
+
+  if (ids.length > 0) {
+    await prisma.puzzleHistory.deleteMany({ where: { userId: { in: ids } } });
+    await prisma.puzzleLike.deleteMany({ where: { userId: { in: ids } } });
+    const result = await prisma.user.deleteMany({
+      where: { id: { in: ids } },
+    });
+    return result.count;
+  }
+
+  // Catch orphaned history from IDs that never became User rows
+  await prisma.puzzleHistory.deleteMany({
+    where: {
+      OR: [
+        { userId: { startsWith: "guest_" } },
+        { userId: { startsWith: "guest-" } },
+        { userId: "guest-user" },
+        { userId: "anonymous-guest" },
+      ],
+    },
+  });
+  await prisma.puzzleLike.deleteMany({
+    where: {
+      OR: [
+        { userId: { startsWith: "guest_" } },
+        { userId: { startsWith: "guest-" } },
+        { userId: "guest-user" },
+        { userId: "anonymous-guest" },
+      ],
+    },
+  });
+
+  return 0;
+}
+
 /**
  * Purge leftover test accounts and anonymous empty guest sessions.
  */
 export async function purgeTestUsers(): Promise<number> {
+  const guestsPurged = await purgeGuestUsers();
   const result = await prisma.user.deleteMany({
     where: {
       OR: [
@@ -84,18 +154,11 @@ export async function purgeTestUsers(): Promise<number> {
         { email: { contains: "test.chess" } },
         { email: { contains: "test_spec_" } },
         { email: { contains: "test_client_" } },
-        {
-          AND: [
-            { username: null },
-            { googleId: null },
-            { email: null },
-          ],
-        },
       ],
     },
   });
 
-  return result.count;
+  return guestsPurged + result.count;
 }
 
 /**
