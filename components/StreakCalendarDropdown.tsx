@@ -26,6 +26,7 @@ export interface StreakCalendarDropdownProps {
   perfectWeekCounter?: number;
   isFrozenState?: boolean;
   lastSolvedDate?: string | null;
+  todayDate?: string;
   activeDates?: string[];
   frozenDates?: string[];
   align?: "left" | "right" | "center";
@@ -76,24 +77,25 @@ export function StreakCalendarDropdown({
   perfectWeekCounter = 0,
   isFrozenState = false,
   lastSolvedDate,
+  todayDate,
   activeDates = [],
   frozenDates = [],
   align = "left",
 }: StreakCalendarDropdownProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [todayStr, setTodayStr] = useState<string>("2026-11-04");
+  const [todayStr, setTodayStr] = useState<string>(todayDate || "2026-11-04");
   const [viewYear, setViewYear] = useState<number>(2026);
   const [viewMonth, setViewMonth] = useState<number>(10); // November (0-indexed)
 
   useEffect(() => {
-    const today = getTodayDateString();
+    const today = todayDate || getTodayDateString();
     setTodayStr(today);
     const [y, m] = today.split("-").map(Number);
     if (y && m) {
       setViewYear(y);
       setViewMonth(m - 1);
     }
-  }, [isOpen]);
+  }, [isOpen, todayDate]);
 
   // Auto-clamp dropdown within viewport boundaries
   useEffect(() => {
@@ -297,8 +299,18 @@ export function StreakCalendarDropdown({
           transition={{ duration: 0.18, ease: "easeOut" }}
           className={`fixed top-12 left-1/2 -translate-x-1/2 sm:absolute sm:top-full sm:left-0 sm:translate-x-0 mt-2 z-50 w-[310px] sm:w-[330px] max-w-[calc(100vw-24px)] rounded-2xl bg-[#161412]/98 border border-white/15 p-4 shadow-2xl backdrop-blur-xl text-white select-none`}
         >
-          {/* Header: Month Title & Controls */}
+          {/* Header: Centered Month Title & Controls */}
           <div className="flex items-center justify-between pb-3 mb-2 border-b border-white/10">
+            <button
+              type="button"
+              onClick={handlePrevMonth}
+              className="w-7 h-7 rounded-lg flex items-center justify-center bg-white/5 hover:bg-white/10 text-white/70 hover:text-white transition-colors cursor-pointer"
+              title="Previous month"
+              aria-label="Previous month"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+
             <div className="flex items-center gap-1.5">
               <span className="text-sm font-black tracking-wide lowercase first-letter:uppercase text-[#f5f2eb]">
                 {monthTitle}
@@ -318,15 +330,6 @@ export function StreakCalendarDropdown({
             <div className="flex items-center gap-1">
               <button
                 type="button"
-                onClick={handlePrevMonth}
-                className="w-7 h-7 rounded-lg flex items-center justify-center bg-white/5 hover:bg-white/10 text-white/70 hover:text-white transition-colors cursor-pointer"
-                title="Previous month"
-                aria-label="Previous month"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
                 onClick={handleNextMonth}
                 className="w-7 h-7 rounded-lg flex items-center justify-center bg-white/5 hover:bg-white/10 text-white/70 hover:text-white transition-colors cursor-pointer"
                 title="Next month"
@@ -337,7 +340,7 @@ export function StreakCalendarDropdown({
               <button
                 type="button"
                 onClick={onClose}
-                className="w-7 h-7 ml-1 rounded-lg flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
                 title="Close"
                 aria-label="Close"
               >
