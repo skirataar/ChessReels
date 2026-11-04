@@ -29,6 +29,14 @@ import {
   clearAllUserAndPuzzleCache,
 } from "@/lib/puzzleCache";
 import { useStreak, resetStreakStats } from "@/lib/useStreak";
+import {
+  USER_STATS_CACHE_KEY,
+  UserStatsCache,
+  getStoredUserStats,
+  saveUserStatsSync,
+  mergeDbStatsWithLocal,
+  getTodayDateString,
+} from "@/lib/userStats";
 import { hydrateUserSession } from "@/lib/sessionHydration";
 import { StreakFlameBadge } from "@/components/StreakFlameBadge";
 import { StreakCalendarDropdown } from "@/components/StreakCalendarDropdown";
@@ -162,21 +170,7 @@ export function PlayView({
   const router = useRouter();
   const [guestId, setGuestId] = useState<string>("");
   const [currentElo, setCurrentElo] = useState<number>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const raw = window.localStorage.getItem(ACCOUNT_STORAGE_KEY);
-        if (raw) {
-          const acc = JSON.parse(raw);
-          if (acc?.elo && typeof acc.elo === "number") return acc.elo;
-        }
-        const savedElo = window.localStorage.getItem(ELO_STORAGE_KEY);
-        if (savedElo) {
-          const parsed = parseInt(savedElo, 10);
-          if (!isNaN(parsed)) return parsed;
-        }
-      } catch {}
-    }
-    return 800;
+    return getStoredUserStats().elo;
   });
   const [lastEloChange, setLastEloChange] = useState<number | null>(null);
 
@@ -735,9 +729,9 @@ export function PlayView({
                     }
                     setUserAccount(data.user);
                     hydrateUserSession(data.user);
-                    if (data.user.elo) {
-                      setCurrentElo(data.user.elo);
-                    }
+                    const merged = mergeDbStatsWithLocal(data.user);
+                    setCurrentElo(merged.elo);
+                    currentEloRef.current = merged.elo;
                     if (Array.isArray(data.user.solvedPuzzleIds) && data.user.solvedPuzzleIds.length > 0) {
                       setSolvedPuzzleIds((prev) => {
                         const next = new Set(prev);
@@ -777,9 +771,9 @@ export function PlayView({
                 if (data?.user && !isGuestAccount(data.user)) {
                   setUserAccount(data.user);
                   hydrateUserSession(data.user);
-                  if (data.user.elo) {
-                    setCurrentElo(data.user.elo);
-                  }
+                  const merged = mergeDbStatsWithLocal(data.user);
+                  setCurrentElo(merged.elo);
+                  currentEloRef.current = merged.elo;
                   if (Array.isArray(data.user.solvedPuzzleIds) && data.user.solvedPuzzleIds.length > 0) {
                     setSolvedPuzzleIds((prev) => {
                       const next = new Set(prev);
@@ -1156,7 +1150,6 @@ export function PlayView({
   const processEloResult = useCallback(
     (result: "win" | "loss", puzzle: PuzzleData) => {
       if (!puzzle) return;
-      if (puzzle.hasBeenRated) return;
       puzzle.hasBeenRated = true;
 
       // Mark hasBeenRated in queue state so this card is sealed
@@ -1168,7 +1161,8 @@ export function PlayView({
         )
       );
 
-      const userElo = currentEloRef.current;
+      const stats = getStoredUserStats();
+      const userElo = stats.elo;
       const puzzleRating = puzzle.rating || 1200;
       const K = isCalibrating ? 64 : 32;
 
@@ -1176,7 +1170,7 @@ export function PlayView({
 
       let eloDelta: number;
       if (result === "win") {
-        const rawGain = Math.max(4, Math.round(K * (1 - expectedScore)));
+        const rawGain = Math.max(5, Math.round(K * (1 - expectedScore)));
         if (puzzle.isRequeued === true) {
           // 50% redemption multiplier on requeued puzzle
           eloDelta = Math.max(2, Math.round(rawGain * 0.5));
@@ -1184,38 +1178,64 @@ export function PlayView({
           eloDelta = rawGain;
         }
       } else {
-        eloDelta = -Math.max(4, Math.round(K * expectedScore));
+        eloDelta = -Math.max(5, Math.round(K * expectedScore));
       }
 
-      // 1. Immediate Optimistic UI Update (functional updater, never reads stale closure)
-      let nextUserElo = userElo;
-      setCurrentElo((prev) => {
-        const next = Math.max(100, prev + eloDelta);
-        nextUserElo = next;
-        currentEloRef.current = next;
-        try {
-          if (typeof window !== "undefined") {
-            window.localStorage.setItem(ELO_STORAGE_KEY, next.toString());
-            const rawAcc = window.localStorage.getItem(ACCOUNT_STORAGE_KEY);
-            if (rawAcc) {
-              const parsedAcc = JSON.parse(rawAcc);
-              window.localStorage.setItem(
-                ACCOUNT_STORAGE_KEY,
-                JSON.stringify({ ...parsedAcc, elo: next })
-              );
+      const nextElo = Math.max(100, userElo + eloDelta);
+
+      // Streak update
+      const today = getTodayDateString();
+      let nextStreak = stats.currentStreak;
+      let nextLastDate = stats.lastSolvedDate;
+      let nextIsFrozen = stats.isFrozenState;
+      let nextFreezes = stats.streakFreezes;
+      let nextPerfectWeek = stats.perfectWeekCounter;
+
+      if (result === "win") {
+        if (stats.lastSolvedDate !== today) {
+          nextStreak = stats.currentStreak + 1;
+          nextLastDate = today;
+          nextIsFrozen = false;
+          if (nextFreezes < 2) {
+            nextPerfectWeek += 1;
+            if (nextPerfectWeek >= 7) {
+              nextFreezes = Math.min(2, nextFreezes + 1);
+              nextPerfectWeek = 0;
             }
+          } else {
+            nextPerfectWeek = 0;
           }
-        } catch {}
-        return next;
+        }
+      }
+
+      // Combo update: on fail, immediately reset combo to 0; on solve, only increment if cleanly solved without wrong move and not requeued
+      let nextCombo = stats.comboCount;
+      if (result === "loss") {
+        nextCombo = 0;
+      } else if (!puzzle.hasFailed && !puzzle.isRequeued) {
+        nextCombo = stats.comboCount + 1;
+      }
+
+      // Synchronous LocalStorage Save (Never 0)
+      saveUserStatsSync({
+        elo: nextElo,
+        currentStreak: nextStreak,
+        lastSolvedDate: nextLastDate,
+        streakFreezes: nextFreezes,
+        perfectWeekCounter: nextPerfectWeek,
+        isFrozenState: nextIsFrozen,
+        comboCount: nextCombo,
       });
 
+      // 1. Immediate Optimistic UI Update
+      setCurrentElo(nextElo);
+      currentEloRef.current = nextElo;
       setLastEloChange(eloDelta);
       triggerEloDeltaBadge(eloDelta);
 
       recordPuzzlePlay(result === "win" ? "win" : "loss");
       if (result === "win") {
         markPuzzleSolved(puzzle.id);
-        setStreak((prev) => prev + 1);
         try {
           if (typeof window !== "undefined") {
             window.localStorage.setItem(
@@ -1224,8 +1244,6 @@ export function PlayView({
             );
           }
         } catch {}
-      } else {
-        setStreak(0);
       }
 
       // Record rating state in history
@@ -1240,16 +1258,19 @@ export function PlayView({
       // 2. Reliable Database Persistence (Non-Blocking)
       const effectiveUserId = userAccount?.id || guestId;
       if (effectiveUserId) {
-        let streakPayload: {
-          streakFreezes?: number;
-          perfectWeekCounter?: number;
-          isFrozenState?: boolean;
-          lastSolvedDate?: string;
-        } = {};
-        try {
-          const rawStreak = localStorage.getItem("chess_reel_streak_data");
-          if (rawStreak) streakPayload = JSON.parse(rawStreak);
-        } catch {}
+        fetch("/api/user/stats", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            elo: nextElo,
+            streak: nextStreak,
+            lastSolvedDate: nextLastDate,
+            streakFreezes: nextFreezes,
+            perfectWeekCounter: nextPerfectWeek,
+            isFrozenState: nextIsFrozen,
+            userId: userAccount?.id,
+          }),
+        }).catch(() => {});
 
         fetch("/api/user/update-elo", {
           method: "POST",
@@ -1257,18 +1278,18 @@ export function PlayView({
           body: JSON.stringify({
             puzzleRating,
             currentUserElo: userElo,
-            newElo: nextUserElo,
+            newElo: nextElo,
             eloDelta,
             result,
             status: result === "win" ? "solved" : "failed",
             userId: userAccount?.id,
             guestId,
             puzzleId: puzzle.id,
-            dailyStreak: dailyStreak,
-            streakFreezes: streakPayload.streakFreezes,
-            perfectWeekCounter: streakPayload.perfectWeekCounter,
-            isFrozenState: streakPayload.isFrozenState,
-            lastSolvedDate: streakPayload.lastSolvedDate,
+            dailyStreak: nextStreak,
+            streakFreezes: nextFreezes,
+            perfectWeekCounter: nextPerfectWeek,
+            isFrozenState: nextIsFrozen,
+            lastSolvedDate: nextLastDate,
             isRequeued: puzzle.isRequeued,
             attemptCount: puzzle.attemptCount,
           }),
@@ -1288,25 +1309,25 @@ export function PlayView({
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               userId: userAccount.id,
-              finalElo: nextUserElo,
+              finalElo: nextElo,
               isFinished: true,
             }),
           }).catch(() => {});
 
           const updatedAcc: UserAccount = {
             ...userAccount,
-            elo: nextUserElo,
+            elo: nextElo,
             isCalibrated: true,
             calibrationStep: 6,
           };
           setUserAccount(updatedAcc);
-          setCalibratedFinalElo(nextUserElo);
+          setCalibratedFinalElo(nextElo);
           setIsCalibratedModalOpen(true);
 
           try {
             if (typeof window !== "undefined") {
               window.localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(updatedAcc));
-              window.localStorage.setItem(ELO_STORAGE_KEY, nextUserElo.toString());
+              window.localStorage.setItem(ELO_STORAGE_KEY, nextElo.toString());
               window.localStorage.removeItem(`chess_reel_tier_session_${userAccount.id}`);
               window.localStorage.removeItem("chess_reel_tier_session_guest");
               window.localStorage.removeItem("chess_reel_tier_session");
@@ -1321,13 +1342,13 @@ export function PlayView({
             body: JSON.stringify({
               userId: userAccount.id,
               step: nextStep,
-              finalElo: nextUserElo,
+              finalElo: nextElo,
             }),
           }).catch(() => {});
 
           const updatedAcc: UserAccount = {
             ...userAccount,
-            elo: nextUserElo,
+            elo: nextElo,
             calibrationStep: nextStep,
           };
           setUserAccount(updatedAcc);
@@ -1335,7 +1356,7 @@ export function PlayView({
           try {
             if (typeof window !== "undefined") {
               window.localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(updatedAcc));
-              window.localStorage.setItem(ELO_STORAGE_KEY, nextUserElo.toString());
+              window.localStorage.setItem(ELO_STORAGE_KEY, nextElo.toString());
             }
           } catch {}
         }

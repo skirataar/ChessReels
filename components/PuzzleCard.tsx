@@ -46,6 +46,7 @@ export interface PuzzleData {
   attemptCount?: number;
   attemptNumber?: number;
   hasBeenRated?: boolean;
+  hasFailed?: boolean;
   fen: string;
   moves: string;
   rating: number;
@@ -720,6 +721,13 @@ export function PuzzleCard({
     soundManager.preloadAll();
   }, [puzzle]);
 
+  // Single ref to guard scoring at most once per active puzzle card instance
+  const hasScoredCurrentPuzzleRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    hasScoredCurrentPuzzleRef.current = false;
+  }, [puzzle?.id, puzzle?.instanceId]);
+
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
@@ -728,17 +736,18 @@ export function PuzzleCard({
     }, 2000);
   }, []);
 
-  // Send Elo update: guards with puzzle.hasBeenRated and delegates to onEloPayout or onEloUpdate
+  // Send Elo update: delegates to onEloPayout or onEloUpdate
   const sendEloResult = useCallback(
     (result: "win" | "loss") => {
       if (!puzzle) return;
-      if (puzzle.hasBeenRated) return;
-      puzzle.hasBeenRated = true;
 
       if (onEloPayout) {
         onEloPayout(result, puzzle);
         return;
       }
+
+      if (puzzle.hasBeenRated) return;
+      puzzle.hasBeenRated = true;
 
       if (isCalibration) {
         onEloUpdate(currentElo, result === "win" ? 1 : -1, result === "win", puzzle.id);
@@ -1195,7 +1204,11 @@ export function PuzzleCard({
           });
           setPlacementFeedback("incorrect");
           onStatusChange("failed");
-          if (!puzzle?.hasBeenRated) {
+          if (puzzle) {
+            puzzle.hasFailed = true;
+          }
+          if (!hasScoredCurrentPuzzleRef.current) {
+            hasScoredCurrentPuzzleRef.current = true;
             sendEloResult("loss");
           }
           if (puzzle) {
@@ -1215,7 +1228,11 @@ export function PuzzleCard({
         }
 
         // Penalize Elo once per puzzle
-        if (!puzzle?.hasBeenRated) {
+        if (puzzle) {
+          puzzle.hasFailed = true;
+        }
+        if (!hasScoredCurrentPuzzleRef.current) {
+          hasScoredCurrentPuzzleRef.current = true;
           sendEloResult("loss");
         }
         if (puzzle) {
@@ -1287,7 +1304,8 @@ export function PuzzleCard({
           });
         }
 
-        if (!puzzle?.hasBeenRated) {
+        if (!hasScoredCurrentPuzzleRef.current) {
+          hasScoredCurrentPuzzleRef.current = true;
           sendEloResult("win");
         }
 
@@ -1355,7 +1373,8 @@ export function PuzzleCard({
               });
             }
 
-            if (!puzzle?.hasBeenRated) {
+            if (!hasScoredCurrentPuzzleRef.current) {
+              hasScoredCurrentPuzzleRef.current = true;
               sendEloResult("win");
             }
 

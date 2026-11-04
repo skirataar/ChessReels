@@ -1,6 +1,7 @@
 "use client";
 
 import { useSyncExternalStore, useCallback } from "react";
+import { getStoredUserStats, saveUserStatsSync } from "@/lib/userStats";
 
 export const DAILY_STREAK_KEY = "chess_reel_daily_streak";
 export const LAST_PLAYED_DATE_KEY = "chess_reel_last_played_date";
@@ -293,62 +294,36 @@ function getSnapshot(): StreakStats {
 
   try {
     const today = getTodayDateString();
-    const storedStreakDataRaw = window.localStorage.getItem(STREAK_DATA_KEY);
-    const rawLegacyLastDate = window.localStorage.getItem(LAST_PLAYED_DATE_KEY);
-    const rawLegacyStreak = parseInt(
-      window.localStorage.getItem(DAILY_STREAK_KEY) || "0",
-      10
-    );
+    const userStats = getStoredUserStats();
 
-    let streakData: StreakData;
-    if (storedStreakDataRaw) {
-      try {
-        const parsed = JSON.parse(storedStreakDataRaw);
-        const freezes = typeof parsed.streakFreezes === "number" ? Math.min(2, Math.max(0, parsed.streakFreezes)) : 0;
-        streakData = {
-          currentStreak: typeof parsed.currentStreak === "number" ? parsed.currentStreak : 0,
-          lastSolvedDate: parsed.lastSolvedDate || null,
-          streakFreezes: freezes,
-          perfectWeekCounter: freezes >= 2 ? 0 : Math.min(7, Math.max(0, parsed.perfectWeekCounter || 0)),
-          isFrozenState: Boolean(parsed.isFrozenState),
-        };
-      } catch {
-        streakData = {
-          currentStreak: rawLegacyStreak,
-          lastSolvedDate: rawLegacyLastDate,
-          streakFreezes: 0,
-          perfectWeekCounter: 0,
-          isFrozenState: false,
-        };
-      }
-    } else {
-      streakData = {
-        currentStreak: rawLegacyStreak,
-        lastSolvedDate: rawLegacyLastDate,
-        streakFreezes: 0,
-        perfectWeekCounter: 0,
-        isFrozenState: false,
-      };
-    }
+    const streakData: StreakData = {
+      currentStreak: userStats.currentStreak,
+      lastSolvedDate: userStats.lastSolvedDate,
+      streakFreezes: userStats.streakFreezes,
+      perfectWeekCounter: userStats.perfectWeekCounter,
+      isFrozenState: userStats.isFrozenState,
+    };
 
     // Resolve active state on load
     const effectiveStreakData = resolveStreakOnLoad(streakData, today);
 
-    // Persist if newly initialized or state changed on load (e.g. freeze consumed or streak lapsed)
-    if (!storedStreakDataRaw || JSON.stringify(effectiveStreakData) !== JSON.stringify(streakData)) {
-      try {
-        window.localStorage.setItem(STREAK_DATA_KEY, JSON.stringify(effectiveStreakData));
-        window.localStorage.setItem(DAILY_STREAK_KEY, String(effectiveStreakData.currentStreak));
-        if (effectiveStreakData.lastSolvedDate) {
-          window.localStorage.setItem(LAST_PLAYED_DATE_KEY, effectiveStreakData.lastSolvedDate);
-        }
-      } catch {}
+    // Persist if state changed on load (e.g. freeze consumed or streak lapsed)
+    if (
+      effectiveStreakData.currentStreak !== userStats.currentStreak ||
+      effectiveStreakData.lastSolvedDate !== userStats.lastSolvedDate ||
+      effectiveStreakData.isFrozenState !== userStats.isFrozenState ||
+      effectiveStreakData.streakFreezes !== userStats.streakFreezes
+    ) {
+      saveUserStatsSync({
+        currentStreak: effectiveStreakData.currentStreak,
+        lastSolvedDate: effectiveStreakData.lastSolvedDate,
+        streakFreezes: effectiveStreakData.streakFreezes,
+        perfectWeekCounter: effectiveStreakData.perfectWeekCounter,
+        isFrozenState: effectiveStreakData.isFrozenState,
+      });
     }
 
-    const rawCombo = parseInt(
-      window.localStorage.getItem(SOLVE_COMBO_KEY) || "0",
-      10
-    );
+    const rawCombo = userStats.comboCount;
     const rawBestCombo = parseInt(
       window.localStorage.getItem(BEST_COMBO_KEY) || "0",
       10
@@ -414,11 +389,13 @@ function subscribe(callback: Listener) {
   listeners.add(callback);
   if (typeof window !== "undefined") {
     window.addEventListener("storage", callback);
+    window.addEventListener("chessreels-user-stats-updated", callback);
   }
   return () => {
     listeners.delete(callback);
     if (typeof window !== "undefined") {
       window.removeEventListener("storage", callback);
+      window.removeEventListener("chessreels-user-stats-updated", callback);
     }
   };
 }
