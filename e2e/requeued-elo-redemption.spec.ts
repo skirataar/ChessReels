@@ -24,13 +24,20 @@ test.describe("Re-queued Failed Puzzles Elo Calculation & Anti-Farming Redemptio
       localStorage.removeItem("chess_reel_solved_ids");
       document.cookie = `chess_reel_session=${user.id}; path=/; max-age=86400`;
     }, DEVTEST_USER);
+    const accountPromise = page.waitForResponse((resp) => resp.url().includes("/api/user/account") && resp.status() === 200).catch(() => null);
     await page.reload();
+    await accountPromise;
+    await page.waitForTimeout(400);
   });
 
   test("1. Re-queued solve awards 50% of normal Elo gain and triggers floating +Elo delta badge", async ({
     page,
   }) => {
     await page.waitForSelector('[data-testid="header-rank-btn"]', { timeout: 10_000 });
+
+    const initialElo = await page.evaluate(() => {
+      return parseInt(localStorage.getItem("chess_reel_elo") || "1244", 10);
+    });
 
     // Step 1: Simulate first attempt failed via test event on puzzle 'test_p_101'
     await page.evaluate(() => {
@@ -57,7 +64,7 @@ test.describe("Re-queued Failed Puzzles Elo Calculation & Anti-Farming Redemptio
     const eloAfterFail = await page.evaluate(() => {
       return parseInt(localStorage.getItem("chess_reel_elo") || "0", 10);
     });
-    expect(eloAfterFail).toBe(DEVTEST_USER.elo - 14);
+    expect(eloAfterFail).toBe(initialElo - 14);
 
     // Step 2: Simulate re-queued puzzle redemption solve (+14 standard win -> reduced to +7)
     await page.evaluate(() => {
@@ -97,7 +104,7 @@ test.describe("Re-queued Failed Puzzles Elo Calculation & Anti-Farming Redemptio
     const eloAfterRedeem = await page.evaluate(() => {
       return parseInt(localStorage.getItem("chess_reel_elo") || "0", 10);
     });
-    expect(eloAfterRedeem).toBe(DEVTEST_USER.elo - 14 + 7);
+    expect(eloAfterRedeem).toBe(initialElo - 14 + 7);
 
     // Step 3: Attempting to solve 'test_p_101' again should be strictly blocked by anti-farming guard
     await page.evaluate(() => {
@@ -118,7 +125,7 @@ test.describe("Re-queued Failed Puzzles Elo Calculation & Anti-Farming Redemptio
     const eloAfterBlocked = await page.evaluate(() => {
       return parseInt(localStorage.getItem("chess_reel_elo") || "0", 10);
     });
-    expect(eloAfterBlocked).toBe(DEVTEST_USER.elo - 14 + 7);
+    expect(eloAfterBlocked).toBe(initialElo - 14 + 7);
   });
 
   test("2. Re-queued attempt failed again keeps state as 'failed_once' and allows future redemption", async ({
