@@ -2502,7 +2502,7 @@ export function PuzzleCard({
                 className="absolute inset-0 bg-[#12100e]/95 backdrop-blur-md flex flex-col items-center justify-center p-6 z-20"
               >
                 {/* Clean Flush Outline Trophy */}
-                <Trophy stroke="#c29b78" className="w-6 h-6 mb-3" strokeWidth={1.5} />
+                <Trophy data-testid="solved-trophy" stroke="#c29b78" className="w-6 h-6 mb-3" strokeWidth={1.5} />
                 {/* Title without Sparkle Star */}
                 <div className="text-xl sm:text-2xl font-bold text-[#f5f2eb] tracking-tight uppercase mb-1 drop-shadow-md">
                   <span>Puzzle Solved!</span>
