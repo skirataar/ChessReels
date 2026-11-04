@@ -807,7 +807,10 @@ export default function TempQAPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0908] text-[#f5f2eb] p-4 sm:p-8 font-sans antialiased selection:bg-[#c29b78]/30">
+    <div
+      suppressHydrationWarning
+      className="min-h-screen bg-[#0a0908] text-[#f5f2eb] p-4 sm:p-8 font-sans antialiased selection:bg-[#c29b78]/30"
+    >
       {/* Top Banner Navigation */}
       <header className="max-w-7xl mx-auto mb-8 pb-6 border-b border-white/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
@@ -848,7 +851,10 @@ export default function TempQAPage() {
       </header>
 
       {/* Main Grid: 7 Modular Sections */}
-      <main className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6 pb-20 w-full px-4 sm:px-6">
+      <main
+        suppressHydrationWarning
+        className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6 pb-20 w-full px-4 sm:px-6"
+      >
 
         {/* ------------------------------------------------------------- */}
         {/* MODULE 1: Onboarding Summary Pill & Pro Upsell Simulator */}
