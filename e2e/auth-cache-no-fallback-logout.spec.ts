@@ -104,10 +104,12 @@ test.describe("Authentication, Cache Keying, No Fallback Puzzles & Seamless Logo
       window.sessionStorage.setItem("session_test", "active");
     }, user);
 
-    await expect(page.getByTestId("header-profile-btn")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId("header-profile-btn")).not.toBeVisible();
+    const bottomProfileBtn = page.getByTestId("bottom-nav-profile");
+    await expect(bottomProfileBtn).toBeVisible({ timeout: 10000 });
 
-    // Open profile modal and click sign out
-    await page.getByTestId("header-profile-btn").click();
+    // Open profile modal and click sign out via bottom dock
+    await bottomProfileBtn.click();
     await expect(page.getByRole("dialog")).toBeVisible({ timeout: 5000 });
 
     const signOutBtn = page.getByTitle(/sign out of account/i);
@@ -241,7 +243,9 @@ test.describe("Authentication, Cache Keying, No Fallback Puzzles & Seamless Logo
     await page.getByRole("button", { name: "Sign In" }).click();
     await page.waitForURL(/\/play/, { timeout: 10000 });
 
-    await expect(page.getByTestId("header-profile-btn")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId("header-profile-btn")).not.toBeVisible();
+    const bottomProfileBtn = page.getByTestId("bottom-nav-profile");
+    await expect(bottomProfileBtn).toBeVisible({ timeout: 10000 });
 
     // Monitor DOM mutations for any legacy landing page elements
     let legacyLandingPageDetected = false;
@@ -259,8 +263,8 @@ test.describe("Authentication, Cache Keying, No Fallback Puzzles & Seamless Logo
       observer.observe(document.body, { childList: true, subtree: true });
     });
 
-    // Open profile modal and click sign out
-    await page.getByTestId("header-profile-btn").click();
+    // Open profile modal and click sign out via bottom dock
+    await bottomProfileBtn.click();
     await expect(page.getByRole("dialog")).toBeVisible({ timeout: 5000 });
 
     const signOutBtn = page.getByTitle(/sign out of account/i);

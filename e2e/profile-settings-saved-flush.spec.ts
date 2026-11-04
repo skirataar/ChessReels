@@ -151,10 +151,13 @@ test.describe("Profile Settings, Change Password, Saved Puzzles & Flush Under-Bo
     await expect(page.getByTestId("header-quota-btn")).toBeVisible({ timeout: 10000 });
     await page.waitForTimeout(500);
 
-    // Open profile modal via header profile button
-    const profileBtn = page.getByTestId("header-profile-btn");
-    await expect(profileBtn).toBeVisible({ timeout: 10000 });
-    await profileBtn.click();
+    // Verify header profile button is completely removed
+    await expect(page.getByTestId("header-profile-btn")).not.toBeVisible();
+
+    // Open profile modal via bottom dock profile button
+    const bottomNavProfile = page.getByTestId("bottom-nav-profile");
+    await expect(bottomNavProfile).toBeVisible({ timeout: 10000 });
+    await bottomNavProfile.click();
 
     // Verify Profile Modal is open
     await expect(page.getByRole("dialog")).toBeVisible({ timeout: 5000 });
@@ -213,12 +216,16 @@ test.describe("Profile Settings, Change Password, Saved Puzzles & Flush Under-Bo
     });
     await page.reload();
 
-    // Wait for pro gold ring on profile button indicating hydration is complete
-    await expect(page.getByTestId("header-profile-btn")).toHaveClass(/ring-amber-400/, { timeout: 10000 });
+    // Verify header profile button is completely removed
+    await expect(page.getByTestId("header-profile-btn")).not.toBeVisible();
+
+    // Wait for pro gold ring on bottom dock profile button indicating hydration is complete
+    const bottomNavProfile = page.getByTestId("bottom-nav-profile");
+    await expect(page.getByTestId("bottom-nav-profile-avatar")).toHaveClass(/ring-amber-400/, { timeout: 10000 });
     await page.waitForTimeout(300);
 
-    // Open profile modal for Pro account
-    await page.getByTestId("header-profile-btn").click();
+    // Open profile modal for Pro account via bottom dock
+    await bottomNavProfile.click();
     await expect(page.getByRole("dialog")).toBeVisible({ timeout: 5000 });
     await expect(page.getByText(/pro active/i).first()).toBeVisible();
     await expect(page.getByText("2250")).toBeVisible(); // Pro peak elo

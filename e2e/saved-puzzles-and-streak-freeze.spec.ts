@@ -264,8 +264,9 @@ test.describe("Task 1 & Task 2: UI Integration & In-App Saved Puzzle Player", ()
     const streakNum = page.getByTestId("streak-number-display").last();
     await expect(streakNum).toHaveClass(/text-\[#f5f2eb\]/);
 
-    // 2. Open Profile via Bottom Dock
-    const profileBtn = page.getByTestId("header-profile-btn");
+    // 2. Open Profile via Bottom Dock (header profile button is cleanly removed)
+    await expect(page.getByTestId("header-profile-btn")).not.toBeVisible();
+    const profileBtn = page.getByTestId("bottom-nav-profile");
     await expect(profileBtn).toBeVisible({ timeout: 10000 });
     await profileBtn.click();
 
@@ -305,7 +306,8 @@ test.describe("Task 1 & Task 2: UI Integration & In-App Saved Puzzle Player", ()
     await page.goto("/play");
     await expect(page.getByTestId("chessboard-container")).toBeVisible({ timeout: 10000 });
 
-    const profileBtn = page.getByTestId("header-profile-btn");
+    await expect(page.getByTestId("header-profile-btn")).not.toBeVisible();
+    const profileBtn = page.getByTestId("bottom-nav-profile");
     await expect(profileBtn).toBeVisible({ timeout: 10000 });
     await profileBtn.click();
 
@@ -366,7 +368,8 @@ test.describe("Task 1 & Task 2: UI Integration & In-App Saved Puzzle Player", ()
     await page.goto("/play");
     await expect(page.getByTestId("chessboard-container")).toBeVisible({ timeout: 10000 });
 
-    const profileBtn = page.getByTestId("header-profile-btn");
+    await expect(page.getByTestId("header-profile-btn")).not.toBeVisible();
+    const profileBtn = page.getByTestId("bottom-nav-profile");
     await expect(profileBtn).toBeVisible({ timeout: 10000 });
     await profileBtn.click();
 

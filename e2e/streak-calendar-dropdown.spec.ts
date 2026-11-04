@@ -17,8 +17,10 @@ async function loginAsDedicatedTestUser(page: Page) {
   const signInBtn = page.getByRole("button", { name: "Sign In" });
   if (await signInBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
     await signInBtn.click();
-    await page.fill('input[placeholder="Username or email"]', TEST_EMAIL);
-    await page.fill('input[placeholder="Password"]', TEST_PASSWORD);
+    const userInput = page.locator("#login-username, input[placeholder*='email'], input[placeholder*='Username']").first();
+    const passInput = page.locator("#login-password, input[type='password']").first();
+    await userInput.fill(TEST_EMAIL);
+    await passInput.fill(TEST_PASSWORD);
     await page.getByRole("button", { name: "Sign In" }).click();
     await page.waitForURL(/\/play/, { timeout: 10000 });
   } else {
@@ -152,7 +154,7 @@ test.describe("Streak Calendar & Freezes Dropdown Menu", () => {
     expect(ignitedFill).toBe("#f59e0b");
   });
 
-  test("6. Decluttered header: freeze indicator and pro badge removed; profile icon has gold ring when pro, grey when free", async ({ page }) => {
+  test("6. Decluttered header: freeze indicator and pro badge removed; profile icon has gold ring when pro, grey when free in bottom dock", async ({ page }) => {
     await loginAsDedicatedTestUser(page);
 
     // 1. Freeze indicator is removed from header
@@ -161,9 +163,12 @@ test.describe("Streak Calendar & Freezes Dropdown Menu", () => {
     // 2. Pro text badge is removed from header
     await expect(page.getByTestId("header-pro-badge")).not.toBeVisible();
 
-    // 3. Profile button exists in header
-    const profileBtn = page.getByTestId("header-profile-btn");
-    await expect(profileBtn).toBeVisible();
+    // 3. Profile button is completely removed from header (no duplicate)
+    await expect(page.getByTestId("header-profile-btn")).not.toBeVisible();
+
+    // 4. Bottom dock profile button has grey ring when free, gold ring when pro
+    const bottomNavProfile = page.getByTestId("bottom-nav-profile");
+    await expect(bottomNavProfile).toBeVisible();
 
     // Test Free account state (grey ring)
     await page.evaluate(() => {
@@ -171,7 +176,8 @@ test.describe("Streak Calendar & Freezes Dropdown Menu", () => {
       window.dispatchEvent(new Event("plan-updated"));
       window.dispatchEvent(new Event("storage"));
     });
-    await expect(profileBtn).toHaveClass(/ring-white\/20/);
+    const profileAvatar = page.getByTestId("bottom-nav-profile-avatar");
+    await expect(profileAvatar).toHaveClass(/ring-white\/20/);
 
     // Test Pro account state (gold ring)
     await page.evaluate(() => {
@@ -179,7 +185,7 @@ test.describe("Streak Calendar & Freezes Dropdown Menu", () => {
       window.dispatchEvent(new Event("plan-updated"));
       window.dispatchEvent(new Event("storage"));
     });
-    await expect(profileBtn).toHaveClass(/ring-amber-400/);
+    await expect(profileAvatar).toHaveClass(/ring-amber-400/);
     await expect(page.getByTestId("header-pro-badge")).not.toBeVisible();
   });
 });
