@@ -10,6 +10,10 @@ import {
   Globe,
   UserPlus,
   Trash2,
+  Check,
+  Clock,
+  Inbox,
+  Send,
 } from "lucide-react";
 import { UserAvatar } from "@/components/UserAvatar";
 
@@ -21,6 +25,38 @@ export interface FriendEntry {
   elo: number;
   streak: number;
   peakElo?: number;
+  skillTier?: string | null;
+  plan?: string | null;
+}
+
+export interface FriendRequestItem {
+  id: string;
+  senderId: string;
+  receiverId: string;
+  status: string;
+  createdAt: string;
+  sender?: {
+    id: string;
+    username: string | null;
+    displayName: string | null;
+    avatar: string | null;
+    elo: number;
+    streak: number;
+    peakElo: number;
+    skillTier: string | null;
+    plan: string | null;
+  };
+  receiver?: {
+    id: string;
+    username: string | null;
+    displayName: string | null;
+    avatar: string | null;
+    elo: number;
+    streak: number;
+    peakElo: number;
+    skillTier: string | null;
+    plan: string | null;
+  };
 }
 
 interface LeaderboardModalProps {
@@ -36,6 +72,7 @@ interface LeaderboardModalProps {
     avatar?: string;
   } | null;
   onOpenAuth?: () => void;
+  onIncomingRequestsCountChange?: (count: number) => void;
 }
 
 interface LeaderboardEntry {
@@ -43,7 +80,6 @@ interface LeaderboardEntry {
   name: string;
   elo: number;
   tier: string;
-  avatarBg: string;
 }
 
 export function getTier(elo: number): {
@@ -53,46 +89,46 @@ export function getTier(elo: number): {
   nextTier?: { name: string; threshold: number };
 } {
   if (elo >= 2400)
-    return { name: "Grandmaster", color: "#f59e0b", bg: "rgba(245, 158, 11, 0.15)" };
+    return { name: "Grandmaster", color: "#c29b78", bg: "rgba(194, 155, 120, 0.15)" };
   if (elo >= 2000)
     return {
       name: "Master",
-      color: "#ec4899",
-      bg: "rgba(236, 72, 153, 0.15)",
+      color: "#dfb48c",
+      bg: "rgba(223, 180, 140, 0.15)",
       nextTier: { name: "Grandmaster", threshold: 2400 },
     };
   if (elo >= 1600)
     return {
       name: "Diamond",
-      color: "#38bdf8",
-      bg: "rgba(56, 189, 248, 0.15)",
+      color: "#94a3b8",
+      bg: "rgba(148, 163, 184, 0.15)",
       nextTier: { name: "Master", threshold: 2000 },
     };
   if (elo >= 1400)
     return {
       name: "Platinum",
-      color: "#a855f7",
-      bg: "rgba(168, 85, 247, 0.15)",
+      color: "#a8a29e",
+      bg: "rgba(168, 162, 158, 0.15)",
       nextTier: { name: "Diamond", threshold: 1600 },
     };
   if (elo >= 1200)
     return {
       name: "Gold",
-      color: "#eab308",
-      bg: "rgba(234, 179, 8, 0.15)",
+      color: "#c29b78",
+      bg: "rgba(194, 155, 120, 0.15)",
       nextTier: { name: "Platinum", threshold: 1400 },
     };
   if (elo >= 1000)
     return {
       name: "Silver",
-      color: "#94a3b8",
-      bg: "rgba(148, 163, 184, 0.15)",
+      color: "#78716c",
+      bg: "rgba(120, 113, 108, 0.15)",
       nextTier: { name: "Gold", threshold: 1200 },
     };
   return {
     name: "Bronze",
-    color: "#b45309",
-    bg: "rgba(180, 83, 9, 0.15)",
+    color: "#78716c",
+    bg: "rgba(120, 113, 108, 0.15)",
     nextTier: { name: "Silver", threshold: 1000 },
   };
 }
@@ -105,38 +141,53 @@ export function LeaderboardModal({
   guestId,
   userAccount,
   onOpenAuth,
+  onIncomingRequestsCountChange,
 }: LeaderboardModalProps) {
-  const [tab, setTab] = useState<"global" | "friends">("global");
+  const [tab, setTab] = useState<"global" | "friends" | "requests">("global");
   const [friends, setFriends] = useState<FriendEntry[]>([]);
+  const [incomingRequests, setIncomingRequests] = useState<FriendRequestItem[]>([]);
+  const [outgoingRequests, setOutgoingRequests] = useState<FriendRequestItem[]>([]);
   const [friendInput, setFriendInput] = useState<string>("");
   const [friendError, setFriendError] = useState<string | null>(null);
   const [friendSuccess, setFriendSuccess] = useState<string | null>(null);
-  const [isAddingFriend, setIsAddingFriend] = useState<boolean>(false);
+  const [isSendingRequest, setIsSendingRequest] = useState<boolean>(false);
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
   const effectiveUserId = userAccount?.id || guestId;
 
-  // Load friends from API
-  const loadFriends = useCallback(async () => {
+  // Load friends and pending requests from API
+  const loadFriendsAndRequests = useCallback(async () => {
     if (!effectiveUserId) return;
     try {
       const res = await fetch(`/api/friends?userId=${encodeURIComponent(effectiveUserId)}`);
       if (res.ok) {
         const data = await res.json();
-        setFriends(data.friends || []);
+        const loadedFriends: FriendEntry[] = data.friends || [];
+        const loadedIncoming: FriendRequestItem[] = data.incomingRequests || [];
+        const loadedOutgoing: FriendRequestItem[] = data.outgoingRequests || [];
+
+        setFriends(loadedFriends);
+        setIncomingRequests(loadedIncoming);
+        setOutgoingRequests(loadedOutgoing);
+
+        const count = loadedIncoming.length;
+        if (onIncomingRequestsCountChange) {
+          onIncomingRequestsCountChange(count);
+        }
       }
     } catch (e) {
-      console.warn("Could not load friends:", e);
+      console.warn("Could not load friends data:", e);
     }
-  }, [effectiveUserId]);
+  }, [effectiveUserId, onIncomingRequestsCountChange]);
 
   useEffect(() => {
     if (isOpen) {
       const timer = setTimeout(() => {
-        loadFriends();
+        loadFriendsAndRequests();
       }, 0);
       return () => clearTimeout(timer);
     }
-  }, [isOpen, loadFriends]);
+  }, [isOpen, loadFriendsAndRequests]);
 
   if (!isOpen) return null;
 
@@ -159,13 +210,13 @@ export function LeaderboardModal({
 
   // Curated global tacticians
   const leaders: LeaderboardEntry[] = [
-    { rank: 1, name: "Magnus Carlsen", elo: 2882, tier: "Grandmaster", avatarBg: "bg-amber-500/20 text-amber-300" },
-    { rank: 2, name: "Hikaru Nakamura", elo: 2875, tier: "Grandmaster", avatarBg: "bg-amber-500/20 text-amber-300" },
-    { rank: 3, name: "Alireza Firouzja", elo: 2805, tier: "Grandmaster", avatarBg: "bg-amber-500/20 text-amber-300" },
-    { rank: 4, name: "Fabiano Caruana", elo: 2803, tier: "Grandmaster", avatarBg: "bg-amber-500/20 text-amber-300" },
-    { rank: 5, name: "Gukesh D", elo: 2794, tier: "Grandmaster", avatarBg: "bg-pink-500/20 text-pink-300" },
-    { rank: 6, name: "Arjun Erigaisi", elo: 2791, tier: "Grandmaster", avatarBg: "bg-pink-500/20 text-pink-300" },
-    { rank: 7, name: "Nodirbek Abdusattorov", elo: 2783, tier: "Grandmaster", avatarBg: "bg-sky-500/20 text-sky-300" },
+    { rank: 1, name: "Magnus Carlsen", elo: 2882, tier: "Grandmaster" },
+    { rank: 2, name: "Hikaru Nakamura", elo: 2875, tier: "Grandmaster" },
+    { rank: 3, name: "Alireza Firouzja", elo: 2805, tier: "Grandmaster" },
+    { rank: 4, name: "Fabiano Caruana", elo: 2803, tier: "Grandmaster" },
+    { rank: 5, name: "Gukesh D", elo: 2794, tier: "Grandmaster" },
+    { rank: 6, name: "Arjun Erigaisi", elo: 2791, tier: "Grandmaster" },
+    { rank: 7, name: "Nodirbek Abdusattorov", elo: 2783, tier: "Grandmaster" },
   ];
 
   const userRank = Math.max(
@@ -173,14 +224,14 @@ export function LeaderboardModal({
     Math.round(500000 / (1 + Math.exp((currentElo - 1200) / 250)))
   );
 
-  // Handle Add Friend
-  const handleAddFriend = async (targetUsername?: string) => {
-    const uname = (targetUsername || friendInput).trim().toLowerCase();
+  // Handle Send Friend Request
+  const handleSendFriendRequest = async () => {
+    const uname = friendInput.trim().toLowerCase().replace(/^@/, "");
     if (!uname) return;
 
     setFriendError(null);
     setFriendSuccess(null);
-    setIsAddingFriend(true);
+    setIsSendingRequest(true);
 
     try {
       const res = await fetch("/api/friends", {
@@ -188,28 +239,78 @@ export function LeaderboardModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: effectiveUserId,
-          friendUsername: uname,
+          targetUsername: uname,
         }),
       });
 
       const data = await res.json();
       if (!res.ok) {
-        setFriendError(data.error || "Could not add friend.");
-        setIsAddingFriend(false);
+        setFriendError(data.error || "Could not send friend request.");
+        setIsSendingRequest(false);
         return;
       }
 
-      setFriendSuccess(`Added ${data.friend.displayName || data.friend.username} to your friends!`);
+      setFriendSuccess(data.message || `Request sent to @${uname}`);
       setFriendInput("");
-      loadFriends();
+      await loadFriendsAndRequests();
     } catch {
-      setFriendError("Network error adding friend.");
+      setFriendError("Network error sending friend request.");
     } finally {
-      setIsAddingFriend(false);
+      setIsSendingRequest(false);
     }
   };
 
-  // Handle Remove Friend
+  // Handle Accept or Decline Incoming Request
+  const handleRespondToRequest = async (requestId: string, action: "accept" | "decline") => {
+    setActionLoadingId(requestId);
+    setFriendError(null);
+    setFriendSuccess(null);
+
+    try {
+      const res = await fetch("/api/friends", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          requestId,
+          userId: effectiveUserId,
+          action,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setFriendError(data.error || `Could not ${action} request.`);
+      } else {
+        setFriendSuccess(data.message || (action === "accept" ? "Friend request accepted." : "Friend request declined."));
+        await loadFriendsAndRequests();
+      }
+    } catch {
+      setFriendError(`Network error while trying to ${action} request.`);
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  // Handle Cancel Outgoing Request
+  const handleCancelOutgoingRequest = async (requestId: string) => {
+    try {
+      const res = await fetch("/api/friends", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: effectiveUserId,
+          requestId,
+        }),
+      });
+      if (res.ok) {
+        setOutgoingRequests((prev) => prev.filter((r) => r.id !== requestId));
+      }
+    } catch (e) {
+      console.warn("Error cancelling request:", e);
+    }
+  };
+
+  // Handle Remove Established Friend
   const handleRemoveFriend = async (friendId: string) => {
     try {
       const res = await fetch("/api/friends", {
@@ -228,7 +329,7 @@ export function LeaderboardModal({
     }
   };
 
-  // Build sorted combined list for Friends Rank
+  // Combined sorted list for Friends Leaderboard
   const currentUserFriendEntry = {
     id: effectiveUserId,
     username: userAccount?.username || "You",
@@ -239,122 +340,162 @@ export function LeaderboardModal({
     isSelf: true,
   };
 
-  const combinedFriendsList = [currentUserFriendEntry, ...friends.map((f) => ({ ...f, isSelf: false }))].sort(
-    (a, b) => b.elo - a.elo
-  );
+  const combinedFriendsList = [
+    currentUserFriendEntry,
+    ...friends.map((f) => ({ ...f, isSelf: false })),
+  ].sort((a, b) => b.elo - a.elo);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+    <div
+      data-testid="leaderboard-modal-overlay"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200"
+    >
       <div
-        className="w-full max-w-md max-h-[90vh] flex flex-col rounded-2xl bg-[#121214] border border-[#27272a] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200"
+        data-testid="leaderboard-modal"
+        className="bg-[#12100e] border border-white/[0.08] rounded-2xl p-5 max-w-[420px] w-full text-[#f5f2eb] max-h-[90vh] flex flex-col shadow-2xl relative animate-in zoom-in-95 duration-200"
         role="dialog"
         aria-modal="true"
         aria-labelledby="leaderboard-title"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#27272a] bg-[#18181B]/80 backdrop-blur-sm">
+        <div className="flex items-center justify-between pb-3.5 border-b border-white/[0.06]">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-              <Trophy className="w-4 h-4" />
+            <div className="w-8 h-8 rounded-xl bg-[#c29b78]/10 border border-[#c29b78]/20 flex items-center justify-center text-[#c29b78]">
+              <Trophy className="w-4 h-4" strokeWidth={1.5} />
             </div>
             <div>
-              <h2 id="leaderboard-title" className="text-base font-bold text-[#e5e1e4] tracking-tight">
-                {tab === "global" ? "Global Standings" : "Friends Ranking"}
+              <h2 id="leaderboard-title" className="text-sm font-semibold text-[#f5f2eb] tracking-tight">
+                {tab === "global"
+                  ? "Global Standings"
+                  : tab === "friends"
+                  ? "Friends Ranking"
+                  : "Friend Requests"}
               </h2>
-              <p className="text-[11px] text-[#bbcabf] font-medium">Tactical Reel Leaderboard</p>
+              <p className="text-[11px] text-[#78716c]">Tactical Reel Leaderboard</p>
             </div>
           </div>
           <button
             onClick={onClose}
             aria-label="Close leaderboard"
-            className="w-8 h-8 rounded-full flex items-center justify-center text-[#bbcabf] hover:text-white bg-[#201f21] hover:bg-[#2a2a2c] transition-colors cursor-pointer"
+            className="w-7 h-7 rounded-lg flex items-center justify-center text-[#78716c] hover:text-[#f5f2eb] hover:bg-white/[0.04] transition-colors cursor-pointer"
           >
-            <X className="w-4 h-4" />
+            <X className="w-4 h-4" strokeWidth={1.5} />
           </button>
         </div>
 
-        {/* Global vs Friends Segmented Toggle */}
-        <div className="p-3 bg-[#18181B]/50 border-b border-[#27272a]">
-          <div className="grid grid-cols-2 p-1 rounded-xl bg-[#201f21]">
+        {/* 3-Way Segmented Tabs (Global Standings | Friends | Requests) */}
+        <div className="my-3.5">
+          <div className="grid grid-cols-3 p-1 rounded-xl bg-[#0a0908] border border-white/[0.06]">
             <button
-              onClick={() => setTab("global")}
-              className={`py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              data-testid="tab-global"
+              onClick={() => {
+                setTab("global");
+                setFriendError(null);
+                setFriendSuccess(null);
+              }}
+              className={`py-1.5 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                 tab === "global"
-                  ? "bg-[#4edea3] text-[#002113] shadow-md"
-                  : "text-[#bbcabf] hover:text-white"
+                  ? "bg-[#1b1816] text-[#f5f2eb] border border-[#c29b78]/30 shadow-sm"
+                  : "text-[#78716c] hover:text-[#f5f2eb]"
               }`}
             >
-              <Globe className="w-3.5 h-3.5" />
-              <span>Global Standings</span>
+              <Globe className="w-3 h-3" />
+              <span>Global</span>
             </button>
             <button
-              onClick={() => setTab("friends")}
-              className={`py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              data-testid="tab-friends"
+              onClick={() => {
+                setTab("friends");
+                setFriendError(null);
+                setFriendSuccess(null);
+              }}
+              className={`py-1.5 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                 tab === "friends"
-                  ? "bg-[#4edea3] text-[#002113] shadow-md"
-                  : "text-[#bbcabf] hover:text-white"
+                  ? "bg-[#1b1816] text-[#f5f2eb] border border-[#c29b78]/30 shadow-sm"
+                  : "text-[#78716c] hover:text-[#f5f2eb]"
               }`}
             >
-              <Users className="w-3.5 h-3.5" />
-              <span>Friends Rank ({friends.length})</span>
+              <Users className="w-3 h-3" />
+              <span>Friends ({friends.length})</span>
+            </button>
+            <button
+              data-testid="tab-requests"
+              onClick={() => {
+                setTab("requests");
+                setFriendError(null);
+                setFriendSuccess(null);
+              }}
+              className={`py-1.5 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-1.5 cursor-pointer relative ${
+                tab === "requests"
+                  ? "bg-[#1b1816] text-[#f5f2eb] border border-[#c29b78]/30 shadow-sm"
+                  : "text-[#78716c] hover:text-[#f5f2eb]"
+              }`}
+            >
+              <Inbox className="w-3 h-3" />
+              <span>Requests</span>
+              {incomingRequests.length > 0 && (
+                <span
+                  data-testid="requests-tab-badge"
+                  className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-[#c29b78] text-[#0a0908] ml-0.5 leading-tight"
+                >
+                  {incomingRequests.length}
+                </span>
+              )}
             </button>
           </div>
         </div>
 
         {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {tab === "global" ? (
+        <div className="flex-1 overflow-y-auto space-y-3.5 pr-0.5">
+          {tab === "global" && (
             <>
-              {/* User Status Card */}
-              <div className="p-4 rounded-xl bg-gradient-to-br from-[#18181B] to-[#201f21] border border-[#4edea3]/30 shadow-lg relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-[#4edea3]/5 rounded-full blur-2xl pointer-events-none" />
-
+              {/* User Position Card */}
+              <div className="p-3.5 rounded-xl bg-[#0a0908] border border-white/[0.06] relative overflow-hidden">
                 <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <div className="w-9 h-9 rounded-full bg-[#4edea3]/10 border border-[#4edea3]/30 flex items-center justify-center text-[#4edea3] font-black text-sm overflow-hidden shrink-0">
-                      <UserAvatar avatar={userAccount?.avatar} fallback="⚡" />
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-full bg-[#1b1816] border border-white/[0.08] flex items-center justify-center text-sm overflow-hidden shrink-0">
+                      <UserAvatar avatar={userAccount?.avatar} fallback="♟" />
                     </div>
                     <div>
                       <div className="flex items-center gap-1.5">
-                        <span className="text-sm font-bold text-white">
+                        <span className="text-xs font-semibold text-[#f5f2eb]">
                           {userAccount ? userAccount.displayName || userAccount.username : "You"}
                         </span>
-                        <span className="text-[10px] text-[#bbcabf] font-mono">
+                        <span className="text-[10px] text-[#78716c] font-mono">
                           {userAccount ? `@${userAccount.username}` : `#${guestId.slice(0, 6)}`}
                         </span>
                       </div>
-                      <span
-                        className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded"
-                        style={{ color: currentTier.color, backgroundColor: currentTier.bg }}
-                      >
-                        {currentTier.name}
+                      <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-white/[0.04] text-[#c29b78] border border-white/[0.06] font-medium inline-block mt-0.5">
+                        {currentTier.name} Division
                       </span>
                     </div>
                   </div>
 
                   <div className="text-right">
-                    <div className="text-lg font-black text-[#4edea3] tracking-tight">
-                      {currentElo} <span className="text-xs text-[#bbcabf] font-normal">Elo</span>
+                    <div className="text-base font-bold text-[#f5f2eb] tabular-nums tracking-tight flex items-center justify-end gap-1">
+                      <Zap className="w-3.5 h-3.5 text-[#c29b78] fill-[#c29b78]" />
+                      <span>{currentElo}</span>
+                      <span className="text-[10px] text-[#78716c] font-normal">Elo</span>
                     </div>
-                    <div className="flex items-center justify-end gap-1 text-[11px] font-bold text-[#ffb95f]">
-                      <Flame className="w-3 h-3 fill-[#ffb95f]" />
-                      <span>{streak} Streak</span>
+                    <div className="flex items-center justify-end gap-1 text-[10px] text-[#c29b78] font-medium mt-0.5">
+                      <Flame className="w-3 h-3 fill-[#c29b78]" />
+                      <span>{streak}d streak</span>
                     </div>
                   </div>
                 </div>
 
                 {/* Next Tier Progress Bar */}
                 {currentTier.nextTier && (
-                  <div className="mt-2 pt-2 border-t border-white/5 space-y-1.5">
-                    <div className="flex items-center justify-between text-[11px] font-semibold text-[#bbcabf]">
-                      <span>Tier Progress</span>
+                  <div className="pt-2 border-t border-white/[0.04] space-y-1.5">
+                    <div className="flex items-center justify-between text-[10px] text-[#78716c]">
+                      <span>Division Progress</span>
                       <span>
-                        <span className="text-[#4edea3] font-bold">{pointsToNext} Elo</span> to {currentTier.nextTier.name}
+                        <span className="text-[#c29b78] font-medium">{pointsToNext} Elo</span> to {currentTier.nextTier.name}
                       </span>
                     </div>
-                    <div className="w-full h-2 rounded-full bg-[#2a2a2c] overflow-hidden">
+                    <div className="w-full h-1.5 rounded-full bg-[#1b1816] overflow-hidden">
                       <div
-                        className="h-full rounded-full bg-gradient-to-r from-[#10b981] to-[#4edea3] transition-all duration-500 shadow-[0_0_8px_rgba(78,222,163,0.5)]"
+                        className="h-full rounded-full bg-[#c29b78] transition-all duration-500"
                         style={{ width: `${progressPercent}%` }}
                       />
                     </div>
@@ -362,151 +503,134 @@ export function LeaderboardModal({
                 )}
               </div>
 
-              {/* Top Rankings List */}
+              {/* Top Tacticians List */}
               <div>
-                <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-[#bbcabf] mb-2 px-1">
+                <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-[#78716c] mb-2 px-1 font-medium">
                   <span>Top Tacticians</span>
                   <span>Rating</span>
                 </div>
 
-                <div className="space-y-1.5">
+                <div className="space-y-1">
                   {leaders.map((entry) => (
                     <div
                       key={entry.rank}
-                      className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-[#18181B]/70 border border-white/[0.04] hover:border-white/10 transition-colors"
+                      className="flex items-center justify-between px-3 py-2 rounded-xl bg-[#0a0908]/50 border border-white/[0.04] hover:border-white/[0.08] transition-colors"
                     >
-                      <div className="flex items-center gap-3">
-                        <span
-                          className={`w-6 text-center text-xs font-black ${
-                            entry.rank === 1
-                              ? "text-amber-400"
-                              : entry.rank === 2
-                              ? "text-neutral-300"
-                              : entry.rank === 3
-                              ? "text-amber-600"
-                              : "text-neutral-500"
-                          }`}
-                        >
-                          {entry.rank === 1 ? "🥇" : entry.rank === 2 ? "🥈" : entry.rank === 3 ? "🥉" : entry.rank}
+                      <div className="flex items-center gap-2.5">
+                        <span className="w-5 text-center text-xs tabular-nums font-medium text-[#78716c]">
+                          #{entry.rank}
                         </span>
-                        <div className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs bg-[#2a2a2c] text-white">
+                        <div className="w-7 h-7 rounded-full flex items-center justify-center font-medium text-xs bg-[#1b1816] text-[#f5f2eb] border border-white/[0.06]">
                           {entry.name[0]}
                         </div>
                         <div>
-                          <span className="text-xs font-bold text-[#e5e1e4] block leading-tight">
+                          <span className="text-xs font-medium text-[#f5f2eb] block leading-tight">
                             {entry.name}
                           </span>
-                          <span className="text-[10px] text-[#bbcabf] font-medium">
+                          <span className="text-[10px] text-[#78716c]">
                             {entry.tier}
                           </span>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-1.5 font-bold text-xs text-[#4edea3]">
-                        <Zap className="w-3 h-3 fill-[#4edea3]" />
+                      <div className="flex items-center gap-1 font-semibold text-xs text-[#f5f2eb] tabular-nums">
+                        <Zap className="w-3 h-3 text-[#c29b78] fill-[#c29b78]" />
                         <span>{entry.elo}</span>
                       </div>
                     </div>
                   ))}
 
-                  {/* User Pinned Rank */}
-                  <div className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-[#4edea3]/10 border border-[#4edea3]/40 shadow-sm mt-2">
-                    <div className="flex items-center gap-3">
-                      <span className="w-6 text-center text-xs font-black text-[#4edea3]">
+                  {/* Current User Row */}
+                  <div
+                    data-testid="global-user-row"
+                    className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-[#c29b78]/[0.06] border border-[#c29b78]/25 shadow-sm mt-2"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span className="w-5 text-center text-xs tabular-nums font-bold text-[#c29b78]">
                         #{userRank}
                       </span>
-                      <div className="w-7 h-7 rounded-full bg-[#10b981] text-[#002113] flex items-center justify-center font-black text-xs overflow-hidden shrink-0">
+                      <div className="w-7 h-7 rounded-full bg-[#1b1816] border border-[#c29b78]/30 flex items-center justify-center font-bold text-xs overflow-hidden shrink-0">
                         <UserAvatar avatar={userAccount?.avatar} fallback="♟" />
                       </div>
                       <div>
-                        <span className="text-xs font-black text-white block leading-tight">
-                          {userAccount ? userAccount.displayName || userAccount.username : "Your Position"}
-                        </span>
-                        <span className="text-[10px] text-[#4edea3] font-bold">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-semibold text-[#f5f2eb] block leading-tight">
+                            {userAccount ? userAccount.displayName || userAccount.username : "Your Position"}
+                          </span>
+                          <span className="bg-[#c29b78]/20 text-[#c29b78] text-[9px] px-1 py-0.2 rounded font-bold uppercase">
+                            YOU
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-[#c29b78]/80 font-medium">
                           {currentTier.name}
                         </span>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1.5 font-bold text-xs text-[#4edea3]">
-                      <Zap className="w-3 h-3 fill-[#4edea3]" />
+                    <div className="flex items-center gap-1 font-bold text-xs text-[#f5f2eb] tabular-nums">
+                      <Zap className="w-3 h-3 text-[#c29b78] fill-[#c29b78]" />
                       <span>{currentElo}</span>
                     </div>
                   </div>
                 </div>
               </div>
             </>
-          ) : (
-            <>
-              {/* Friends Tab Content */}
+          )}
 
-              {/* Add Friend Input Box */}
-              <div className="p-3 rounded-xl bg-[#18181B] border border-white/10 space-y-2">
-                <label className="text-[11px] font-bold uppercase tracking-wider text-[#bbcabf] flex items-center gap-1.5">
-                  <UserPlus className="w-3.5 h-3.5 text-[#4edea3]" />
-                  <span>Add Friend by Username</span>
+          {tab === "friends" && (
+            <>
+              {/* Send Friend Request Input Box */}
+              <div className="p-3.5 rounded-xl bg-[#0a0908] border border-white/[0.06] space-y-2.5">
+                <label className="text-[10px] font-medium uppercase tracking-[0.15em] text-[#78716c] flex items-center gap-1.5">
+                  <UserPlus className="w-3.5 h-3.5 text-[#c29b78]" strokeWidth={1.5} />
+                  <span>Send Friend Request</span>
                 </label>
                 <div className="flex gap-2">
                   <div className="relative flex-1">
                     <input
+                      data-testid="add-friend-input"
                       type="text"
-                      placeholder="e.g. hikaru_fan"
+                      placeholder="Enter username (e.g. magnus)"
                       value={friendInput}
                       onChange={(e) => setFriendInput(e.target.value)}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
                           e.preventDefault();
-                          handleAddFriend();
+                          handleSendFriendRequest();
                         }
                       }}
-                      className="w-full px-3 py-2 text-xs rounded-lg bg-[#201f21] border border-white/5 text-white placeholder:text-neutral-600 focus:outline-none focus:border-[#4edea3]"
+                      className="w-full px-3 py-2 text-xs rounded-xl bg-[#12100e] border border-white/[0.08] text-[#f5f2eb] placeholder:text-[#78716c] focus:outline-none focus:border-[#c29b78]/60 transition-colors"
                     />
                   </div>
                   <button
-                    onClick={() => handleAddFriend()}
-                    disabled={isAddingFriend || !friendInput.trim()}
-                    className="px-3.5 py-2 rounded-lg bg-[#4edea3] hover:bg-[#10b981] disabled:opacity-50 text-[#002113] font-bold text-xs transition-colors cursor-pointer shrink-0"
+                    data-testid="add-friend-submit-btn"
+                    onClick={handleSendFriendRequest}
+                    disabled={isSendingRequest || !friendInput.trim()}
+                    className="px-3.5 py-2 rounded-xl bg-[#c29b78] hover:bg-[#d4af8c] active:scale-[0.99] disabled:opacity-50 text-[#0a0908] font-semibold text-xs tracking-wide transition-all cursor-pointer shrink-0 flex items-center gap-1"
                   >
-                    {isAddingFriend ? "Adding..." : "+ Add"}
+                    <Send className="w-3 h-3" />
+                    <span>{isSendingRequest ? "Sending..." : "Send Request"}</span>
                   </button>
                 </div>
 
                 {/* Instant Feedback Messages */}
                 {friendError && (
-                  <p className="text-[11px] font-medium text-red-400">{friendError}</p>
+                  <p data-testid="friend-error-msg" className="text-xs font-medium text-rose-400">
+                    {friendError}
+                  </p>
                 )}
                 {friendSuccess && (
-                  <p className="text-[11px] font-medium text-[#4edea3]">{friendSuccess}</p>
+                  <p data-testid="friend-success-msg" className="text-xs font-medium text-[#c29b78]">
+                    {friendSuccess}
+                  </p>
                 )}
-
-                {/* Suggested Demo Friends to Add with 1-click */}
-                <div className="pt-1">
-                  <span className="text-[10px] text-[#bbcabf] block mb-1.5 font-medium">
-                    Try adding tactical challengers:
-                  </span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {["tactics_pro", "hikaru_fan", "magnus_junior", "chess_rookie"].map((name) => {
-                      const alreadyFriend = friends.some((f) => f.username === name);
-                      if (alreadyFriend) return null;
-                      return (
-                        <button
-                          key={name}
-                          onClick={() => handleAddFriend(name)}
-                          className="px-2 py-1 rounded-md bg-[#201f21] hover:bg-[#2a2a2c] text-[10px] font-mono text-[#bbcabf] hover:text-[#4edea3] border border-white/5 transition-colors cursor-pointer"
-                        >
-                          +{name}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
               </div>
 
               {/* Guest Reminder if not signed in */}
               {!userAccount && (
-                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-between gap-2">
-                  <div className="text-[11px] text-amber-200">
-                    Sign in or create an account to save your friends and rank.
+                <div className="p-3 rounded-xl bg-[#c29b78]/[0.08] border border-[#c29b78]/20 flex items-center justify-between gap-2">
+                  <div className="text-[11px] text-[#c29b78]">
+                    Sign in to save your friends and receive challenge requests.
                   </div>
                   {onOpenAuth && (
                     <button
@@ -514,7 +638,7 @@ export function LeaderboardModal({
                         onClose();
                         onOpenAuth();
                       }}
-                      className="px-2.5 py-1.5 rounded-lg bg-amber-500 text-black font-bold text-[10px] uppercase tracking-wider shrink-0 cursor-pointer"
+                      className="px-2.5 py-1 rounded-lg bg-[#c29b78] text-[#0a0908] font-semibold text-[10px] uppercase tracking-wider shrink-0 cursor-pointer"
                     >
                       Sign In
                     </button>
@@ -522,14 +646,54 @@ export function LeaderboardModal({
                 </div>
               )}
 
+              {/* Outgoing Pending Requests (if any) */}
+              {outgoingRequests.length > 0 && (
+                <div className="p-3 rounded-xl bg-[#0a0908]/70 border border-white/[0.04] space-y-2">
+                  <div className="flex items-center justify-between text-[10px] font-medium uppercase tracking-wider text-[#78716c]">
+                    <span className="flex items-center gap-1">
+                      <Clock className="w-3 h-3 text-[#c29b78]" />
+                      <span>Outgoing Pending ({outgoingRequests.length})</span>
+                    </span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {outgoingRequests.map((req) => (
+                      <div
+                        key={req.id}
+                        data-testid="outgoing-request-row"
+                        className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-white/[0.02] border border-white/[0.04] text-xs"
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-full bg-[#1b1816] flex items-center justify-center text-xs overflow-hidden">
+                            <UserAvatar avatar={req.receiver?.avatar} fallback="♟" />
+                          </div>
+                          <span className="text-[#f5f2eb] font-medium">
+                            @{req.receiver?.username || "player"}
+                          </span>
+                          <span className="text-[10px] text-[#78716c]">
+                            • Waiting for response
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => handleCancelOutgoingRequest(req.id)}
+                          className="text-[10px] text-[#78716c] hover:text-rose-400 transition-colors"
+                          title="Cancel request"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Friends Leaderboard Standings */}
               <div>
-                <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-[#bbcabf] mb-2 px-1">
+                <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-[#78716c] mb-2 px-1 font-medium">
                   <span>Friends Leaderboard</span>
                   <span>Rating</span>
                 </div>
 
-                <div className="space-y-1.5">
+                <div className="space-y-1">
                   {combinedFriendsList.map((entry, index) => {
                     const rankNum = index + 1;
                     const tier = getTier(entry.elo);
@@ -537,52 +701,44 @@ export function LeaderboardModal({
                     return (
                       <div
                         key={entry.id}
+                        data-testid={entry.isSelf ? "friends-user-row" : "friend-row"}
                         className={`flex items-center justify-between px-3 py-2.5 rounded-xl border transition-colors ${
                           entry.isSelf
-                            ? "bg-[#4edea3]/10 border-[#4edea3]/40 shadow-sm"
-                            : "bg-[#18181B]/80 border-white/5 hover:border-white/10"
+                            ? "bg-[#c29b78]/[0.06] border-[#c29b78]/25 shadow-sm"
+                            : "bg-[#0a0908]/50 border-white/[0.04] hover:border-white/[0.08]"
                         }`}
                       >
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2.5">
                           <span
-                            className={`w-6 text-center text-xs font-black ${
-                              rankNum === 1
-                                ? "text-amber-400"
-                                : rankNum === 2
-                                ? "text-neutral-300"
-                                : rankNum === 3
-                                ? "text-amber-600"
-                                : "text-neutral-500"
+                            className={`w-5 text-center text-xs tabular-nums font-medium ${
+                              entry.isSelf ? "text-[#c29b78] font-bold" : "text-[#78716c]"
                             }`}
                           >
-                            {rankNum === 1 ? "🥇" : rankNum === 2 ? "🥈" : rankNum === 3 ? "🥉" : `#${rankNum}`}
+                            #{rankNum}
                           </span>
 
-                          <div className="w-8 h-8 rounded-full bg-[#201f21] border border-white/10 flex items-center justify-center text-sm overflow-hidden shrink-0">
+                          <div className="w-7 h-7 rounded-full bg-[#1b1816] border border-white/[0.08] flex items-center justify-center text-xs overflow-hidden shrink-0">
                             <UserAvatar avatar={entry.avatar} fallback="♟" />
                           </div>
 
                           <div>
                             <div className="flex items-center gap-1.5">
-                              <span className="text-xs font-bold text-white">
+                              <span className="text-xs font-semibold text-[#f5f2eb]">
                                 {entry.displayName || entry.username}
                               </span>
                               {entry.isSelf && (
-                                <span className="bg-[#4edea3]/20 text-[#4edea3] text-[9px] px-1.5 py-0.2 rounded font-black uppercase">
-                                  You
+                                <span className="bg-[#c29b78]/20 text-[#c29b78] text-[9px] px-1.5 py-0.2 rounded font-bold uppercase">
+                                  YOU
                                 </span>
                               )}
                             </div>
                             <div className="flex items-center gap-1.5 mt-0.5">
-                              <span
-                                className="text-[9px] font-bold uppercase px-1 py-0.2 rounded"
-                                style={{ color: tier.color, backgroundColor: tier.bg }}
-                              >
+                              <span className="text-[9px] uppercase px-1 py-0.2 rounded bg-white/[0.04] text-[#78716c] font-medium">
                                 {tier.name}
                               </span>
                               {entry.streak > 0 && (
-                                <span className="text-[10px] text-[#ffb95f] font-bold flex items-center gap-0.5">
-                                  <Flame className="w-2.5 h-2.5 fill-[#ffb95f]" />
+                                <span className="text-[10px] text-[#c29b78] font-medium flex items-center gap-0.5">
+                                  <Flame className="w-2.5 h-2.5 fill-[#c29b78]" />
                                   {entry.streak}
                                 </span>
                               )}
@@ -591,8 +747,8 @@ export function LeaderboardModal({
                         </div>
 
                         <div className="flex items-center gap-2">
-                          <div className="flex items-center gap-1 font-bold text-xs text-[#4edea3]">
-                            <Zap className="w-3 h-3 fill-[#4edea3]" />
+                          <div className="flex items-center gap-1 font-semibold text-xs text-[#f5f2eb] tabular-nums">
+                            <Zap className="w-3 h-3 text-[#c29b78] fill-[#c29b78]" />
                             <span>{entry.elo}</span>
                           </div>
 
@@ -600,7 +756,7 @@ export function LeaderboardModal({
                             <button
                               onClick={() => handleRemoveFriend(entry.id)}
                               title="Remove friend"
-                              className="p-1 rounded text-[#bbcabf]/50 hover:text-red-400 transition-colors cursor-pointer"
+                              className="p-1 rounded text-[#78716c] hover:text-rose-400 transition-colors cursor-pointer"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -613,13 +769,104 @@ export function LeaderboardModal({
               </div>
             </>
           )}
+
+          {tab === "requests" && (
+            <div className="space-y-3">
+              <div className="text-[10px] uppercase tracking-wider text-[#78716c] px-1 font-medium flex items-center justify-between">
+                <span>Incoming Friend Requests</span>
+                <span>{incomingRequests.length} Pending</span>
+              </div>
+
+              {/* Feedback Message */}
+              {friendError && (
+                <p data-testid="request-error-msg" className="text-xs font-medium text-rose-400 px-1">
+                  {friendError}
+                </p>
+              )}
+              {friendSuccess && (
+                <p data-testid="request-success-msg" className="text-xs font-medium text-[#c29b78] px-1">
+                  {friendSuccess}
+                </p>
+              )}
+
+              {incomingRequests.length === 0 ? (
+                <div
+                  data-testid="no-incoming-requests"
+                  className="py-10 text-center rounded-xl bg-[#0a0908]/50 border border-white/[0.04] p-6 space-y-1.5"
+                >
+                  <Inbox className="w-7 h-7 text-[#78716c]/60 mx-auto stroke-[1.5]" />
+                  <p className="text-xs text-[#f5f2eb] font-medium">No pending requests</p>
+                  <p className="text-[11px] text-[#78716c]">
+                    When other tacticians challenge or add you, their invitations will appear here.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {incomingRequests.map((req) => {
+                    const sender = req.sender;
+                    const tier = getTier(sender?.elo || 800);
+                    const isLoading = actionLoadingId === req.id;
+
+                    return (
+                      <div
+                        key={req.id}
+                        data-testid="incoming-request-card"
+                        className="p-3 rounded-xl bg-[#0a0908] border border-white/[0.06] flex items-center justify-between gap-3"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-9 h-9 rounded-full bg-[#1b1816] border border-white/[0.08] flex items-center justify-center text-xs overflow-hidden shrink-0">
+                            <UserAvatar avatar={sender?.avatar} fallback="♟" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-xs font-semibold text-[#f5f2eb] truncate">
+                              {sender?.displayName || sender?.username || "Tactician"}
+                            </div>
+                            <div className="flex items-center gap-2 text-[10px] text-[#78716c]">
+                              <span>@{sender?.username || "user"}</span>
+                              <span>•</span>
+                              <span className="flex items-center gap-0.5 text-[#f5f2eb] font-medium">
+                                <Zap className="w-2.5 h-2.5 text-[#c29b78] fill-[#c29b78]" />
+                                {sender?.elo || 800} Elo
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Accept / Decline Action Buttons */}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            data-testid="accept-friend-btn"
+                            disabled={isLoading}
+                            onClick={() => handleRespondToRequest(req.id, "accept")}
+                            className="w-8 h-8 rounded-lg bg-[#c29b78]/15 hover:bg-[#c29b78]/25 border border-[#c29b78]/30 flex items-center justify-center text-[#c29b78] transition-all cursor-pointer disabled:opacity-50"
+                            title="Accept request"
+                          >
+                            <Check className="w-4 h-4 stroke-[2.5]" />
+                          </button>
+                          <button
+                            data-testid="decline-friend-btn"
+                            disabled={isLoading}
+                            onClick={() => handleRespondToRequest(req.id, "decline")}
+                            className="w-8 h-8 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] flex items-center justify-center text-[#78716c] hover:text-[#f5f2eb] transition-all cursor-pointer disabled:opacity-50"
+                            title="Decline request"
+                          >
+                            <X className="w-4 h-4 stroke-[2]" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Footer */}
-        <div className="p-3 border-t border-[#27272a] bg-[#18181B]/60 flex justify-end">
+        <div className="pt-3 mt-3 border-t border-white/[0.06] flex justify-end">
           <button
             onClick={onClose}
-            className="w-full py-2.5 rounded-xl bg-[#4edea3] hover:bg-[#10b981] text-[#002113] font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer shadow-md"
+            className="w-full py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] text-[#f5f2eb] text-xs font-medium transition-all cursor-pointer text-center"
           >
             Back to Reels
           </button>

@@ -322,6 +322,25 @@ export function PlayView({
   const [calibratedFinalElo, setCalibratedFinalElo] = useState<number>(800);
   const [isStatsModalOpen, setIsStatsModalOpen] = useState<boolean>(false);
   const [oauthAlert, setOauthAlert] = useState<string | null>(null);
+  const [incomingFriendRequestsCount, setIncomingFriendRequestsCount] = useState<number>(0);
+
+  // Fetch pending incoming friend requests count for header badge
+  useEffect(() => {
+    const effectiveId = userAccount?.id || guestId;
+    if (!effectiveId) return;
+    let isMounted = true;
+    fetch(`/api/friends?userId=${encodeURIComponent(effectiveId)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (isMounted && data && typeof data.incomingCount === "number") {
+          setIncomingFriendRequestsCount(data.incomingCount);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, [userAccount?.id, guestId, activeTab]);
 
   // Account switch detection: tracks previous userId to wipe stale queues and cached state
   const previousUserIdRef = useRef<string | null>(null);
@@ -1409,10 +1428,16 @@ export function PlayView({
               onClick={() => setActiveTab("rank")}
               aria-label="Leaderboard rank"
               data-testid="header-rank-btn"
-              className="w-7 h-7 rounded-full hover:bg-[#22201e] flex items-center justify-center text-[#a3a3a3] hover:text-[#c29b78] transition-colors cursor-pointer"
+              className="w-7 h-7 rounded-full hover:bg-[#22201e] flex items-center justify-center text-[#a3a3a3] hover:text-[#c29b78] transition-colors cursor-pointer relative"
               title="Global Standings & Friends"
             >
               <Trophy className="w-3.5 h-3.5" />
+              {incomingFriendRequestsCount > 0 && (
+                <span
+                  data-testid="header-friend-requests-dot"
+                  className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-[#c29b78] shadow-[0_0_6px_rgba(194,155,120,0.8)]"
+                />
+              )}
             </button>
           </div>
         </div>
@@ -1596,6 +1621,7 @@ export function PlayView({
         guestId={guestId}
         userAccount={userAccount}
         onOpenAuth={() => setIsAuthModalOpen(true)}
+        onIncomingRequestsCountChange={setIncomingFriendRequestsCount}
       />
 
       <ProfileModal
