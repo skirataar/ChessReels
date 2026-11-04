@@ -644,6 +644,24 @@ export default function TempQAPage() {
     ]);
   };
 
+  const handleTestNextDayArrival = () => {
+    const nextDate = addCalendarDays(simulatedDate, 1);
+    // On next day arrival before solving:
+    // lastSolvedDate remains yesterday (simulatedDate), currentStreak is preserved, flame is OFF (unlit)
+    setStreakData((prev) => ({
+      ...prev,
+      currentStreak: prev.currentStreak > 0 ? prev.currentStreak : 5,
+      lastSolvedDate: simulatedDate,
+      isFrozenState: false,
+    }));
+    setSimulatedDate(nextDate);
+    setIsTestingIgnition(false);
+    setStreakLog((prev) => [
+      `[Next Day Arrival (${nextDate})] Arrived on new day before solving. Streak preserved at ${streakData.currentStreak > 0 ? streakData.currentStreak : 5}. Flame is visually OFF (unlit). Solve to ignite!`,
+      ...prev.slice(0, 7),
+    ]);
+  };
+
   useEffect(() => {
     const today = getTodayDateString();
     setSimulatedDate(today);
@@ -1635,6 +1653,12 @@ export default function TempQAPage() {
                   <StreakFlameBadge
                     streak={streakData.currentStreak}
                     isFrozenState={Boolean(streakData.isFrozenState)}
+                    hasSolvedToday={
+                      streakData.lastSolvedDate === simulatedDate &&
+                      streakData.currentStreak > 0 &&
+                      !streakData.isFrozenState
+                    }
+                    lastSolvedDate={streakData.lastSolvedDate}
                     isIgniting={isTestingIgnition}
                     testId="qa-streak-flame-badge"
                     flameTestId="qa-flame-icon"
@@ -1687,6 +1711,8 @@ export default function TempQAPage() {
                       ? "bg-stone-500/20 text-stone-400 border border-stone-500/30"
                       : streakData.isFrozenState
                       ? "bg-sky-500/20 text-sky-300 border border-sky-400/40"
+                      : streakData.lastSolvedDate !== simulatedDate
+                      ? "bg-stone-500/20 text-stone-300 border border-stone-500/40"
                       : "bg-amber-500/20 text-amber-300 border border-amber-500/40"
                   }`}
                 >
@@ -1694,11 +1720,22 @@ export default function TempQAPage() {
                     ? "State A: Hollow (0)"
                     : streakData.isFrozenState
                     ? "State B: Icy Frozen (❄️)"
+                    : streakData.lastSolvedDate !== simulatedDate
+                    ? "State D: Unlit Next-Day (Off)"
                     : "State C: Ignited Amber (🔥)"}
                 </span>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
+                <button
+                  data-testid="test-next-day-arrival-btn"
+                  onClick={handleTestNextDayArrival}
+                  className="py-2 px-3 rounded-lg bg-white/5 border border-white/15 text-xs font-bold text-stone-300 hover:bg-white/10 active:scale-[0.99] transition-all flex items-center justify-center gap-1.5"
+                  title="Simulate arriving on the next day before solving (Flame should turn OFF)"
+                >
+                  <Flame className="w-3.5 h-3.5 fill-none stroke-[#78716c]" strokeWidth={1.75} />
+                  <span>Next Day Arrival (Flame Off)</span>
+                </button>
                 <button
                   data-testid="test-streak-ignition-btn"
                   onClick={handleTestStreakIgnition}
@@ -1707,6 +1744,9 @@ export default function TempQAPage() {
                   <Flame className="w-3.5 h-3.5 fill-[#f59e0b] stroke-[#fbbf24] drop-shadow-[0_0_8px_rgba(245,158,11,0.55)]" />
                   <span>Test 0 → 1 Ignition</span>
                 </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   data-testid="test-missed-day-frozen-btn"
                   onClick={handleTestMissedDayToFrozen}
@@ -1715,9 +1755,6 @@ export default function TempQAPage() {
                   <Snowflake className="w-3.5 h-3.5 text-sky-300" />
                   <span>Test Missed Day → Icy Frozen</span>
                 </button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
                 <button
                   data-testid="test-solve-frozen-thaw-btn"
                   onClick={handleTestSolveOnFrozenDay}
@@ -1726,10 +1763,13 @@ export default function TempQAPage() {
                   <Flame className="w-3.5 h-3.5 fill-[#f59e0b] stroke-[#fbbf24]" />
                   <span>Thaw Ice → Amber (+1)</span>
                 </button>
+              </div>
+
+              <div>
                 <button
                   data-testid="set-streak-zero-btn"
                   onClick={handleSetStreakZero}
-                  className="py-2 px-3 rounded-lg bg-white/5 border border-white/10 text-xs font-medium text-stone-400 hover:bg-white/10 text-center transition-all flex items-center justify-center gap-1.5"
+                  className="w-full py-2 px-3 rounded-lg bg-white/5 border border-white/10 text-xs font-medium text-stone-400 hover:bg-white/10 text-center transition-all flex items-center justify-center gap-1.5"
                 >
                   <Flame className="w-3.5 h-3.5 fill-none stroke-[#78716c]" strokeWidth={1.75} />
                   <span>Set 0 Streak (Hollow)</span>

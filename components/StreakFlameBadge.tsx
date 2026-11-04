@@ -1,13 +1,16 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Flame, Snowflake } from "lucide-react";
+import { getTodayDateString } from "@/lib/useStreak";
 
 export interface StreakFlameBadgeProps {
   streak: number;
   isFrozenState?: boolean;
   isIgniting?: boolean;
+  hasSolvedToday?: boolean;
+  lastSolvedDate?: string | null;
   size?: "sm" | "md" | "lg";
   className?: string;
   testId?: string;
@@ -19,27 +22,46 @@ export function StreakFlameBadge({
   streak,
   isFrozenState = false,
   isIgniting: controlledIgniting,
+  hasSolvedToday,
+  lastSolvedDate,
   size = "sm",
   className = "",
   testId = "header-streak-indicator",
   flameTestId = "header-flame-icon",
   onClick,
 }: StreakFlameBadgeProps) {
+  // Determine if the user has completed at least one solve today
+  // If hasSolvedToday is explicitly passed, use it.
+  // Otherwise, derive from lastSolvedDate if provided, or default to true for backward compatibility.
+  const resolvedHasSolvedToday = useMemo(() => {
+    if (typeof hasSolvedToday === "boolean") return hasSolvedToday;
+    if (lastSolvedDate !== undefined) {
+      if (!lastSolvedDate) return false;
+      const today = getTodayDateString();
+      return lastSolvedDate === today;
+    }
+    return true;
+  }, [hasSolvedToday, lastSolvedDate]);
+
   const prevStreakRef = useRef(streak);
   const prevFrozenRef = useRef(isFrozenState);
+  const prevSolvedTodayRef = useRef(resolvedHasSolvedToday);
   const [animationTick, setAnimationTick] = useState(0);
 
-  // Trigger animation tick whenever streak increments or frozen state toggles
+  // Trigger animation tick whenever streak increments, frozen state toggles,
+  // or when the flame ignites upon solving the first puzzle of the day (!prev -> true)
   useEffect(() => {
     const streakChanged = streak !== prevStreakRef.current;
     const frozenChanged = isFrozenState !== prevFrozenRef.current;
+    const firstSolveToday = !prevSolvedTodayRef.current && resolvedHasSolvedToday;
 
-    if (streakChanged || frozenChanged) {
+    if (streakChanged || frozenChanged || firstSolveToday) {
       setAnimationTick((prev) => prev + 1);
     }
     prevStreakRef.current = streak;
     prevFrozenRef.current = isFrozenState;
-  }, [streak, isFrozenState]);
+    prevSolvedTodayRef.current = resolvedHasSolvedToday;
+  }, [streak, isFrozenState, resolvedHasSolvedToday]);
 
   useEffect(() => {
     if (controlledIgniting) {
@@ -47,13 +69,23 @@ export function StreakFlameBadge({
     }
   }, [controlledIgniting]);
 
-  // Three Visual States:
+  // Four Visual States:
   // State A: Hollow (streak === 0)
   // State B: Icy Blue Frozen (streak >= 1 && isFrozenState === true)
-  // State C: Ignited Fired Up (streak >= 1 && isFrozenState === false)
+  // State C: Unlit / Dormant Next-Day (streak >= 1 && !isFrozenState && !resolvedHasSolvedToday)
+  // State D: Ignited Fired Up (streak >= 1 && !isFrozenState && resolvedHasSolvedToday)
   const isHollow = streak === 0;
   const isFrozen = streak >= 1 && isFrozenState;
-  const isIgnited = streak >= 1 && !isFrozenState;
+  const isUnlit = streak >= 1 && !isFrozenState && !resolvedHasSolvedToday;
+  const isIgnited = streak >= 1 && !isFrozenState && resolvedHasSolvedToday;
+
+  const flameState = isHollow
+    ? "hollow"
+    : isFrozen
+    ? "frozen"
+    : isUnlit
+    ? "unlit"
+    : "ignited";
 
   // Icon and text sizing
   const iconSizeClass =
@@ -89,6 +121,8 @@ export function StreakFlameBadge({
       title={
         isFrozen
           ? `Streak Protected by Freeze: ${streak} ${streak === 1 ? "day" : "days"} (Click to view calendar)`
+          : isUnlit
+          ? `Streak Active: ${streak} ${streak === 1 ? "day" : "days"} (Solve today to ignite flame!)`
           : `Daily Streak: ${streak} ${streak === 1 ? "day" : "days"} (Click to view calendar)`
       }
     >
@@ -146,9 +180,10 @@ export function StreakFlameBadge({
         >
           <Flame
             data-testid={flameTestId}
-            fill={isHollow ? "none" : isFrozen ? "#38bdf8" : "#f59e0b"}
-            stroke={isHollow ? "#78716c" : isFrozen ? "#7dd3fc" : "#fbbf24"}
-            strokeWidth={isHollow ? 1.75 : 1.5}
+            data-flame-state={flameState}
+            fill={isHollow || isUnlit ? "none" : isFrozen ? "#38bdf8" : "#f59e0b"}
+            stroke={isHollow || isUnlit ? "#78716c" : isFrozen ? "#7dd3fc" : "#fbbf24"}
+            strokeWidth={isHollow || isUnlit ? 1.75 : 1.5}
             className={`${iconSizeClass} shrink-0 transition-colors duration-300 ${
               isFrozen
                 ? "drop-shadow-[0_0_8px_rgba(56,189,248,0.6)]"
@@ -164,7 +199,7 @@ export function StreakFlameBadge({
       <span className={`relative inline-block overflow-hidden ${rollHeight} min-w-[9px]`}>
         <AnimatePresence mode="popLayout" initial={false}>
           <motion.span
-            key={`${streak}-${isFrozenState}`}
+            key={`${streak}-${isFrozenState}-${flameState}`}
             data-testid="streak-number-display"
             initial={{ y: rollOffset, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
@@ -173,6 +208,8 @@ export function StreakFlameBadge({
             className={`inline-block ${textClass} ${
               isHollow
                 ? "text-[#78716c]"
+                : isUnlit
+                ? "text-[#a8a29e]"
                 : isFrozen
                 ? "text-[#e0f2fe]"
                 : "text-[#f5f2eb]"

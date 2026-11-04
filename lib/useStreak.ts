@@ -250,6 +250,7 @@ export interface StreakStats {
   totalSolved: number;
   totalFailed: number;
   isFrozenState: boolean;
+  hasSolvedToday: boolean;
 }
 
 const SERVER_SNAPSHOT: StreakStats = {
@@ -262,6 +263,7 @@ const SERVER_SNAPSHOT: StreakStats = {
   totalSolved: 0,
   totalFailed: 0,
   isFrozenState: false,
+  hasSolvedToday: false,
 };
 
 let cachedSnapshot: StreakStats = SERVER_SNAPSHOT;
@@ -339,6 +341,11 @@ function getSnapshot(): StreakStats {
       10
     );
 
+    const hasSolvedToday =
+      effectiveStreakData.lastSolvedDate === today &&
+      effectiveStreakData.currentStreak > 0 &&
+      !effectiveStreakData.isFrozenState;
+
     if (
       cachedSnapshot.dailyStreak !== effectiveStreakData.currentStreak ||
       cachedSnapshot.streakFreezes !== effectiveStreakData.streakFreezes ||
@@ -348,7 +355,8 @@ function getSnapshot(): StreakStats {
       cachedSnapshot.lastPlayedDate !== effectiveStreakData.lastSolvedDate ||
       cachedSnapshot.totalSolved !== totalSolved ||
       cachedSnapshot.totalFailed !== totalFailed ||
-      cachedSnapshot.isFrozenState !== Boolean(effectiveStreakData.isFrozenState)
+      cachedSnapshot.isFrozenState !== Boolean(effectiveStreakData.isFrozenState) ||
+      cachedSnapshot.hasSolvedToday !== hasSolvedToday
     ) {
       cachedSnapshot = {
         dailyStreak: effectiveStreakData.currentStreak,
@@ -360,6 +368,7 @@ function getSnapshot(): StreakStats {
         totalSolved,
         totalFailed,
         isFrozenState: Boolean(effectiveStreakData.isFrozenState),
+        hasSolvedToday,
       };
     }
 
@@ -522,6 +531,7 @@ export function useStreak() {
     streakFreezes: stats.streakFreezes,
     perfectWeekCounter: stats.perfectWeekCounter,
     isFrozenState: stats.isFrozenState,
+    hasSolvedToday: stats.hasSolvedToday,
     combo: stats.combo,
     bestCombo: stats.bestCombo,
     totalSolved: stats.totalSolved,

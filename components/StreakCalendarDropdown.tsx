@@ -359,103 +359,130 @@ export function StreakCalendarDropdown({
           </div>
 
           {/* Monthly Calendar Grid with Connected Streak Tracks & Frozen Drops */}
-          <div className="space-y-1">
-            {calendarWeeks.map((week, weekIdx) => (
-              <div
-                key={`week-${weekIdx}`}
-                className="grid grid-cols-7 relative h-8 sm:h-9 items-center"
-              >
-                {week.map((day, colIdx) => {
-                  if (!day.isCurrentMonth) {
-                    return (
-                      <div
-                        key={`empty-${colIdx}`}
-                        className="w-full h-full flex items-center justify-center text-[11px] text-white/10"
-                      />
-                    );
+          <div className="space-y-1.5">
+            {calendarWeeks.map((week, weekIdx) => {
+              const hasMonthDays = week.some((d) => d.isCurrentMonth);
+              if (!hasMonthDays) return null;
+
+              // Compute contiguous active streak runs in this week row
+              const activeRuns: { start: number; end: number }[] = [];
+              let currentRunStart: number | null = null;
+
+              week.forEach((day, idx) => {
+                if (day.isCurrentMonth && day.isActive) {
+                  if (currentRunStart === null) currentRunStart = idx;
+                } else {
+                  if (currentRunStart !== null) {
+                    activeRuns.push({ start: currentRunStart, end: idx - 1 });
+                    currentRunStart = null;
                   }
+                }
+              });
+              if (currentRunStart !== null) {
+                activeRuns.push({ start: currentRunStart, end: week.length - 1 });
+              }
 
-                  const hasLeftActive =
-                    colIdx > 0 &&
-                    week[colIdx - 1].isCurrentMonth &&
-                    week[colIdx - 1].isActive;
+              return (
+                <div
+                  key={`week-${weekIdx}`}
+                  className="relative h-8 sm:h-9 flex items-center"
+                >
+                  {/* Row Background Track (Matching Duolingo capsule track) */}
+                  <div className="absolute inset-x-0 inset-y-0.5 rounded-full bg-white/[0.04] border border-white/[0.04] pointer-events-none z-0" />
 
-                  const hasRightActive =
-                    colIdx < 6 &&
-                    week[colIdx + 1].isCurrentMonth &&
-                    week[colIdx + 1].isActive;
-
-                  // Sparkle diamond decoration on certain days in active streak
-                  const showSparkle =
-                    day.isActive && (day.dayNumber % 7 === 1 || day.dayNumber % 7 === 4);
-
-                  return (
-                    <div
-                      key={`day-${day.dateStr}`}
-                      className="w-full h-full relative flex items-center justify-center"
-                    >
-                      {/* Connected Solid Orange/Amber Streak Bar */}
-                      {day.isActive && (
+                  {/* Contiguous Active Streak Bars (Solid Vibrant Orange Capsule) */}
+                  {activeRuns.map((run) => {
+                    const leftPct = (run.start / 7) * 100;
+                    const widthPct = ((run.end - run.start + 1) / 7) * 100;
+                    return (
+                      <React.Fragment key={`run-group-${run.start}-${run.end}`}>
                         <div
-                          className={`absolute inset-y-0.5 bg-gradient-to-r from-[#f59e0b] to-[#ea580c] shadow-sm shadow-[#f59e0b]/20 ${
-                            !hasLeftActive && !hasRightActive
-                              ? "left-0.5 right-0.5 rounded-full"
-                              : !hasLeftActive && hasRightActive
-                              ? "left-0.5 right-0 rounded-l-full"
-                              : hasLeftActive && !hasRightActive
-                              ? "left-0 right-0.5 rounded-r-full"
-                              : "left-0 right-0 rounded-none"
-                          }`}
+                          className="absolute inset-y-0.5 rounded-full bg-gradient-to-r from-[#ff9800] via-[#fb8c00] to-[#f57c00] shadow-md shadow-orange-500/25 border border-amber-300/30 pointer-events-none z-0 transition-all"
+                          style={{
+                            left: `calc(${leftPct}% + 1px)`,
+                            width: `calc(${widthPct}% - 2px)`,
+                          }}
                         />
-                      )}
 
-                      {/* Sparkle diamond inside streak */}
-                      {showSparkle && (
-                        <span className="absolute top-1 right-1 z-20 text-[7px] text-white/80 pointer-events-none select-none">
-                          ✦
-                        </span>
-                      )}
+                        {/* Little diamond sparkles between consecutive active days */}
+                        {Array.from({ length: run.end - run.start }).map((_, i) => {
+                          const colBoundary = run.start + i + 1;
+                          return (
+                            <span
+                              key={`sparkle-${colBoundary}`}
+                              className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 text-[8px] text-white/80 pointer-events-none select-none font-bold"
+                              style={{ left: `${(colBoundary / 7) * 100}%` }}
+                            >
+                              ✦
+                            </span>
+                          );
+                        })}
+                      </React.Fragment>
+                    );
+                  })}
 
-                      {/* Day Number or Icy Frozen Droplet */}
-                      {day.isFrozen ? (
-                        // Icy Blue Frozen droplet matching uploaded Duolingo design
+                  {/* Day Cells Grid */}
+                  <div className="grid grid-cols-7 w-full h-full relative z-10 items-center">
+                    {week.map((day, colIdx) => {
+                      if (!day.isCurrentMonth) {
+                        return (
+                          <div
+                            key={`empty-${colIdx}`}
+                            className="w-full h-full flex items-center justify-center text-[11px] text-white/5 pointer-events-none"
+                          />
+                        );
+                      }
+
+                      return (
                         <div
-                          className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-b from-sky-400 to-sky-500 text-white flex items-center justify-center font-black text-xs shadow-md shadow-sky-500/40 relative z-10"
-                          title="Protected by Streak Freeze"
+                          key={`day-${day.dateStr}`}
+                          className="w-full h-full relative flex items-center justify-center select-none"
                         >
-                          <span>{day.dayNumber}</span>
-                          <div className="absolute -bottom-0.5 w-1.5 h-1.5 bg-sky-500 rotate-45 rounded-[1px]" />
+                          {/* Day Number or Icy Frozen Droplet */}
+                          {day.isFrozen ? (
+                            // Duolingo Icy Blue Droplet with gloss shine and pointed drip tail
+                            <div
+                              className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-b from-[#38bdf8] via-[#0ea5e9] to-[#0284c7] text-white flex items-center justify-center font-black text-xs shadow-md shadow-sky-500/40 relative z-10 cursor-help"
+                              title="Protected by Streak Freeze"
+                            >
+                              {/* Specular gloss highlight arc */}
+                              <div className="absolute top-1 left-1.5 w-2 h-1 rounded-full bg-white/40 -rotate-12 pointer-events-none" />
+                              {/* Pointed bottom drip tail */}
+                              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-[#0284c7] rotate-45 rounded-[1px] pointer-events-none" />
+                              <span className="relative z-10 drop-shadow-sm">{day.dayNumber}</span>
+                            </div>
+                          ) : day.isActive ? (
+                            // Active Day in Streak
+                            <span className="relative z-10 font-black text-white text-xs sm:text-sm drop-shadow-sm">
+                              {day.dayNumber}
+                            </span>
+                          ) : day.isToday ? (
+                            // Today, not yet solved: outlined amber ring
+                            <div
+                              className="w-7 h-7 sm:w-7.5 sm:h-7.5 rounded-full border-2 border-amber-400 text-amber-400 flex items-center justify-center font-bold text-xs"
+                              title="Today — Solve to advance streak!"
+                            >
+                              <span>{day.dayNumber}</span>
+                            </div>
+                          ) : (
+                            // Regular unplayed / missed / future day
+                            <span
+                              className={`relative z-10 text-xs font-bold ${
+                                day.isFuture
+                                  ? "text-white/20 font-medium"
+                                  : "text-[#f59e0b]"
+                              }`}
+                            >
+                              {day.dayNumber}
+                            </span>
+                          )}
                         </div>
-                      ) : day.isActive ? (
-                        // Active Day in Streak
-                        <span className="relative z-10 font-black text-white text-xs sm:text-sm drop-shadow-sm">
-                          {day.dayNumber}
-                        </span>
-                      ) : day.isToday ? (
-                        // Today, not yet solved: outlined amber ring
-                        <div
-                          className="w-7 h-7 sm:w-7.5 sm:h-7.5 rounded-full border-2 border-amber-400 text-amber-400 flex items-center justify-center font-bold text-xs"
-                          title="Today — Solve to advance streak!"
-                        >
-                          <span>{day.dayNumber}</span>
-                        </div>
-                      ) : (
-                        // Regular unplayed / missed / future day
-                        <span
-                          className={`relative z-10 text-xs font-semibold ${
-                            day.isFuture
-                              ? "text-white/20"
-                              : "text-amber-500/60"
-                          }`}
-                        >
-                          {day.dayNumber}
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
           {/* ------------------------------------------------------------- */}

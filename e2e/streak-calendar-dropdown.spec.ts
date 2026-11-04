@@ -118,4 +118,38 @@ test.describe("Streak Calendar & Freezes Dropdown Menu", () => {
     await page.keyboard.press("Escape");
     await expect(dropdown).not.toBeVisible();
   });
+
+  test("5. Next day arrival turns flame OFF (unlit) and first solve ignites flame with pulse animation", async ({ page }) => {
+    await page.goto("http://localhost:3000/temp-qa");
+    await page.waitForSelector('[data-testid="module-streak-freeze"]');
+
+    const streakBadge = page.getByTestId("qa-streak-flame-badge");
+    const flameIcon = page.getByTestId("qa-flame-icon");
+    const stateBadge = page.getByTestId("qa-streak-state-badge");
+
+    // Click Next Day Arrival (Flame Off)
+    const nextDayBtn = page.getByTestId("test-next-day-arrival-btn");
+    await nextDayBtn.click();
+
+    // Verify flame is visually OFF: unlit state, fill none, stroke muted, streak preserved
+    await expect(flameIcon).toHaveAttribute("data-flame-state", "unlit");
+    await expect(stateBadge).toContainText("State D: Unlit Next-Day (Off)");
+    await expect(streakBadge.getByTestId("streak-number-display").last()).toHaveText("5");
+
+    const flameFill = await flameIcon.getAttribute("fill");
+    expect(flameFill).toBe("none");
+
+    // Solve first puzzle of the new day
+    const solveBtn = page.getByTestId("streak-plus-one-day-btn");
+    await solveBtn.click();
+
+    // Verify ignition: pulse ring appears, flame ignites into warm gold, streak rolls up to 6
+    await expect(flameIcon).toHaveAttribute("data-flame-state", "ignited");
+    await expect(stateBadge).toContainText("State C: Ignited Amber");
+    await expect(streakBadge.getByTestId("streak-number-display").last()).toHaveText("6");
+
+    const ignitedFill = await flameIcon.getAttribute("fill");
+    expect(ignitedFill).toBe("#f59e0b");
+  });
 });
+

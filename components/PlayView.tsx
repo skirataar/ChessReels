@@ -334,6 +334,7 @@ export function PlayView({
     streakFreezes,
     perfectWeekCounter,
     isFrozenState,
+    hasSolvedToday,
     combo,
     bestCombo,
     totalSolved,
@@ -1324,6 +1325,8 @@ export function PlayView({
                 <StreakFlameBadge
                   streak={dailyStreak}
                   isFrozenState={isFrozenState}
+                  hasSolvedToday={hasSolvedToday}
+                  lastSolvedDate={lastPlayedDate}
                   testId="header-streak-indicator"
                   flameTestId="header-flame-icon"
                   size="sm"
