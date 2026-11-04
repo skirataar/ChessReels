@@ -168,6 +168,7 @@ export function clearAllUserAndPuzzleCache(userId?: string): void {
   // 4. Clear all user, Elo, streak, and puzzle localStorage keys
   try {
     const keysToRemove = [
+      "chessreels_user_stats_v1",
       "chess_reel_account",
       "chess_reel_user_elo",
       "chess_reel_elo",
