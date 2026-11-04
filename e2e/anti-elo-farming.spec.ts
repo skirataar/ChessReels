@@ -114,11 +114,16 @@ test.describe("Anti-Elo Farming & Per-Puzzle Completion State Persistence", () =
     });
     await page.waitForTimeout(500);
 
-    // Verify celebration or advance to next puzzle
+    // Advance to next puzzle (via Next Reel button if visible, or ArrowDown)
     const nextReelBtn = page.getByRole("button", { name: "Next Reel" });
-    if (await nextReelBtn.isVisible()) {
-      await nextReelBtn.click();
-    } else {
+    let advanced = false;
+    if (await nextReelBtn.isVisible().catch(() => false)) {
+      try {
+        await nextReelBtn.click({ timeout: 2500 });
+        advanced = true;
+      } catch {}
+    }
+    if (!advanced) {
       await page.keyboard.press("ArrowDown");
     }
     await page.waitForTimeout(1000);
@@ -182,8 +187,10 @@ test.describe("Anti-Elo Farming & Per-Puzzle Completion State Persistence", () =
 
     // Dismiss celebration by clicking "Review Board" if present
     const reviewBoardBtn = page.getByRole("button", { name: "Review Board" });
-    if (await reviewBoardBtn.isVisible()) {
-      await reviewBoardBtn.click();
+    if (await reviewBoardBtn.isVisible().catch(() => false)) {
+      try {
+        await reviewBoardBtn.click({ timeout: 2000 });
+      } catch {}
     }
     await page.waitForTimeout(300);
 

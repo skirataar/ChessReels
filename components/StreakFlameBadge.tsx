@@ -66,11 +66,7 @@ export function StreakFlameBadge({
     <div
       data-testid={testId}
       suppressHydrationWarning
-      className={`inline-flex items-center gap-1 cursor-default select-none transition-all duration-300 ${
-        isFrozen
-          ? "px-2 py-0.5 rounded-xl border border-sky-400/30 bg-sky-500/10 shadow-[0_0_10px_rgba(56,189,248,0.15)]"
-          : ""
-      } ${className}`}
+      className={`inline-flex items-center gap-1 cursor-default select-none transition-all duration-300 bg-transparent border-none p-0 ${className}`}
       title={
         isFrozen
           ? `Streak Protected by Freeze: ${streak} ${streak === 1 ? "day" : "days"} (Solve today to thaw & advance)`

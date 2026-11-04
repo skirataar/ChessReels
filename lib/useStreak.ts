@@ -158,7 +158,29 @@ export function resolveStreakOnLoad(data: StreakData, todayStr: string): StreakD
  * - When solving today, clears isFrozenState back to false and increments currentStreak.
  */
 export function resolveStreakOnSolve(data: StreakData, todayStr: string): StreakData {
-  // 1. Reconcile day rollover / missed days to get current status before solving
+  // 1. If user is currently in a frozen state (isFrozenState === true),
+  // a freeze was ALREADY consumed during the missed-day check (daysDiff === 2 or 3).
+  // Solving today thaws ice (isFrozenState = false), increments streak by 1,
+  // sets lastSolvedDate to todayStr, and STRICTLY PRESERVES the exact remaining streakFreezes.
+  if (data.isFrozenState && data.currentStreak >= 1) {
+    const preservedFreezes = Math.min(2, Math.max(0, data.streakFreezes || 0));
+    let streak = data.currentStreak + 1;
+    let perfectWeek = (data.perfectWeekCounter || 0) + 1;
+    let nextFreezes = preservedFreezes;
+    if (perfectWeek === 7) {
+      perfectWeek = 0;
+      nextFreezes = Math.min(2, preservedFreezes + 1);
+    }
+    return {
+      currentStreak: streak,
+      lastSolvedDate: todayStr,
+      streakFreezes: nextFreezes,
+      perfectWeekCounter: perfectWeek,
+      isFrozenState: false,
+    };
+  }
+
+  // 2. Reconcile day rollover / missed days to get current status before solving
   const current = resolveStreakOnLoad(data, todayStr);
   let freezes = current.streakFreezes;
   let streak = current.currentStreak;
