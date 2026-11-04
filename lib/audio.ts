@@ -394,3 +394,8 @@ export function playSoundForMove(
 ): SoundName {
   return soundManager.playSoundForMove(moveResult, chessInstance, isOpponentMove, isSolved);
 }
+
+if (typeof window !== "undefined") {
+  (window as any).__soundManager = soundManager;
+  (window as any).__playSoundForMove = playSoundForMove;
+}
