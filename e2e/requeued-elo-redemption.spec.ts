@@ -19,6 +19,7 @@ test.describe("Re-queued Failed Puzzles Elo Calculation & Anti-Farming Redemptio
     await page.evaluate((user) => {
       localStorage.setItem("chess_reel_account", JSON.stringify(user));
       localStorage.setItem("chess_reel_elo", String(user.elo));
+      localStorage.removeItem("chessreels_user_stats_v1");
       localStorage.removeItem("chess_reel_puzzle_rating_history");
       localStorage.removeItem("chess_reel_rated_puzzle_ids");
       localStorage.removeItem("chess_reel_solved_ids");
