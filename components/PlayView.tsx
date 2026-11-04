@@ -1237,7 +1237,7 @@ export function PlayView({
   }
 
   return (
-    <div className="bg-[#151413] font-sans text-[#f5f5f5] flex flex-col min-h-screen selection:bg-[#c29b78] selection:text-[#151413] overflow-x-hidden overscroll-none w-full">
+    <div className="bg-[#151413] font-sans text-[#f5f5f5] flex flex-col h-dvh max-h-dvh selection:bg-[#c29b78] selection:text-[#151413] overflow-hidden overscroll-none w-full select-none justify-between">
       {oauthAlert && (
         <div className="fixed top-16 inset-x-0 z-50 p-3 max-w-md mx-auto animate-in slide-in-from-top-2 duration-200">
           <div className="p-3 rounded-xl bg-[#22201e] border border-[#c29b78]/40 text-[#f5f5f5] text-xs flex items-start justify-between gap-2 shadow-2xl">
@@ -1416,7 +1416,7 @@ export function PlayView({
       )}
 
       {/* 2. Main Gameplay Canvas */}
-      <main className="flex flex-col relative w-full pt-14 pb-20 bg-[#151413] min-h-[calc(100dvh-3.5rem)] overflow-x-hidden overscroll-none">
+      <main className="flex-1 flex flex-col relative w-full pt-14 pb-16 bg-[#151413] overflow-hidden overscroll-none touch-none select-none justify-between">
         {/* Placement Calibration Banner */}
         {hasMounted && isCalibrating && (
           <div className="w-full max-w-sm mx-auto px-3 mt-2 mb-1 animate-in fade-in duration-200">
@@ -1470,7 +1470,7 @@ export function PlayView({
             <div className="w-full h-16 bg-[#22201e]/80 rounded-xl border border-white/5 animate-pulse" />
           </div>
         ) : (
-          <div className="w-full flex-1 flex flex-col items-center justify-between">
+          <div className="w-full flex-1 flex flex-col items-center justify-between touch-none overscroll-none overflow-hidden">
             {/* Free Tier Quota Exhausted Banner with Refill Countdown & Upgrade CTA */}
             {hasMounted && !canPlay && !isPro && !isCalibrating && (
               <div className="w-full max-w-sm mx-auto px-3 mt-1.5 mb-1 animate-in fade-in slide-in-from-top-1 duration-200">
