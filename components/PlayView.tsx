@@ -1309,7 +1309,7 @@ export function PlayView({
               </AnimatePresence>
             </div>
 
-            {/* Flush Daily Streak Indicator with Flame States, Freezes, and Interactive Calendar Dropdown */}
+            {/* Flush Daily Streak Indicator with Flame States and Interactive Calendar Dropdown */}
             <div className="relative">
               <button
                 type="button"
@@ -1318,7 +1318,7 @@ export function PlayView({
                   e.stopPropagation();
                   setIsStreakDropdownOpen((prev) => !prev);
                 }}
-                className="flex items-center gap-2 cursor-pointer select-none group focus:outline-none bg-transparent border-none p-0"
+                className="flex items-center cursor-pointer select-none group focus:outline-none bg-transparent border-none p-0"
                 title="Click to view streak calendar & freezes"
                 aria-expanded={isStreakDropdownOpen}
               >
@@ -1331,17 +1331,6 @@ export function PlayView({
                   flameTestId="header-flame-icon"
                   size="sm"
                 />
-
-                {/* Streak Freeze Badge */}
-                <div
-                  data-testid="header-freeze-indicator"
-                  suppressHydrationWarning
-                  className="flex items-center gap-1 text-xs font-medium text-sky-400/90 group-hover:text-sky-300 transition-colors bg-transparent border-none p-0 cursor-pointer"
-                  title="Earned every 7-day streak • Protects up to 2 missed days (Click to view)"
-                >
-                  <Snowflake className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.5} />
-                  <span suppressHydrationWarning>{streakFreezes}/2</span>
-                </div>
               </button>
 
               {/* Streak Calendar & Freezes Dropdown Menu */}
@@ -1369,59 +1358,51 @@ export function PlayView({
               </div>
             )}
 
-            {/* Flush Free Tier Quota, Calibration, or PRO Indicator */}
-            {!hasMounted ? (
-              <button
-                onClick={() => {
-                  setPaywallReason("quota");
-                  setIsQuotaModalOpen(true);
-                }}
-                data-testid="header-quota-btn"
-                suppressHydrationWarning
-                className="flex items-center gap-1 text-[11px] font-bold transition-all cursor-pointer opacity-80"
-                aria-label="View free puzzle quota"
-              >
-                <span className="text-amber-400">⚡</span>
-                <span className="font-mono text-zinc-200">
-                  {puzzlesRemaining}/{windowLimit}
-                </span>
-              </button>
-            ) : isPro ? (
-              <div
-                suppressHydrationWarning
-                className="flex items-center gap-1 text-[11px] font-black text-[#c29b78]"
-                title="Pro Member: Unlimited Puzzles & 0 Ads"
-                data-testid="header-pro-badge"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-[#c29b78] inline-block shrink-0" strokeWidth={1.5} />
-                <span>PRO</span>
-              </div>
-            ) : isCalibrating ? (
-              <div
-                suppressHydrationWarning
-                className="flex items-center gap-1 text-[11px] font-bold text-[#c29b78]"
-                title={`Placement Calibration: Puzzle ${currentCalibrationStep} of 6 (Quota starts after placement)`}
-                data-testid="header-calibration-badge"
-              >
-                <span>🎯 {currentCalibrationStep}/6</span>
-              </div>
-            ) : (
-              <button
-                onClick={() => {
-                  setPaywallReason("quota");
-                  setIsQuotaModalOpen(true);
-                }}
-                data-testid="header-quota-btn"
-                suppressHydrationWarning
-                className="flex items-center gap-1 text-[11px] font-bold transition-all cursor-pointer active:scale-95"
-                title={`Free Quota: ${puzzlesRemaining}/${windowLimit} puzzles remaining this ${windowHours}h window. Tap for details.`}
-                aria-label="View free puzzle quota"
-              >
-                <span className={puzzlesRemaining > 0 ? "text-amber-400" : "text-rose-400"}>⚡</span>
-                <span suppressHydrationWarning className={`font-mono ${puzzlesRemaining > 0 ? "text-zinc-200" : "text-rose-400 font-bold"}`}>
-                  {puzzlesRemaining}/{windowLimit}
-                </span>
-              </button>
+            {/* Free Tier Quota / Calibration (Hidden for Pro Members) */}
+            {!isPro && (
+              !hasMounted ? (
+                <button
+                  onClick={() => {
+                    setPaywallReason("quota");
+                    setIsQuotaModalOpen(true);
+                  }}
+                  data-testid="header-quota-btn"
+                  suppressHydrationWarning
+                  className="flex items-center gap-1 text-[11px] font-bold transition-all cursor-pointer opacity-80"
+                  aria-label="View free puzzle quota"
+                >
+                  <span className="text-amber-400">⚡</span>
+                  <span className="font-mono text-zinc-200">
+                    {puzzlesRemaining}/{windowLimit}
+                  </span>
+                </button>
+              ) : isCalibrating ? (
+                <div
+                  suppressHydrationWarning
+                  className="flex items-center gap-1 text-[11px] font-bold text-[#c29b78]"
+                  title={`Placement Calibration: Puzzle ${currentCalibrationStep} of 6 (Quota starts after placement)`}
+                  data-testid="header-calibration-badge"
+                >
+                  <span>🎯 {currentCalibrationStep}/6</span>
+                </div>
+              ) : (
+                <button
+                  onClick={() => {
+                    setPaywallReason("quota");
+                    setIsQuotaModalOpen(true);
+                  }}
+                  data-testid="header-quota-btn"
+                  suppressHydrationWarning
+                  className="flex items-center gap-1 text-[11px] font-bold transition-all cursor-pointer active:scale-95"
+                  title={`Free Quota: ${puzzlesRemaining}/${windowLimit} puzzles remaining this ${windowHours}h window. Tap for details.`}
+                  aria-label="View free puzzle quota"
+                >
+                  <span className={puzzlesRemaining > 0 ? "text-amber-400" : "text-rose-400"}>⚡</span>
+                  <span suppressHydrationWarning className={`font-mono ${puzzlesRemaining > 0 ? "text-zinc-200" : "text-rose-400 font-bold"}`}>
+                    {puzzlesRemaining}/{windowLimit}
+                  </span>
+                </button>
+              )
             )}
 
             {/* Leaderboard Rank Button */}
@@ -1433,6 +1414,26 @@ export function PlayView({
               title="Global Standings & Friends"
             >
               <Trophy className="w-3.5 h-3.5" />
+            </button>
+
+            {/* Profile Icon with Pro Gold Ring vs Free Grey Ring */}
+            <button
+              type="button"
+              onClick={() => setActiveTab("profile")}
+              aria-label="Profile and settings"
+              data-testid="header-profile-btn"
+              className={`relative w-7 h-7 rounded-full flex items-center justify-center transition-all cursor-pointer overflow-hidden ${
+                isPro
+                  ? "ring-2 ring-amber-400 ring-offset-1 ring-offset-[#0f0e0d] shadow-[0_0_8px_rgba(245,158,11,0.45)]"
+                  : "ring-2 ring-white/20 ring-offset-1 ring-offset-[#0f0e0d]"
+              }`}
+              title={isPro ? "Profile • Pro Member" : "Profile • Free Tier"}
+            >
+              <UserAvatar
+                avatar={userAccount?.avatar}
+                fallback="♟"
+                className="w-full h-full flex items-center justify-center text-xs font-bold bg-[#22201e]"
+              />
             </button>
           </div>
         </div>
