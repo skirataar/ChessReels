@@ -182,7 +182,13 @@ export function clearAllUserAndPuzzleCache(userId?: string): void {
       "chess_reel_total_solved",
       "chess_reel_total_failed",
       "chess_reel_solved_puzzles",
+      "chess_reel_solved_ids",
       "chess_reel_saved_puzzles",
+      "chess_reel_bookmarks",
+      "chess_reel_likes",
+      "chess_reel_auto_advance",
+      "chess_reel_show_coordinates",
+      "chess_reel_muted",
       "chess_reel_plan",
       "chess_reel_custom_dp",
       "chess_reel_preview_guest",
@@ -214,7 +220,8 @@ export function clearAllUserAndPuzzleCache(userId?: string): void {
         key &&
         (key.startsWith("chess_reel_puzzle_queue") ||
           key.startsWith("chess_reel_tier_session") ||
-          key.startsWith("chess_reel_bookmarks_"))
+          key.startsWith("chess_reel_saved_puzzles") ||
+          key.startsWith("chess_reel_bookmarks"))
       ) {
         safeRemoveItem(key);
       }

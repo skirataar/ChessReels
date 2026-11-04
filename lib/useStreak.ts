@@ -65,6 +65,7 @@ export const getDaysDifference = getCalendarDaysDiff;
  */
 export function resolveStreakOnLoad(data: StreakData, todayStr: string): StreakData {
   const freezes = Math.min(2, Math.max(0, data.streakFreezes || 0));
+  const perfectWeek = freezes >= 2 ? 0 : Math.min(7, Math.max(0, data.perfectWeekCounter || 0));
   if (data.currentStreak === 0 || !data.lastSolvedDate) {
     return {
       currentStreak: 0,
@@ -82,6 +83,7 @@ export function resolveStreakOnLoad(data: StreakData, todayStr: string): StreakD
     return {
       ...data,
       streakFreezes: freezes,
+      perfectWeekCounter: perfectWeek,
       isFrozenState: false,
     };
   }
@@ -91,6 +93,7 @@ export function resolveStreakOnLoad(data: StreakData, todayStr: string): StreakD
     return {
       ...data,
       streakFreezes: freezes,
+      perfectWeekCounter: perfectWeek,
       isFrozenState: Boolean(data.isFrozenState),
     };
   }
@@ -99,10 +102,11 @@ export function resolveStreakOnLoad(data: StreakData, todayStr: string): StreakD
     // Missed 1 calendar day
     if (freezes >= 1) {
       // Protected by 1 freeze: preserve currentStreak at exact existing value (never increment)
+      const nextFreezes = freezes - 1;
       return {
         currentStreak: data.currentStreak,
         lastSolvedDate: addCalendarDays(todayStr, -1), // advance to yesterday (the frozen day)
-        streakFreezes: freezes - 1,
+        streakFreezes: nextFreezes,
         perfectWeekCounter: 0,
         isFrozenState: true,
       };
@@ -154,7 +158,10 @@ export function resolveStreakOnLoad(data: StreakData, todayStr: string): StreakD
 /**
  * Solve Puzzle Today
  * - Resolves missed days first via resolveStreakOnLoad.
- * - When currentStreak === 0, immediately initializes from 0 to 1, sets lastSolvedDate to today, perfectWeek = 1.
+ * - When currentStreak === 0, immediately initializes from 0 to 1, sets lastSolvedDate to today.
+ * - When streakFreezes === 2: perfectWeekCounter stays 0 and is NEVER tracked or incremented.
+ * - When streakFreezes < 2: increments perfectWeekCounter on consecutive solve days.
+ *   Reaching 7 awards +1 freeze (up to 2) and resets perfectWeekCounter to 0.
  * - When solving today, clears isFrozenState back to false and increments currentStreak.
  */
 export function resolveStreakOnSolve(data: StreakData, todayStr: string): StreakData {
@@ -163,18 +170,23 @@ export function resolveStreakOnSolve(data: StreakData, todayStr: string): Streak
   // Solving today thaws ice (isFrozenState = false), increments streak by 1,
   // sets lastSolvedDate to todayStr, and STRICTLY PRESERVES the exact remaining streakFreezes.
   if (data.isFrozenState && data.currentStreak >= 1) {
-    const preservedFreezes = Math.min(2, Math.max(0, data.streakFreezes || 0));
-    let streak = data.currentStreak + 1;
-    let perfectWeek = (data.perfectWeekCounter || 0) + 1;
-    let nextFreezes = preservedFreezes;
-    if (perfectWeek === 7) {
-      perfectWeek = 0;
-      nextFreezes = Math.min(2, preservedFreezes + 1);
+    let preservedFreezes = Math.min(2, Math.max(0, data.streakFreezes || 0));
+    const streak = data.currentStreak + 1;
+    let perfectWeek = 0;
+    if (preservedFreezes < 2) {
+      perfectWeek = (data.perfectWeekCounter || 0) + 1;
+      if (perfectWeek >= 7) {
+        preservedFreezes = Math.min(2, preservedFreezes + 1);
+        perfectWeek = 0;
+      }
+      if (preservedFreezes >= 2) {
+        perfectWeek = 0;
+      }
     }
     return {
       currentStreak: streak,
       lastSolvedDate: todayStr,
-      streakFreezes: nextFreezes,
+      streakFreezes: preservedFreezes,
       perfectWeekCounter: perfectWeek,
       isFrozenState: false,
     };
@@ -184,17 +196,18 @@ export function resolveStreakOnSolve(data: StreakData, todayStr: string): Streak
   const current = resolveStreakOnLoad(data, todayStr);
   let freezes = current.streakFreezes;
   let streak = current.currentStreak;
-  let perfectWeek = current.perfectWeekCounter;
+  let perfectWeek = freezes >= 2 ? 0 : current.perfectWeekCounter;
 
   // Day 1 Streak Initialization:
   // When currentStreak === 0, solving a puzzle immediately increments currentStreak from 0 to 1,
-  // sets lastSolvedDate to todayStr, perfectWeekCounter = 1, and isFrozenState = false.
+  // sets lastSolvedDate to todayStr, and isFrozenState = false.
+  // When freezes < 2: perfectWeekCounter starts at 1. When freezes === 2: perfectWeekCounter stays 0!
   if (streak === 0 || !current.lastSolvedDate) {
     return {
       currentStreak: 1,
       lastSolvedDate: todayStr,
       streakFreezes: freezes,
-      perfectWeekCounter: 1,
+      perfectWeekCounter: freezes < 2 ? 1 : 0,
       isFrozenState: false,
     };
   }
@@ -207,19 +220,26 @@ export function resolveStreakOnSolve(data: StreakData, todayStr: string): Streak
       currentStreak: Math.max(1, streak),
       lastSolvedDate: todayStr,
       streakFreezes: freezes,
-      perfectWeekCounter: Math.max(1, perfectWeek),
+      perfectWeekCounter: freezes >= 2 ? 0 : Math.max(1, perfectWeek),
       isFrozenState: false,
     };
   }
 
   if (daysDiff === 1) {
-    // Consecutive Day Solved (or yesterday was preserved by freeze):
+    // Consecutive Day Solved:
     // Thaw freeze state back to ignited amber and increment streak
     streak += 1;
-    perfectWeek += 1;
-    if (perfectWeek === 7) {
+    if (freezes < 2) {
+      perfectWeek += 1;
+      if (perfectWeek >= 7) {
+        freezes = Math.min(2, freezes + 1);
+        perfectWeek = 0;
+      }
+      if (freezes >= 2) {
+        perfectWeek = 0;
+      }
+    } else {
       perfectWeek = 0;
-      freezes = Math.min(2, freezes + 1);
     }
     return {
       currentStreak: streak,
@@ -235,7 +255,7 @@ export function resolveStreakOnSolve(data: StreakData, todayStr: string): Streak
     currentStreak: 1,
     lastSolvedDate: todayStr,
     streakFreezes: freezes,
-    perfectWeekCounter: 1,
+    perfectWeekCounter: freezes < 2 ? 1 : 0,
     isFrozenState: false,
   };
 }
@@ -284,18 +304,19 @@ function getSnapshot(): StreakStats {
     if (storedStreakDataRaw) {
       try {
         const parsed = JSON.parse(storedStreakDataRaw);
+        const freezes = typeof parsed.streakFreezes === "number" ? Math.min(2, Math.max(0, parsed.streakFreezes)) : 0;
         streakData = {
           currentStreak: typeof parsed.currentStreak === "number" ? parsed.currentStreak : 0,
           lastSolvedDate: parsed.lastSolvedDate || null,
-          streakFreezes: typeof parsed.streakFreezes === "number" ? Math.min(2, Math.max(0, parsed.streakFreezes)) : 2,
-          perfectWeekCounter: Math.min(7, Math.max(0, parsed.perfectWeekCounter || 0)),
+          streakFreezes: freezes,
+          perfectWeekCounter: freezes >= 2 ? 0 : Math.min(7, Math.max(0, parsed.perfectWeekCounter || 0)),
           isFrozenState: Boolean(parsed.isFrozenState),
         };
       } catch {
         streakData = {
           currentStreak: rawLegacyStreak,
           lastSolvedDate: rawLegacyLastDate,
-          streakFreezes: 2,
+          streakFreezes: 0,
           perfectWeekCounter: 0,
           isFrozenState: false,
         };
@@ -304,7 +325,7 @@ function getSnapshot(): StreakStats {
       streakData = {
         currentStreak: rawLegacyStreak,
         lastSolvedDate: rawLegacyLastDate,
-        streakFreezes: 2,
+        streakFreezes: 0,
         perfectWeekCounter: 0,
         isFrozenState: false,
       };
@@ -402,6 +423,55 @@ function subscribe(callback: Listener) {
   };
 }
 
+/**
+ * Hydrates streak progression directly from PostgreSQL DB into localStorage and notifies all subscribers.
+ */
+export function hydrateStreakFromDb(dbData: {
+  streak?: number;
+  lastSolvedDate?: string | null;
+  streakFreezes?: number;
+  perfectWeekCounter?: number;
+  isFrozenState?: boolean;
+}): StreakData {
+  const currentStreak = typeof dbData.streak === "number" ? Math.max(0, dbData.streak) : 0;
+  const lastSolvedDate = dbData.lastSolvedDate || null;
+  const streakFreezes = Math.min(
+    2,
+    Math.max(0, typeof dbData.streakFreezes === "number" ? dbData.streakFreezes : 0)
+  );
+  const perfectWeekCounter =
+    streakFreezes >= 2
+      ? 0
+      : Math.min(
+          7,
+          Math.max(0, typeof dbData.perfectWeekCounter === "number" ? dbData.perfectWeekCounter : 0)
+        );
+  const isFrozenState = Boolean(dbData.isFrozenState);
+
+  const data: StreakData = {
+    currentStreak,
+    lastSolvedDate,
+    streakFreezes,
+    perfectWeekCounter,
+    isFrozenState,
+  };
+
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.setItem(STREAK_DATA_KEY, JSON.stringify(data));
+      window.localStorage.setItem(DAILY_STREAK_KEY, String(currentStreak));
+      if (lastSolvedDate) {
+        window.localStorage.setItem(LAST_PLAYED_DATE_KEY, lastSolvedDate);
+      } else {
+        window.localStorage.removeItem(LAST_PLAYED_DATE_KEY);
+      }
+    } catch {}
+    notifyListeners();
+  }
+
+  return data;
+}
+
 export function resetStreakStats() {
   if (typeof window === "undefined") return;
   try {
@@ -411,14 +481,7 @@ export function resetStreakStats() {
     window.localStorage.removeItem(TOTAL_FAILED_KEY);
     window.localStorage.removeItem(SOLVE_COMBO_KEY);
     window.localStorage.removeItem(BEST_COMBO_KEY);
-    const initialFresh: StreakData = {
-      currentStreak: 0,
-      lastSolvedDate: null,
-      streakFreezes: 2,
-      perfectWeekCounter: 0,
-      isFrozenState: false,
-    };
-    window.localStorage.setItem(STREAK_DATA_KEY, JSON.stringify(initialFresh));
+    window.localStorage.removeItem(STREAK_DATA_KEY);
     cachedSnapshot = SERVER_SNAPSHOT;
     notifyListeners();
   } catch {}
@@ -444,18 +507,25 @@ export function useStreak() {
       if (storedStreakDataRaw) {
         try {
           const parsed = JSON.parse(storedStreakDataRaw);
+          const freezes =
+            typeof parsed.streakFreezes === "number"
+              ? Math.min(2, Math.max(0, parsed.streakFreezes))
+              : 0;
           currentStreakData = {
             currentStreak: typeof parsed.currentStreak === "number" ? parsed.currentStreak : 0,
             lastSolvedDate: parsed.lastSolvedDate || null,
-            streakFreezes: typeof parsed.streakFreezes === "number" ? Math.min(2, Math.max(0, parsed.streakFreezes)) : 2,
-            perfectWeekCounter: Math.min(7, Math.max(0, parsed.perfectWeekCounter || 0)),
+            streakFreezes: freezes,
+            perfectWeekCounter:
+              freezes >= 2
+                ? 0
+                : Math.min(7, Math.max(0, parsed.perfectWeekCounter || 0)),
             isFrozenState: Boolean(parsed.isFrozenState),
           };
         } catch {
           currentStreakData = {
             currentStreak: rawLegacyStreak,
             lastSolvedDate: rawLegacyLastDate,
-            streakFreezes: 2,
+            streakFreezes: 0,
             perfectWeekCounter: 0,
             isFrozenState: false,
           };
@@ -464,7 +534,7 @@ export function useStreak() {
         currentStreakData = {
           currentStreak: rawLegacyStreak,
           lastSolvedDate: rawLegacyLastDate,
-          streakFreezes: 2,
+          streakFreezes: 0,
           perfectWeekCounter: 0,
           isFrozenState: false,
         };

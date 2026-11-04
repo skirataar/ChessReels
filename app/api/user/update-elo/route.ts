@@ -12,6 +12,10 @@ interface UpdateEloBody {
   dailyStreak?: number;
   isRequeued?: boolean;
   attemptCount?: number;
+  streakFreezes?: number;
+  perfectWeekCounter?: number;
+  isFrozenState?: boolean;
+  lastSolvedDate?: string;
 }
 
 export async function POST(request: NextRequest) {
@@ -196,14 +200,43 @@ export async function POST(request: NextRequest) {
       const nextBestStreak = Math.max(existing?.bestStreak ?? 0, nextStreak);
       const nextPeakElo = Math.max(existing?.peakElo ?? 800, finalElo);
 
+      const dataToUpdate: Record<string, any> = {
+        elo: finalElo,
+        peakElo: nextPeakElo,
+        streak: nextStreak,
+        bestStreak: nextBestStreak,
+      };
+
+      if (typeof body.streakFreezes === "number") {
+        const freezes = Math.min(2, Math.max(0, body.streakFreezes));
+        dataToUpdate.streakFreezes = freezes;
+        if (freezes >= 2) dataToUpdate.perfectWeekCounter = 0;
+      }
+      if (
+        typeof body.perfectWeekCounter === "number" &&
+        (dataToUpdate.streakFreezes ?? existing.streakFreezes) < 2
+      ) {
+        dataToUpdate.perfectWeekCounter = Math.min(7, Math.max(0, body.perfectWeekCounter));
+      }
+      if (typeof body.isFrozenState === "boolean") {
+        dataToUpdate.isFrozenState = body.isFrozenState;
+      }
+      if (body.lastSolvedDate) {
+        dataToUpdate.lastSolvedDate = body.lastSolvedDate;
+      } else if (result === "win") {
+        dataToUpdate.lastSolvedDate = new Date().toISOString().slice(0, 10);
+      }
+
+      if (result === "win" && puzzleId) {
+        const existingSolved = existing.solvedPuzzleIds || [];
+        if (!existingSolved.includes(puzzleId)) {
+          dataToUpdate.solvedPuzzleIds = [...existingSolved, puzzleId];
+        }
+      }
+
       const updatedUser = await prisma.user.update({
         where: { id: targetUserId },
-        data: {
-          elo: finalElo,
-          peakElo: nextPeakElo,
-          streak: nextStreak,
-          bestStreak: nextBestStreak,
-        },
+        data: dataToUpdate,
       });
 
       return NextResponse.json({
@@ -216,6 +249,10 @@ export async function POST(request: NextRequest) {
         streak: updatedUser.streak,
         peakElo: updatedUser.peakElo,
         isRequeued: calculated.isRequeued,
+        streakFreezes: updatedUser.streakFreezes,
+        perfectWeekCounter: updatedUser.perfectWeekCounter,
+        isFrozenState: updatedUser.isFrozenState,
+        lastSolvedDate: updatedUser.lastSolvedDate,
       });
     } catch (dbError) {
       console.warn(

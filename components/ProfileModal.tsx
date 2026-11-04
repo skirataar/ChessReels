@@ -35,6 +35,7 @@ import { getTier } from "./LeaderboardModal";
 import { UserAvatar } from "@/components/UserAvatar";
 import { CURATED_AVATARS, compressImageFile, persistAvatar } from "@/lib/avatarUpload";
 import { PuzzleCard, PuzzleData, PuzzleStatus } from "@/components/PuzzleCard";
+import { isGuestUserId } from "@/lib/guestAccount";
 
 export interface ProfileModalProps {
   isOpen: boolean;
@@ -316,6 +317,13 @@ export function ProfileModal({
   const handleToggleMute = () => {
     const next = sounds.toggleMute();
     setIsMuted(next);
+    if (userAccount?.id && !isGuestUserId(userAccount.id)) {
+      fetch("/api/user/account", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: userAccount.id, soundEnabled: !next }),
+      }).catch(() => {});
+    }
   };
 
   // Toggle Auto-advance after solving
@@ -325,6 +333,13 @@ export function ProfileModal({
     if (typeof window !== "undefined") {
       window.localStorage.setItem("chess_reel_auto_advance", nextState ? "1" : "0");
       window.dispatchEvent(new Event("auto-advance-updated"));
+    }
+    if (userAccount?.id && !isGuestUserId(userAccount.id)) {
+      fetch("/api/user/account", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: userAccount.id, autoAdvance: nextState }),
+      }).catch(() => {});
     }
   };
 
@@ -351,6 +366,14 @@ export function ProfileModal({
         }
 
         window.dispatchEvent(new Event("bookmarks-updated"));
+      }
+
+      if (userAccount?.id && !isGuestUserId(userAccount.id)) {
+        fetch("/api/user/account", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: userAccount.id, savedPuzzleIds: updated }),
+        }).catch(() => {});
       }
     } catch (e) {
       console.warn("Could not remove bookmark:", e);

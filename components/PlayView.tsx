@@ -29,10 +29,11 @@ import {
   clearAllUserAndPuzzleCache,
 } from "@/lib/puzzleCache";
 import { useStreak, resetStreakStats } from "@/lib/useStreak";
+import { hydrateUserSession } from "@/lib/sessionHydration";
 import { StreakFlameBadge } from "@/components/StreakFlameBadge";
 import { StreakCalendarDropdown } from "@/components/StreakCalendarDropdown";
 import { useTierQuota } from "@/lib/useTierQuota";
-import { clearGuestLocalSession, isGuestAccount } from "@/lib/guestAccount";
+import { clearGuestLocalSession, isGuestAccount, isGuestUserId } from "@/lib/guestAccount";
 import { RefreshCw, WifiOff, UserPlus, BarChart2, Trophy, Zap, Flame, Crown, Sparkles, User, Snowflake } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -58,8 +59,19 @@ export interface UserAccount {
   calibrationStep: number;
   plan?: string;
   peakElo?: number;
+  targetElo?: number | null;
   streak?: number;
   bestStreak?: number;
+  lastSolvedDate?: string | null;
+  streakFreezes?: number;
+  perfectWeekCounter?: number;
+  isFrozenState?: boolean;
+  solvedPuzzleIds?: string[];
+  savedPuzzleIds?: string[];
+  likedPuzzleIds?: string[];
+  autoAdvance?: boolean;
+  soundEnabled?: boolean;
+  showCoordinates?: boolean;
 }
 
 function readRegisteredAccount(): UserAccount | null {
@@ -640,7 +652,15 @@ export function PlayView({
                   window.dispatchEvent(new Event("plan-updated"));
                 }
                 setUserAccount(oauthUser);
+                hydrateUserSession(oauthUser);
                 if (oauthUser.elo) setCurrentElo(oauthUser.elo);
+                if (Array.isArray(oauthUser.solvedPuzzleIds) && oauthUser.solvedPuzzleIds.length > 0) {
+                  setSolvedPuzzleIds((prev) => {
+                    const next = new Set(prev);
+                    oauthUser.solvedPuzzleIds.forEach((id: string) => next.add(id));
+                    return next;
+                  });
+                }
                 window.dispatchEvent(new Event("account-updated"));
                 if (window.location.search.includes("google_auth=success")) {
                   window.history.replaceState({}, document.title, window.location.pathname);
@@ -689,17 +709,16 @@ export function PlayView({
                       return;
                     }
                     setUserAccount(data.user);
-                    const currentLocalElo =
-                      typeof window !== "undefined"
-                        ? window.localStorage.getItem(ELO_STORAGE_KEY)
-                        : null;
-                    if (!currentLocalElo && data.user.elo) {
+                    hydrateUserSession(data.user);
+                    if (data.user.elo) {
                       setCurrentElo(data.user.elo);
                     }
-                    window.localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(data.user));
-                    if (data.user.plan) {
-                      window.localStorage.setItem("chess_reel_plan", data.user.plan);
-                      window.dispatchEvent(new Event("plan-updated"));
+                    if (Array.isArray(data.user.solvedPuzzleIds) && data.user.solvedPuzzleIds.length > 0) {
+                      setSolvedPuzzleIds((prev) => {
+                        const next = new Set(prev);
+                        data.user.solvedPuzzleIds.forEach((id: string) => next.add(id));
+                        return next;
+                      });
                     }
                   }
                 })
@@ -717,9 +736,48 @@ export function PlayView({
             return;
           }
         } else {
-          clearGuestLocalSession();
-          setUserAccount(null);
-          router.replace("/");
+          // Check if valid session cookie exists
+          const sessionCookie =
+            typeof document !== "undefined"
+              ? document.cookie
+                  .split("; ")
+                  .find((row) => row.startsWith("chess_reel_session="))
+                  ?.split("=")[1]
+              : null;
+          const decodedSession = sessionCookie ? decodeURIComponent(sessionCookie) : null;
+          if (decodedSession && !isGuestUserId(decodedSession)) {
+            fetch(`/api/user/account?userId=${encodeURIComponent(decodedSession)}`)
+              .then((res) => (res.ok ? res.json() : null))
+              .then((data) => {
+                if (data?.user && !isGuestAccount(data.user)) {
+                  setUserAccount(data.user);
+                  hydrateUserSession(data.user);
+                  if (data.user.elo) {
+                    setCurrentElo(data.user.elo);
+                  }
+                  if (Array.isArray(data.user.solvedPuzzleIds) && data.user.solvedPuzzleIds.length > 0) {
+                    setSolvedPuzzleIds((prev) => {
+                      const next = new Set(prev);
+                      data.user.solvedPuzzleIds.forEach((id: string) => next.add(id));
+                      return next;
+                    });
+                  }
+                } else {
+                  clearGuestLocalSession();
+                  setUserAccount(null);
+                  router.replace("/");
+                }
+              })
+              .catch(() => {
+                clearGuestLocalSession();
+                setUserAccount(null);
+                router.replace("/");
+              });
+          } else {
+            clearGuestLocalSession();
+            setUserAccount(null);
+            router.replace("/");
+          }
         }
       } catch (e) {
         console.warn("Storage access restricted:", e);
@@ -1350,6 +1408,7 @@ export function PlayView({
   const handleSignOut = () => {
     const oldUserId = userAccount?.id;
     clearAllUserAndPuzzleCache(oldUserId);
+    resetStreakStats();
     setUserAccount(null);
     setIsStatsModalOpen(false);
     setSolvedPuzzleIds(new Set());

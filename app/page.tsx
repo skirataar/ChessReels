@@ -7,6 +7,7 @@ import { ChevronLeft, ArrowRight, Check, LogIn, Sparkles } from "lucide-react";
 import { BOARD_THEMES, BoardTheme, setStoredBoardTheme, getStoredBoardTheme } from "@/lib/boardThemes";
 import { clearGuestLocalSession, isGuestAccount } from "@/lib/guestAccount";
 import { prefetchPuzzles, clearAllUserAndPuzzleCache } from "@/lib/puzzleCache";
+import { hydrateUserSession } from "@/lib/sessionHydration";
 
 // --- Types ---
 type FlowStep = "gate" | "step-elo" | "step-goal" | "step-board" | "auth" | "pro-upsell";
@@ -705,15 +706,10 @@ export default function RootPage() {
 
       if (data.user) {
         clearAllUserAndPuzzleCache();
-        window.localStorage.setItem("chess_reel_account", JSON.stringify(data.user));
-        window.localStorage.setItem("chess_reel_elo", String(data.user.elo || startingElo));
-        window.localStorage.setItem("chess_reel_plan", data.user.plan || "free");
+        hydrateUserSession(data.user);
         prefetchPuzzles(startingElo, 5, data.user.id).catch(() => {});
         document.cookie = "chess_reel_pending_google=; path=/; max-age=0";
         document.cookie = `chess_reel_session=${encodeURIComponent(data.user.id)}; path=/; max-age=${60 * 60 * 24 * 30}`;
-        window.dispatchEvent(new Event("account-updated"));
-        window.dispatchEvent(new Event("tier-session-updated"));
-        window.dispatchEvent(new Event("plan-updated"));
         setStep("pro-upsell");
       }
     } catch {
@@ -792,19 +788,9 @@ export default function RootPage() {
 
         if (data.user) {
           clearAllUserAndPuzzleCache();
-          window.localStorage.setItem("chess_reel_account", JSON.stringify(data.user));
-          window.localStorage.setItem("chess_reel_elo", String(data.user.elo || startingElo));
-          if (data.user.plan) {
-            window.localStorage.setItem("chess_reel_plan", data.user.plan);
-            window.dispatchEvent(new Event("plan-updated"));
-          } else {
-            window.localStorage.removeItem("chess_reel_plan");
-          }
+          hydrateUserSession(data.user);
           prefetchPuzzles(data.user.elo || 800, 5, data.user.id).catch(() => {});
-          window.dispatchEvent(new Event("tier-session-updated"));
-
           document.cookie = `chess_reel_session=${encodeURIComponent(data.user.id)}; path=/; max-age=${60 * 60 * 24 * 30}`;
-          window.dispatchEvent(new Event("account-updated"));
           setStep("pro-upsell");
         }
       } catch {
@@ -844,21 +830,9 @@ export default function RootPage() {
 
         if (data.user) {
           clearAllUserAndPuzzleCache();
-          window.localStorage.setItem("chess_reel_account", JSON.stringify(data.user));
-          if (data.user.elo) {
-            window.localStorage.setItem("chess_reel_elo", String(data.user.elo));
-          }
-          if (data.user.plan) {
-            window.localStorage.setItem("chess_reel_plan", data.user.plan);
-            window.dispatchEvent(new Event("plan-updated"));
-          } else {
-            window.localStorage.removeItem("chess_reel_plan");
-          }
+          hydrateUserSession(data.user);
           prefetchPuzzles(data.user.elo || 800, 5, data.user.id).catch(() => {});
-          window.dispatchEvent(new Event("tier-session-updated"));
-
           document.cookie = `chess_reel_session=${encodeURIComponent(data.user.id)}; path=/; max-age=${60 * 60 * 24 * 30}`;
-          window.dispatchEvent(new Event("account-updated"));
           router.replace("/play");
         }
       } catch {
