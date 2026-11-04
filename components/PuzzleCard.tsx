@@ -41,6 +41,8 @@ import { useBoardTheme } from "@/lib/boardThemes";
 export interface PuzzleData {
   id: string;
   instanceId?: string;
+  isRequeued?: boolean;
+  attemptNumber?: number;
   fen: string;
   moves: string;
   rating: number;
@@ -248,6 +250,21 @@ export function PuzzleCard({
   onOpenStats,
 }: PuzzleCardProps) {
   const activeInstanceKey = instanceId || puzzle?.instanceId || puzzle?.id;
+  const [testIsRequeued, setTestIsRequeued] = useState<boolean>(false);
+  useEffect(() => {
+    const handleTestRequeue = (e: Event) => {
+      const ce = e as CustomEvent<{ isRequeued: boolean }>;
+      if (ce.detail?.isRequeued !== undefined) setTestIsRequeued(ce.detail.isRequeued);
+    };
+    window.addEventListener("chess-reel-test-requeue", handleTestRequeue);
+    return () => window.removeEventListener("chess-reel-test-requeue", handleTestRequeue);
+  }, []);
+
+  const isRequeued = Boolean(
+    testIsRequeued ||
+    puzzle?.isRequeued ||
+    (activeInstanceKey && activeInstanceKey.includes("_attempt_") && !activeInstanceKey.endsWith("_attempt_1"))
+  );
   const isDesktopPointer = useIsDesktopPointer();
   const [boardTheme] = useBoardTheme();
   const initialPuzzleState = computePuzzleInitialState(puzzle);
@@ -658,6 +675,7 @@ export function PuzzleCard({
             guestId,
             puzzleId: puzzle.id,
             dailyStreak: streak,
+            isRequeued,
           }),
         });
 
@@ -673,7 +691,8 @@ export function PuzzleCard({
           if (typeof data.newElo === "number") {
             onEloUpdate(data.newElo, data.eloChange ?? 0, result === "win", puzzle.id);
           } else {
-            const delta = result === "win" ? 10 : -10;
+            const normalDelta = result === "win" ? 10 : -10;
+            const delta = result === "win" && isRequeued ? Math.max(1, Math.round(normalDelta * 0.5)) : normalDelta;
             onEloUpdate(currentElo + delta, delta, result === "win", puzzle.id);
           }
         } else {
@@ -681,7 +700,8 @@ export function PuzzleCard({
             onEloUpdate(currentElo, result === "win" ? 1 : -1, result === "win", puzzle.id);
             return;
           }
-          const delta = result === "win" ? 10 : -10;
+          const normalDelta = result === "win" ? 10 : -10;
+          const delta = result === "win" && isRequeued ? Math.max(1, Math.round(normalDelta * 0.5)) : normalDelta;
           onEloUpdate(currentElo + delta, delta, result === "win", puzzle.id);
         }
       } catch (err) {
@@ -690,7 +710,8 @@ export function PuzzleCard({
           onEloUpdate(currentElo, result === "win" ? 1 : -1, result === "win", puzzle.id);
           return;
         }
-        const delta = result === "win" ? 10 : -10;
+        const normalDelta = result === "win" ? 10 : -10;
+        const delta = result === "win" && isRequeued ? Math.max(1, Math.round(normalDelta * 0.5)) : normalDelta;
         onEloUpdate(currentElo + delta, delta, result === "win", puzzle.id);
       }
     },
@@ -2559,6 +2580,11 @@ export function PuzzleCard({
               <>
                 <CheckCircle2 className="w-3.5 h-3.5 text-[#10b981] shrink-0 stroke-[2.25]" />
                 <span className="font-bold text-[#10b981]">Solved</span>
+                {isRequeued && (
+                  <span data-testid="requeued-status-tag" className="text-[12px] text-amber-400/80 font-normal">
+                    • Requeued
+                  </span>
+                )}
                 {isReviewMode && (
                   <span className="text-[12px] text-[#78716c] font-normal">• Review Mode</span>
                 )}
@@ -2576,6 +2602,11 @@ export function PuzzleCard({
                 <span className="text-[#78716c] tabular-nums">
                   • Step {currentStep} of {totalPlayerMoves}
                 </span>
+                {isRequeued && (
+                  <span data-testid="requeued-status-tag" className="text-[12px] text-amber-400/80 font-normal">
+                    • Requeued
+                  </span>
+                )}
                 {isReviewMode && (
                   <span className="text-[12px] text-[#78716c] font-normal">• Review</span>
                 )}
@@ -2583,10 +2614,15 @@ export function PuzzleCard({
             )}
           </div>
 
-          <div className="flex items-center">
+          <div className="flex items-center gap-1.5">
             <span className="font-semibold tabular-nums text-[#c29b78]">
               {puzzle ? `${puzzle.rating} Elo` : "---"}
             </span>
+            {isRequeued && (
+              <span className="text-[11px] text-amber-400/70 font-mono select-none" title="Requeued puzzle earns reduced Elo on solve">
+                (½ Elo)
+              </span>
+            )}
           </div>
         </div>
       </div>
