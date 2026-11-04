@@ -40,6 +40,7 @@ import { useBoardTheme } from "@/lib/boardThemes";
 
 export interface PuzzleData {
   id: string;
+  instanceId?: string;
   fen: string;
   moves: string;
   rating: number;
@@ -66,6 +67,7 @@ export interface PuzzleCardProps {
   status: PuzzleStatus;
   savedState?: SavedPuzzleState;
   onSavePuzzleState?: (puzzleId: string, state: SavedPuzzleState) => void;
+  instanceId?: string;
   isAlreadyRated?: boolean;
   ratedPuzzleIds?: Set<string>;
   onMarkRated?: (puzzleId: string) => void;
@@ -220,6 +222,7 @@ export function PuzzleCard({
   status,
   savedState,
   onSavePuzzleState,
+  instanceId,
   isAlreadyRated,
   ratedPuzzleIds,
   onMarkRated,
@@ -244,6 +247,7 @@ export function PuzzleCard({
   onPrevPuzzle,
   onOpenStats,
 }: PuzzleCardProps) {
+  const activeInstanceKey = instanceId || puzzle?.instanceId || puzzle?.id;
   const isDesktopPointer = useIsDesktopPointer();
   const [boardTheme] = useBoardTheme();
   const initialPuzzleState = computePuzzleInitialState(puzzle);
@@ -283,7 +287,7 @@ export function PuzzleCard({
   const isPreviouslyCompleted = Boolean(
     savedState?.status === "solved" ||
     isAlreadyRated ||
-    (puzzle?.id && (ratedPuzzleIds?.has(puzzle.id) || ratedPuzzleIdsRef.current.has(puzzle.id)))
+    (activeInstanceKey && (ratedPuzzleIds?.has(activeInstanceKey) || ratedPuzzleIdsRef.current.has(activeInstanceKey)))
   );
 
   const [isReviewMode, setIsReviewMode] = useState<boolean>(() => isPreviouslyCompleted);
@@ -446,10 +450,10 @@ export function PuzzleCard({
   const mistakeTimerRef = useRef<NodeJS.Timeout | null>(null);
   const toastTimerRef = useRef<NodeJS.Timeout | null>(null);
   const hasPenalizedRef = useRef<boolean>(
-    Boolean(savedState?.status === "failed" || (puzzle?.id && (ratedPuzzleIds?.has(puzzle.id) || isAlreadyRated)))
+    Boolean(savedState?.status === "failed" || (activeInstanceKey && (ratedPuzzleIds?.has(activeInstanceKey) || isAlreadyRated)))
   );
   const hasWonRef = useRef<boolean>(
-    Boolean(savedState?.status === "solved" || (puzzle?.id && (ratedPuzzleIds?.has(puzzle.id) || isAlreadyRated)))
+    Boolean(savedState?.status === "solved" || (activeInstanceKey && (ratedPuzzleIds?.has(activeInstanceKey) || isAlreadyRated)))
   );
 
   // Stable refs for callbacks & props to prevent puzzle re-initialization loops
@@ -555,8 +559,8 @@ export function PuzzleCard({
           setPlayerTurnMessage("Solved");
           hasWonRef.current = true;
           if (puzzle) {
-            onMarkRated?.(puzzle.id);
-            onSavePuzzleState?.(puzzle.id, {
+            onMarkRated?.(activeInstanceKey || puzzle.id);
+            onSavePuzzleState?.(activeInstanceKey || puzzle.id, {
               status: "solved",
               moveHistory: history,
               viewMoveIndex: history.length - 1,
@@ -571,7 +575,7 @@ export function PuzzleCard({
           }
         }
         if (customEvent.detail.status === "failed" && puzzle) {
-          onSavePuzzleState?.(puzzle.id, {
+          onSavePuzzleState?.(activeInstanceKey || puzzle.id, {
             status: "failed",
             moveHistory,
             viewMoveIndex,
@@ -632,15 +636,16 @@ export function PuzzleCard({
       if (
         isReviewMode ||
         isAlreadyRated ||
-        ratedPuzzleIds?.has(puzzle.id) ||
-        ratedPuzzleIdsRef.current.has(puzzle.id)
+        (activeInstanceKey && (ratedPuzzleIds?.has(activeInstanceKey) || ratedPuzzleIdsRef.current.has(activeInstanceKey)))
       ) {
         return;
       }
 
-      // Immediately add puzzle.id to ratedPuzzleIds on the very first completion attempt (win or loss)
-      ratedPuzzleIdsRef.current.add(puzzle.id);
-      onMarkRated?.(puzzle.id);
+      // Immediately add activeInstanceKey to ratedPuzzleIds on the very first completion attempt (win or loss)
+      if (activeInstanceKey) {
+        ratedPuzzleIdsRef.current.add(activeInstanceKey);
+        onMarkRated?.(activeInstanceKey);
+      }
 
       try {
         const response = await fetch("/api/user/update-elo", {
@@ -835,7 +840,7 @@ export function PuzzleCard({
         status === "solved" ||
         savedState?.status === "solved" ||
         isAlreadyRated ||
-        Boolean(puzzle?.id && (ratedPuzzleIds?.has(puzzle.id) || ratedPuzzleIdsRef.current.has(puzzle.id)));
+        Boolean(activeInstanceKey && (ratedPuzzleIds?.has(activeInstanceKey) || ratedPuzzleIdsRef.current.has(activeInstanceKey)));
 
       if (isAlreadyCompleted) {
         setIsReviewMode(true);
@@ -1127,12 +1132,12 @@ export function PuzzleCard({
           });
           setPlacementFeedback("incorrect");
           onStatusChange("failed");
-          if (!hasPenalizedRef.current && !isReviewMode && !isAlreadyRated && (!puzzle || !ratedPuzzleIds?.has(puzzle.id))) {
+          if (!hasPenalizedRef.current && !isReviewMode && !isAlreadyRated && (!activeInstanceKey || !ratedPuzzleIds?.has(activeInstanceKey))) {
             hasPenalizedRef.current = true;
             sendEloResult("loss");
           }
           if (puzzle) {
-            onSavePuzzleState?.(puzzle.id, {
+            onSavePuzzleState?.(activeInstanceKey || puzzle.id, {
               status: "failed",
               moveHistory,
               viewMoveIndex,
@@ -1148,12 +1153,12 @@ export function PuzzleCard({
         }
 
         // Penalize Elo once per puzzle and record in PuzzleHistory
-        if (!hasPenalizedRef.current && !isReviewMode && !isAlreadyRated && (!puzzle || !ratedPuzzleIds?.has(puzzle.id))) {
+        if (!hasPenalizedRef.current && !isReviewMode && !isAlreadyRated && (!activeInstanceKey || !ratedPuzzleIds?.has(activeInstanceKey))) {
           hasPenalizedRef.current = true;
           sendEloResult("loss");
         }
         if (puzzle) {
-          onSavePuzzleState?.(puzzle.id, {
+          onSavePuzzleState?.(activeInstanceKey || puzzle.id, {
             status: "failed",
             moveHistory,
             viewMoveIndex,
@@ -1213,14 +1218,14 @@ export function PuzzleCard({
 
         const updatedHistory = [...moveHistory, playerFen];
         if (puzzle) {
-          onSavePuzzleState?.(puzzle.id, {
+          onSavePuzzleState?.(activeInstanceKey || puzzle.id, {
             status: "solved",
             moveHistory: updatedHistory,
             viewMoveIndex: updatedHistory.length - 1,
           });
         }
 
-        if (!hasWonRef.current && !isReviewMode && !isAlreadyRated && (!puzzle || !ratedPuzzleIds?.has(puzzle.id))) {
+        if (!hasWonRef.current && !isReviewMode && !isAlreadyRated && (!activeInstanceKey || !ratedPuzzleIds?.has(activeInstanceKey))) {
           hasWonRef.current = true;
           sendEloResult("win");
         }
@@ -1279,7 +1284,7 @@ export function PuzzleCard({
 
             if (puzzle) {
               setMoveHistory((currentHist) => {
-                onSavePuzzleState?.(puzzle.id, {
+                onSavePuzzleState?.(activeInstanceKey || puzzle.id, {
                   status: "solved",
                   moveHistory: currentHist,
                   viewMoveIndex: currentHist.length - 1,
@@ -1288,7 +1293,7 @@ export function PuzzleCard({
               });
             }
 
-            if (!hasWonRef.current && !isReviewMode && !isAlreadyRated && (!puzzle || !ratedPuzzleIds?.has(puzzle.id))) {
+            if (!hasWonRef.current && !isReviewMode && !isAlreadyRated && (!activeInstanceKey || !ratedPuzzleIds?.has(activeInstanceKey))) {
               hasWonRef.current = true;
               sendEloResult("win");
             }

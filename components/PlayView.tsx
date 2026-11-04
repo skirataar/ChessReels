@@ -234,14 +234,6 @@ export function PlayView({
       ...prev,
       [puzzleId]: state,
     }));
-    if (state.status === "solved") {
-      setSolvedPuzzleIds((prev) => {
-        if (prev.has(puzzleId)) return prev;
-        const next = new Set(prev);
-        next.add(puzzleId);
-        return next;
-      });
-    }
   }, []);
 
   const countedQuotaPuzzleIdsRef = useRef<Set<string>>(new Set());
@@ -296,6 +288,19 @@ export function PlayView({
 
   // Active puzzle derived from queue and currentIndex
   const currentPuzzle = queue[currentIndex] || null;
+
+  const puzzleAttemptCountRef = useRef<Record<string, number>>({});
+
+  const ensurePuzzleInstanceId = useCallback((p: PuzzleData): PuzzleData => {
+    if (!p) return p;
+    if (p.instanceId) return p;
+    const attempt = puzzleAttemptCountRef.current[p.id] || 1;
+    puzzleAttemptCountRef.current[p.id] = attempt;
+    return {
+      ...p,
+      instanceId: `${p.id}_attempt_${attempt}`,
+    };
+  }, []);
 
   // Track attempt mistakes: tracks IDs that experienced a mistake during their current attempt
   const failedAttemptPuzzleIdsRef = useRef<Set<string>>(new Set());
@@ -619,7 +624,7 @@ export function PlayView({
         .then((data) => {
           if (data) {
             const arr: PuzzleData[] = Array.isArray(data) ? data : [data];
-            const filtered = arr.filter((p) => p && !solvedPuzzleIdsRef.current.has(p.id));
+            const filtered = arr.filter((p) => p && !solvedPuzzleIdsRef.current.has(p.id)).map(ensurePuzzleInstanceId);
             if (filtered.length > 0) {
               setQueue(filtered);
               setCurrentIndex(0);
@@ -655,6 +660,8 @@ export function PlayView({
   useEffect(() => {
     const p = queue[currentIndex];
     if (p) {
+      const instanceKey = p.instanceId || `${p.id}_attempt_1`;
+      failedAttemptPuzzleIdsRef.current.delete(instanceKey);
       failedAttemptPuzzleIdsRef.current.delete(p.id);
     }
   }, [currentIndex, queue]);
@@ -663,7 +670,12 @@ export function PlayView({
   const scheduleFailedPuzzleReinsertion = useCallback(
     async (failedPuzzle: PuzzleData, fromIndex: number) => {
       const offset = 10 + Math.floor(Math.random() * 5); // 10..14
-      const cleanResetCopy: PuzzleData = { ...failedPuzzle };
+      const nextAttempt = (puzzleAttemptCountRef.current[failedPuzzle.id] || 1) + 1;
+      puzzleAttemptCountRef.current[failedPuzzle.id] = nextAttempt;
+      const cleanResetCopy: PuzzleData = {
+        ...failedPuzzle,
+        instanceId: `${failedPuzzle.id}_attempt_${nextAttempt}`,
+      };
       const currentGap = queue.length - fromIndex;
 
       if (currentGap <= 10) {
@@ -679,7 +691,7 @@ export function PlayView({
           if (res.ok) {
             const data = await res.json();
             const arr: PuzzleData[] = Array.isArray(data) ? data : [data];
-            newBatch = arr.filter((p) => p && !solvedPuzzleIds.has(p.id));
+            newBatch = arr.filter((p) => p && !solvedPuzzleIds.has(p.id)).map(ensurePuzzleInstanceId);
           }
 
           setQueue((prevQueue) => {
@@ -706,7 +718,7 @@ export function PlayView({
         });
       }
     },
-    [queue.length, userAccount?.id, guestId, solvedPuzzleIds]
+    [queue.length, userAccount?.id, guestId, solvedPuzzleIds, ensurePuzzleInstanceId]
   );
 
   // Status Change Handler with Solved & Failed Rules
@@ -716,8 +728,11 @@ export function PlayView({
       const puzzle = queue[currentIndex];
       if (!puzzle) return;
 
+      const instanceKey = puzzle.instanceId || `${puzzle.id}_attempt_1`;
+
       if (status === "failed") {
-        const attemptKey = `${puzzle.id}#${currentIndex}`;
+        const attemptKey = `${instanceKey}#${currentIndex}`;
+        failedAttemptPuzzleIdsRef.current.add(instanceKey);
         failedAttemptPuzzleIdsRef.current.add(puzzle.id);
 
         if (!scheduledReinsertionsRef.current.has(attemptKey)) {
@@ -725,34 +740,41 @@ export function PlayView({
           scheduleFailedPuzzleReinsertion(puzzle, currentIndex);
         }
       } else if (status === "solved") {
+        const hasFailedOnThisAttempt =
+          failedAttemptPuzzleIdsRef.current.has(instanceKey) ||
+          failedAttemptPuzzleIdsRef.current.has(puzzle.id);
+
         setPuzzleStates((prev) => {
-          if (prev[puzzle.id]?.status === "solved") return prev;
+          if (prev[instanceKey]?.status === "solved") return prev;
           return {
             ...prev,
-            [puzzle.id]: {
+            [instanceKey]: {
               status: "solved",
-              moveHistory: prev[puzzle.id]?.moveHistory || [],
-              viewMoveIndex: prev[puzzle.id]?.viewMoveIndex || 0,
+              moveHistory: prev[instanceKey]?.moveHistory || [],
+              viewMoveIndex: prev[instanceKey]?.viewMoveIndex || 0,
             },
           };
         });
 
-        // Continuous Ranked Play: consume free tier quota on genuine solve (only once per puzzle ID)
-        if (!isCalibrating && !solvedPuzzleIdsRef.current.has(puzzle.id) && !countedQuotaPuzzleIdsRef.current.has(puzzle.id)) {
+        // Continuous Ranked Play: consume free tier quota on genuine solve (only once per puzzle ID, and only if not failed on this attempt)
+        if (!isCalibrating && !solvedPuzzleIdsRef.current.has(puzzle.id) && !countedQuotaPuzzleIdsRef.current.has(puzzle.id) && !hasFailedOnThisAttempt) {
           countedQuotaPuzzleIdsRef.current.add(puzzle.id);
           recordPuzzlePlayed(true);
         }
 
-        // Permanently mark solved for this session
-        setSolvedPuzzleIds((prev) => {
-          if (prev.has(puzzle.id)) return prev;
-          const next = new Set(prev);
-          next.add(puzzle.id);
-          return next;
-        });
+        // Only mark permanently as solved in solvedPuzzleIds IF they didn't fail on this attempt!
+        if (!hasFailedOnThisAttempt) {
+          recordPuzzlePlay("win");
+          setSolvedPuzzleIds((prev) => {
+            if (prev.has(puzzle.id)) return prev;
+            const next = new Set(prev);
+            next.add(puzzle.id);
+            return next;
+          });
+        }
       }
     },
-    [queue, currentIndex, scheduleFailedPuzzleReinsertion]
+    [queue, currentIndex, scheduleFailedPuzzleReinsertion, isCalibrating, recordPuzzlePlayed]
   );
 
   // Swipe Up / Next Puzzle navigation: strictly increment currentIndex to a new puzzle ID & deduplicate against solved
@@ -766,7 +788,7 @@ export function PlayView({
         if (lastSolvedRaw) {
           try {
             const p = JSON.parse(lastSolvedRaw);
-            setQueue((prev) => [p, ...prev]);
+            setQueue((prev) => [ensurePuzzleInstanceId(p), ...prev]);
             setCurrentIndex(0);
           } catch {}
         }
@@ -793,10 +815,11 @@ export function PlayView({
     if (currentIndex + 1 < queue.length) {
       const nextIndex = currentIndex + 1;
       const nextP = queue[nextIndex];
+      const nextKey = nextP ? (nextP.instanceId || nextP.id) : "";
       setSlideDirection("next");
       setCurrentIndex(nextIndex);
-      if (nextP && puzzleStatesRef.current[nextP.id]) {
-        setPuzzleStatus(puzzleStatesRef.current[nextP.id].status);
+      if (nextKey && puzzleStatesRef.current[nextKey]) {
+        setPuzzleStatus(puzzleStatesRef.current[nextKey].status);
       } else {
         setPuzzleStatus("playing");
       }
@@ -815,7 +838,7 @@ export function PlayView({
     }
 
     if (nextPuzzle) {
-      setQueue((prev) => [...prev.slice(0, currentIndex + 1), nextPuzzle!]);
+      setQueue((prev) => [...prev.slice(0, currentIndex + 1), ensurePuzzleInstanceId(nextPuzzle!)]);
       setCurrentIndex(currentIndex + 1);
       setPuzzleStatus("playing");
       prefetchPuzzles(elo, 5, targetUserId).catch(() => {});
@@ -830,9 +853,9 @@ export function PlayView({
       if (res.ok) {
         const data = await res.json();
         const arr: PuzzleData[] = Array.isArray(data) ? data : [data];
-        const validBatch = arr.filter(
-          (p) => p && p.id !== currentId && !currentSolved.has(p.id) && !ratedPuzzleIdsRef.current.has(p.id)
-        );
+        const validBatch = arr
+          .filter((p) => p && p.id !== currentId && !currentSolved.has(p.id) && !ratedPuzzleIdsRef.current.has(p.id))
+          .map(ensurePuzzleInstanceId);
 
         if (validBatch.length > 0) {
           const chosen = validBatch[0];
@@ -858,6 +881,7 @@ export function PlayView({
     queue,
     userAccount?.id,
     setIsQuotaModalOpen,
+    ensurePuzzleInstanceId,
   ]);
 
   // Swipe Down / Previous Puzzle navigation
@@ -865,10 +889,11 @@ export function PlayView({
     if (currentIndex > 0) {
       const prevIndex = currentIndex - 1;
       const prevPuzzle = queue[prevIndex];
+      const prevKey = prevPuzzle ? (prevPuzzle.instanceId || prevPuzzle.id) : "";
       setSlideDirection("prev");
       setCurrentIndex(prevIndex);
-      if (prevPuzzle && puzzleStatesRef.current[prevPuzzle.id]) {
-        setPuzzleStatus(puzzleStatesRef.current[prevPuzzle.id].status);
+      if (prevKey && puzzleStatesRef.current[prevKey]) {
+        setPuzzleStatus(puzzleStatesRef.current[prevKey].status);
       } else {
         setPuzzleStatus("playing");
       }
@@ -890,7 +915,7 @@ export function PlayView({
         // Check local prefetch buffer first - verify it matches user's elo
         const cached = popNextPuzzle(targetUserId);
         if (cached && !solvedPuzzleIdsRef.current.has(cached.id) && Math.abs(cached.rating - elo) <= 250) {
-          setQueue([cached]);
+          setQueue([ensurePuzzleInstanceId(cached)]);
           setCurrentIndex(0);
           setPuzzleStatus("playing");
           prefetchPuzzles(elo, 5, targetUserId).catch(() => {});
@@ -903,7 +928,7 @@ export function PlayView({
           .then((data) => {
             if (data) {
               const arr: PuzzleData[] = Array.isArray(data) ? data : [data];
-              const filtered = arr.filter((p) => p && !solvedPuzzleIdsRef.current.has(p.id));
+              const filtered = arr.filter((p) => p && !solvedPuzzleIdsRef.current.has(p.id)).map(ensurePuzzleInstanceId);
               if (filtered.length > 0) {
                 setQueue(filtered);
                 setCurrentIndex(0);
@@ -929,7 +954,7 @@ export function PlayView({
         if (lastSolvedRaw) {
           try {
             const p = JSON.parse(lastSolvedRaw);
-            setQueue([p]);
+            setQueue([ensurePuzzleInstanceId(p)]);
             setCurrentIndex(0);
           } catch {}
         }
@@ -942,7 +967,9 @@ export function PlayView({
 
   // Handle Elo update and placement test logic
   const handleEloUpdate = (newElo: number, change: number, isWin?: boolean, puzzleId?: string) => {
-    const activeId = puzzleId || currentPuzzle?.id;
+    const activePuzzle = queue[currentIndex] || currentPuzzle;
+    const activeId = puzzleId || activePuzzle?.instanceId || activePuzzle?.id;
+    const rawPuzzleId = activePuzzle?.id || currentPuzzle?.id;
     const isAlreadyRated = Boolean(activeId && ratedPuzzleIdsRef.current.has(activeId) && !isCalibrating);
 
     if (!isAlreadyRated && activeId) {
@@ -1042,7 +1069,7 @@ export function PlayView({
 
     // 2. Continuous Ranked Play: Free Tier Quota (4 puzzles / 4h) and Ads (every 2 puzzles) start HERE
     // Quota and ads ONLY count when the puzzle was actually solved (won)
-    if (won && activeId && !isCalibrating && !solvedPuzzleIdsRef.current.has(activeId) && !countedQuotaPuzzleIdsRef.current.has(activeId)) {
+    if (won && activeId && rawPuzzleId && !isCalibrating && !solvedPuzzleIdsRef.current.has(rawPuzzleId) && !countedQuotaPuzzleIdsRef.current.has(activeId)) {
       countedQuotaPuzzleIdsRef.current.add(activeId);
       recordPuzzlePlayed(true);
     }
@@ -1122,7 +1149,7 @@ export function PlayView({
       .then((data) => {
         if (data) {
           const arr: PuzzleData[] = Array.isArray(data) ? data : [data];
-          const filtered = arr.filter((p) => p && !solvedPuzzleIds.has(p.id));
+          const filtered = arr.filter((p) => p && !solvedPuzzleIds.has(p.id)).map(ensurePuzzleInstanceId);
           if (filtered.length > 0) {
             setQueue(filtered);
             setCurrentIndex(0);
@@ -1169,7 +1196,7 @@ export function PlayView({
       .then((data) => {
         if (data) {
           const arr: PuzzleData[] = Array.isArray(data) ? data : [data];
-          const filtered = arr.filter((p) => p && !solvedPuzzleIds.has(p.id));
+          const filtered = arr.filter((p) => p && !solvedPuzzleIds.has(p.id)).map(ensurePuzzleInstanceId);
           if (filtered.length > 0) {
             setQueue(filtered);
             setCurrentIndex(0);
@@ -1288,7 +1315,7 @@ export function PlayView({
             <div
               data-testid="header-freeze-indicator"
               suppressHydrationWarning
-              className="flex items-center gap-1 text-xs font-medium text-sky-400/90 cursor-help"
+              className="flex items-center gap-1 text-xs font-medium text-sky-400/90 cursor-help bg-transparent border-none p-0"
               title="Earned every 7-day streak • Protects up to 2 missed days"
             >
               <Snowflake className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.5} />
@@ -1485,12 +1512,13 @@ export function PlayView({
               </div>
             )}
             <PuzzleCard
-              key={`${currentPuzzle.id}-${currentIndex}`}
+              key={`${currentPuzzle.instanceId || currentPuzzle.id}-${currentIndex}`}
               puzzle={currentPuzzle}
+              instanceId={currentPuzzle.instanceId}
               status={puzzleStatus}
-              savedState={currentPuzzle ? puzzleStates[currentPuzzle.id] : undefined}
+              savedState={currentPuzzle ? puzzleStates[currentPuzzle.instanceId || currentPuzzle.id] : undefined}
               onSavePuzzleState={handleSavePuzzleState}
-              isAlreadyRated={currentPuzzle ? ratedPuzzleIds.has(currentPuzzle.id) : false}
+              isAlreadyRated={currentPuzzle ? ratedPuzzleIds.has(currentPuzzle.instanceId || currentPuzzle.id) : false}
               ratedPuzzleIds={ratedPuzzleIds}
               onMarkRated={markPuzzleRated}
               currentElo={currentElo}
@@ -1619,7 +1647,7 @@ export function PlayView({
               if (lastSolvedRaw) {
                 try {
                   const p = JSON.parse(lastSolvedRaw);
-                  setQueue((prev) => [p, ...prev]);
+                  setQueue((prev) => [ensurePuzzleInstanceId(p), ...prev]);
                   setCurrentIndex(0);
                   setPuzzleStatus("solved");
                 } catch {}
