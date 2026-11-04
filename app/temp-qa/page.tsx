@@ -847,15 +847,15 @@ export default function TempQAPage() {
         </div>
       </header>
 
-      {/* Main Grid: 6 Modular Sections */}
-      <main className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6 pb-20">
+      {/* Main Grid: 7 Modular Sections */}
+      <main className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6 pb-20 w-full px-4 sm:px-6">
 
         {/* ------------------------------------------------------------- */}
         {/* MODULE 1: Onboarding Summary Pill & Pro Upsell Simulator */}
         {/* ------------------------------------------------------------- */}
         <section
           data-testid="module-onboarding-upsell"
-          className="p-5 sm:p-6 rounded-2xl bg-[#12100e] border border-white/10 flex flex-col justify-between"
+          className="min-w-0 w-full p-5 sm:p-6 rounded-2xl bg-[#12100e] border border-white/10 flex flex-col justify-between overflow-hidden"
         >
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-4">
@@ -1053,7 +1053,7 @@ export default function TempQAPage() {
         {/* ------------------------------------------------------------- */}
         <section
           data-testid="module-auth-cache"
-          className="p-5 sm:p-6 rounded-2xl bg-[#12100e] border border-white/10 flex flex-col justify-between"
+          className="min-w-0 w-full p-5 sm:p-6 rounded-2xl bg-[#12100e] border border-white/10 flex flex-col justify-between overflow-hidden"
         >
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-4">
@@ -1154,7 +1154,7 @@ export default function TempQAPage() {
         {/* ------------------------------------------------------------- */}
         <section
           data-testid="module-queue-spaced-repetition"
-          className="p-5 sm:p-6 rounded-2xl bg-[#12100e] border border-white/10 flex flex-col justify-between"
+          className="min-w-0 w-full p-5 sm:p-6 rounded-2xl bg-[#12100e] border border-white/10 flex flex-col justify-between overflow-hidden"
         >
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-4">
@@ -1291,7 +1291,7 @@ export default function TempQAPage() {
         {/* ------------------------------------------------------------- */}
         <section
           data-testid="module-auto-swipe-idle"
-          className="p-5 sm:p-6 rounded-2xl bg-[#12100e] border border-white/10 flex flex-col justify-between"
+          className="min-w-0 w-full p-5 sm:p-6 rounded-2xl bg-[#12100e] border border-white/10 flex flex-col justify-between overflow-hidden"
         >
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-4">
@@ -1412,7 +1412,7 @@ export default function TempQAPage() {
         {/* ------------------------------------------------------------- */}
         <section
           data-testid="module-placement-elo-delta"
-          className="p-5 sm:p-6 rounded-2xl bg-[#12100e] border border-white/10 flex flex-col justify-between"
+          className="min-w-0 w-full p-5 sm:p-6 rounded-2xl bg-[#12100e] border border-white/10 flex flex-col justify-between overflow-hidden"
         >
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-4">
@@ -1525,13 +1525,13 @@ export default function TempQAPage() {
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/10">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-white/10">
             <button
               data-testid="trigger-placement-correct-btn"
               onClick={() => triggerPlacementMove("correct")}
               className="py-2.5 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold text-xs flex items-center justify-center gap-1.5 hover:bg-emerald-500/30 transition-all"
             >
-              <CheckCircle2 className="w-4 h-4" />
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
               <span>Trigger Placement Correct</span>
             </button>
             <button
@@ -1539,7 +1539,7 @@ export default function TempQAPage() {
               onClick={() => triggerPlacementMove("incorrect")}
               className="py-2.5 rounded-xl bg-rose-500/20 text-rose-300 border border-rose-500/30 font-bold text-xs flex items-center justify-center gap-1.5 hover:bg-rose-500/30 transition-all"
             >
-              <XCircle className="w-4 h-4" />
+              <XCircle className="w-4 h-4 shrink-0" />
               <span>Trigger Placement Wrong</span>
             </button>
           </div>
@@ -1550,7 +1550,7 @@ export default function TempQAPage() {
         {/* ------------------------------------------------------------- */}
         <section
           data-testid="module-streak-freeze"
-          className="p-5 sm:p-6 rounded-2xl bg-[#12100e] border border-white/10 flex flex-col justify-between"
+          className="min-w-0 w-full p-5 sm:p-6 rounded-2xl bg-[#12100e] border border-white/10 flex flex-col justify-between overflow-hidden"
         >
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-4">
@@ -1778,7 +1778,7 @@ export default function TempQAPage() {
         {/* ------------------------------------------------------------- */}
         <section
           data-testid="module-db-cleanup"
-          className="md:col-span-2 p-5 sm:p-6 rounded-2xl bg-[#12100e] border border-white/10 flex flex-col justify-between"
+          className="min-w-0 w-full md:col-span-2 p-5 sm:p-6 rounded-2xl bg-[#12100e] border border-white/10 flex flex-col justify-between overflow-hidden"
         >
           <div>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-white/10 mb-4 gap-2">
