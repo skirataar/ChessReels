@@ -345,32 +345,14 @@ export function PlayView({
     }
   }, [updatePuzzleRatingState]);
 
-  // Anti-Farming Guard: checks whether a puzzle is already rated or eligible for redemption solve
+  // Deterministic check whether a puzzle is already rated or eligible
   const getIsPuzzleAlreadyRated = useCallback((p: PuzzleData | null | undefined): boolean => {
     if (!p) return false;
+    if (p.hasBeenRated) return true;
     const baseId = p.id;
     const ratingState = puzzleRatingHistoryRef.current[baseId];
-
-    // Solved or redeemed puzzles can NEVER award Elo again
-    if (ratingState === "solved" || ratingState === "redeemed") {
-      return true;
-    }
-
-    // Failed once: allow ONE redemption attempt
-    if (ratingState === "failed_once") {
-      const isRequeued = Boolean(p.isRequeued || (p.attemptCount && p.attemptCount > 1));
-      if (isRequeued) {
-        // Only rated if this specific re-queued attempt instance was already marked rated
-        const instanceKey = p.instanceId || `${baseId}_attempt_${p.attemptCount || 2}`;
-        return ratedPuzzleIdsRef.current.has(instanceKey);
-      }
-      // Original failed attempt instance is already rated
-      return true;
-    }
-
-    // Fresh puzzle: rated if instance or base id is already recorded
-    const instanceKey = p.instanceId || `${baseId}_attempt_1`;
-    return ratedPuzzleIdsRef.current.has(instanceKey) || ratedPuzzleIdsRef.current.has(baseId);
+    if (ratingState === "solved" || ratingState === "redeemed") return true;
+    return false;
   }, []);
 
   // Puzzle feed queue state & active pointer for bi-directional swiping.
@@ -393,6 +375,7 @@ export function PlayView({
       attemptCount: attempt,
       attemptNumber: attempt,
       instanceId: p.instanceId || `${p.id}_attempt_${attempt}`,
+      hasBeenRated: p.hasBeenRated ?? false,
     };
   }, []);
 
@@ -852,6 +835,7 @@ export function PlayView({
         ...failedPuzzle,
         instanceId: `${failedPuzzle.id}_attempt_${nextAttempt}`,
         isRequeued: true,
+        hasBeenRated: false,
         attemptCount: nextAttempt,
         attemptNumber: nextAttempt,
       };
@@ -1144,165 +1128,240 @@ export function PlayView({
     }
   }, [hasMounted, userAccount?.id, canPlay, isPro, isCalibrating, setIsQuotaModalOpen]);
 
-  // Handle Elo update and placement test logic
-  const handleEloUpdate = (newElo: number, change: number, isWin?: boolean, puzzleId?: string, isRequeuedParam?: boolean) => {
-    const activePuzzle = queue[currentIndex] || currentPuzzle;
-    const rawPuzzleId = puzzleId || activePuzzle?.id || currentPuzzle?.id;
-    const activeId = activePuzzle?.instanceId || (rawPuzzleId ? `${rawPuzzleId}_attempt_${activePuzzle?.attemptCount || 1}` : "");
-    const isRequeued = isRequeuedParam !== undefined ? isRequeuedParam : Boolean(activePuzzle?.isRequeued || (activePuzzle?.attemptCount && activePuzzle.attemptCount > 1));
-    const currentRatingState = rawPuzzleId ? puzzleRatingHistoryRef.current[rawPuzzleId] : undefined;
+  // Exact standard Elo calculation and instant optimistic UI payout
+  const processEloResult = useCallback(
+    (result: "win" | "loss", puzzle: PuzzleData) => {
+      if (!puzzle) return;
+      if (puzzle.hasBeenRated) return;
+      puzzle.hasBeenRated = true;
 
-    const isAlreadyRated =
-      (puzzleId
-        ? currentRatingState === "solved" || currentRatingState === "redeemed"
-        : getIsPuzzleAlreadyRated(activePuzzle)) && !isCalibrating;
+      // Mark hasBeenRated in queue state so this card is sealed
+      setQueue((prevQueue) =>
+        prevQueue.map((item) =>
+          item.id === puzzle.id || (item.instanceId && item.instanceId === puzzle.instanceId)
+            ? { ...item, hasBeenRated: true }
+            : item
+        )
+      );
 
-    // Strict Elo Idempotency Guard: do not alter Elo or streak if this puzzle was already rated
-    if (isAlreadyRated) {
-      return;
-    }
+      const userElo = currentEloRef.current;
+      const puzzleRating = puzzle.rating || 1200;
+      const K = isCalibrating ? 64 : 32;
 
-    const won = isWin !== undefined ? isWin : change > 0;
-    recordPuzzlePlay(won ? "win" : "loss");
+      const expectedScore = 1 / (1 + Math.pow(10, (puzzleRating - userElo) / 400));
 
-    // Update puzzle rating history state machine and rated puzzle IDs
-    if (rawPuzzleId && !isCalibrating) {
-      if (won) {
-        if (isRequeued && currentRatingState === "failed_once") {
-          updatePuzzleRatingState(rawPuzzleId, "redeemed");
+      let eloDelta: number;
+      if (result === "win") {
+        const rawGain = Math.max(4, Math.round(K * (1 - expectedScore)));
+        if (puzzle.isRequeued === true) {
+          // 50% redemption multiplier on requeued puzzle
+          eloDelta = Math.max(2, Math.round(rawGain * 0.5));
         } else {
-          updatePuzzleRatingState(rawPuzzleId, "solved");
+          eloDelta = rawGain;
         }
-        markPuzzleSolved(rawPuzzleId);
-        markPuzzleRated(rawPuzzleId);
-        if (activeId) markPuzzleRated(activeId);
       } else {
-        // Failed attempt: record state as 'failed_once' (allows one redemption solve)
-        updatePuzzleRatingState(rawPuzzleId, "failed_once");
-        if (activeId) markPuzzleRated(activeId);
+        eloDelta = -Math.max(4, Math.round(K * expectedScore));
       }
-    }
 
-    if (won && currentPuzzle) {
-      try {
-        if (typeof window !== "undefined") {
-          window.localStorage.setItem("chess_reel_last_solved_puzzle", JSON.stringify(currentPuzzle));
-        }
-      } catch {}
-    }
-
-    // 1. Placement Calibration Mode (Quota and Ads do NOT count during placement!)
-    if (userAccount && !userAccount.isCalibrated) {
-      // Balanced placement calibration deltas: smooth progression
-      const calibrationDeltas = [80, 70, 60, 50, 45, 35];
-      const stepIndex = userAccount.calibrationStep ?? 0;
-      const isWin = change > 0;
-      const stepDelta = isWin
-        ? calibrationDeltas[stepIndex] || 35
-        : -Math.round((calibrationDeltas[stepIndex] || 35) * 0.75);
-
-      // Dynamic bounds: allow players to calibrate across their natural skill range (400 to 2800)
-      const nextElo = Math.max(400, Math.min(2800, currentElo + stepDelta));
-      const nextStep = stepIndex + 1;
-
-      setCurrentElo(nextElo);
-      setLastEloChange(stepDelta);
-      triggerEloDeltaBadge(stepDelta);
-
-      if (nextStep >= 6) {
-        fetch("/api/user/calibrate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userId: userAccount.id,
-            finalElo: nextElo,
-            isFinished: true,
-          }),
-        }).catch(() => {});
-
-        const updatedAcc: UserAccount = {
-          ...userAccount,
-          elo: nextElo,
-          isCalibrated: true,
-          calibrationStep: 6,
-        };
-        setUserAccount(updatedAcc);
-        setCalibratedFinalElo(nextElo);
-        setIsCalibratedModalOpen(true);
-
+      // 1. Immediate Optimistic UI Update (functional updater, never reads stale closure)
+      let nextUserElo = userElo;
+      setCurrentElo((prev) => {
+        const next = Math.max(100, prev + eloDelta);
+        nextUserElo = next;
+        currentEloRef.current = next;
         try {
           if (typeof window !== "undefined") {
-            window.localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(updatedAcc));
-            window.localStorage.setItem(ELO_STORAGE_KEY, nextElo.toString());
-            // Ensure fresh quota for calibrated user: clean 5 puzzles as configured by admin
-            window.localStorage.removeItem(`chess_reel_tier_session_${userAccount.id}`);
-            window.localStorage.removeItem("chess_reel_tier_session_guest");
-            window.localStorage.removeItem("chess_reel_tier_session");
-            window.localStorage.removeItem("chess_reel_last_solved_puzzle");
-            window.dispatchEvent(new Event("tier-session-updated"));
+            window.localStorage.setItem(ELO_STORAGE_KEY, next.toString());
+            const rawAcc = window.localStorage.getItem(ACCOUNT_STORAGE_KEY);
+            if (rawAcc) {
+              const parsedAcc = JSON.parse(rawAcc);
+              window.localStorage.setItem(
+                ACCOUNT_STORAGE_KEY,
+                JSON.stringify({ ...parsedAcc, elo: next })
+              );
+            }
+          }
+        } catch {}
+        return next;
+      });
+
+      setLastEloChange(eloDelta);
+      triggerEloDeltaBadge(eloDelta);
+
+      recordPuzzlePlay(result === "win" ? "win" : "loss");
+      if (result === "win") {
+        setStreak((prev) => prev + 1);
+        try {
+          if (typeof window !== "undefined") {
+            window.localStorage.setItem(
+              "chess_reel_last_solved_puzzle",
+              JSON.stringify(puzzle)
+            );
           }
         } catch {}
       } else {
-        fetch("/api/user/calibrate", {
+        setStreak(0);
+      }
+
+      // Record rating state in history
+      const nextRatingState =
+        result === "win"
+          ? puzzle.isRequeued
+            ? "redeemed"
+            : "solved"
+          : "failed_once";
+      updatePuzzleRatingState(puzzle.id, nextRatingState);
+
+      // 2. Reliable Database Persistence (Non-Blocking)
+      const effectiveUserId = userAccount?.id || guestId;
+      if (effectiveUserId) {
+        let streakPayload: {
+          streakFreezes?: number;
+          perfectWeekCounter?: number;
+          isFrozenState?: boolean;
+          lastSolvedDate?: string;
+        } = {};
+        try {
+          const rawStreak = localStorage.getItem("chess_reel_streak_data");
+          if (rawStreak) streakPayload = JSON.parse(rawStreak);
+        } catch {}
+
+        fetch("/api/user/update-elo", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            userId: userAccount.id,
-            step: nextStep,
-            finalElo: nextElo,
+            puzzleRating,
+            currentUserElo: userElo,
+            newElo: nextUserElo,
+            eloDelta,
+            result,
+            status: result === "win" ? "solved" : "failed",
+            userId: userAccount?.id,
+            guestId,
+            puzzleId: puzzle.id,
+            dailyStreak: dailyStreak,
+            streakFreezes: streakPayload.streakFreezes,
+            perfectWeekCounter: streakPayload.perfectWeekCounter,
+            isFrozenState: streakPayload.isFrozenState,
+            lastSolvedDate: streakPayload.lastSolvedDate,
+            isRequeued: puzzle.isRequeued,
+            attemptCount: puzzle.attemptCount,
           }),
-        }).catch(() => {});
-
-        const updatedAcc: UserAccount = {
-          ...userAccount,
-          elo: nextElo,
-          calibrationStep: nextStep,
-        };
-        setUserAccount(updatedAcc);
-
-        try {
-          if (typeof window !== "undefined") {
-            window.localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(updatedAcc));
-            window.localStorage.setItem(ELO_STORAGE_KEY, nextElo.toString());
-          }
-        } catch {}
+        }).catch((err) => {
+          console.warn("Non-blocking DB persistence failed:", err);
+        });
       }
 
-      return;
-    }
+      // 3. Calibration progression handling
+      if (isCalibrating && userAccount) {
+        const stepIndex = userAccount.calibrationStep ?? 0;
+        const nextStep = stepIndex + 1;
 
-    // 2. Continuous Ranked Play: Free Tier Quota (4 puzzles / 4h) and Ads (every 2 puzzles) start HERE
-    // Quota and ads ONLY count when the puzzle was actually solved (won)
-    if (won && activeId && rawPuzzleId && !isCalibrating && !solvedPuzzleIdsRef.current.has(rawPuzzleId) && !countedQuotaPuzzleIdsRef.current.has(activeId)) {
-      countedQuotaPuzzleIdsRef.current.add(activeId);
-      recordPuzzlePlayed(true);
-    }
+        if (nextStep >= 6) {
+          fetch("/api/user/calibrate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              userId: userAccount.id,
+              finalElo: nextUserElo,
+              isFinished: true,
+            }),
+          }).catch(() => {});
 
-    // Standard Continuous Reel Mode
-    setCurrentElo(newElo);
-    setLastEloChange(change);
-    triggerEloDeltaBadge(change);
+          const updatedAcc: UserAccount = {
+            ...userAccount,
+            elo: nextUserElo,
+            isCalibrated: true,
+            calibrationStep: 6,
+          };
+          setUserAccount(updatedAcc);
+          setCalibratedFinalElo(nextUserElo);
+          setIsCalibratedModalOpen(true);
 
-    if (change > 0) {
-      setStreak((prev) => prev + 1);
-    } else if (change < 0) {
-      setStreak(0);
-    }
+          try {
+            if (typeof window !== "undefined") {
+              window.localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(updatedAcc));
+              window.localStorage.setItem(ELO_STORAGE_KEY, nextUserElo.toString());
+              window.localStorage.removeItem(`chess_reel_tier_session_${userAccount.id}`);
+              window.localStorage.removeItem("chess_reel_tier_session_guest");
+              window.localStorage.removeItem("chess_reel_tier_session");
+              window.localStorage.removeItem("chess_reel_last_solved_puzzle");
+              window.dispatchEvent(new Event("tier-session-updated"));
+            }
+          } catch {}
+        } else {
+          fetch("/api/user/calibrate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              userId: userAccount.id,
+              step: nextStep,
+              finalElo: nextUserElo,
+            }),
+          }).catch(() => {});
 
-    try {
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem(ELO_STORAGE_KEY, newElo.toString());
-        if (userAccount) {
-          const updated = { ...userAccount, elo: newElo };
-          window.localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(updated));
+          const updatedAcc: UserAccount = {
+            ...userAccount,
+            elo: nextUserElo,
+            calibrationStep: nextStep,
+          };
+          setUserAccount(updatedAcc);
+
+          try {
+            if (typeof window !== "undefined") {
+              window.localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(updatedAcc));
+              window.localStorage.setItem(ELO_STORAGE_KEY, nextUserElo.toString());
+            }
+          } catch {}
         }
       }
-    } catch (e) {
-      console.warn("Could not save Elo to localStorage:", e);
-    }
+    },
+    [isCalibrating, userAccount, guestId, dailyStreak, updatePuzzleRatingState, triggerEloDeltaBadge, recordPuzzlePlay]
+  );
 
-    prefetchPuzzles(newElo, 5, userAccount?.id || guestId).catch(() => {});
-  };
+  // Handle direct Elo update (e.g. from test events or explicit triggers)
+  const handleEloUpdate = useCallback(
+    (newElo: number, change: number, isWin?: boolean, puzzleId?: string, isRequeuedParam?: boolean) => {
+      setCurrentElo((prev) => {
+        const next = typeof newElo === "number" ? Math.max(100, newElo) : Math.max(100, prev + change);
+        currentEloRef.current = next;
+        try {
+          if (typeof window !== "undefined") {
+            window.localStorage.setItem(ELO_STORAGE_KEY, next.toString());
+            const rawAcc = window.localStorage.getItem(ACCOUNT_STORAGE_KEY);
+            if (rawAcc) {
+              const parsedAcc = JSON.parse(rawAcc);
+              window.localStorage.setItem(
+                ACCOUNT_STORAGE_KEY,
+                JSON.stringify({ ...parsedAcc, elo: next })
+              );
+            }
+          }
+        } catch {}
+        return next;
+      });
+
+      setLastEloChange(change);
+      triggerEloDeltaBadge(change);
+
+      if (change > 0) {
+        setStreak((prev) => prev + 1);
+      } else if (change < 0) {
+        setStreak(0);
+      }
+
+      if (puzzleId) {
+        const nextRatingState =
+          change > 0
+            ? isRequeuedParam
+              ? "redeemed"
+              : "solved"
+            : "failed_once";
+        updatePuzzleRatingState(puzzleId, nextRatingState);
+      }
+    },
+    [triggerEloDeltaBadge, updatePuzzleRatingState]
+  );
 
   useEffect(() => {
     handleEloUpdateRef.current = handleEloUpdate;
@@ -1781,6 +1840,7 @@ export function PlayView({
               }}
               onStatusChange={handleStatusChange}
               onEloUpdate={handleEloUpdate}
+              onEloPayout={processEloResult}
               onNextPuzzle={goToNextPuzzle}
               onPrevPuzzle={goToPrevPuzzle}
               onOpenStats={() => setIsStatsModalOpen(true)}

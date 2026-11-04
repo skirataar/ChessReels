@@ -45,6 +45,7 @@ export interface PuzzleData {
   isRequeued?: boolean;
   attemptCount?: number;
   attemptNumber?: number;
+  hasBeenRated?: boolean;
   fen: string;
   moves: string;
   rating: number;
@@ -94,6 +95,7 @@ export interface PuzzleCardProps {
   onModeChange?: (mode: "ranked" | "practice") => void;
   onStatusChange: (status: PuzzleStatus) => void;
   onEloUpdate: (newElo: number, change: number, isWin?: boolean, puzzleId?: string) => void;
+  onEloPayout?: (result: "win" | "loss", puzzle: PuzzleData) => void;
   onNextPuzzle: () => void;
   onPrevPuzzle?: () => void;
   onOpenStats?: () => void;
@@ -250,6 +252,7 @@ export function PuzzleCard({
   onModeChange,
   onStatusChange,
   onEloUpdate,
+  onEloPayout,
   onNextPuzzle,
   onPrevPuzzle,
   onOpenStats,
@@ -307,11 +310,7 @@ export function PuzzleCard({
     }
   }, [ratedPuzzleIds]);
 
-  const isPreviouslyCompleted = Boolean(
-    savedState?.status === "solved" ||
-    isAlreadyRated ||
-    (activeInstanceKey && (ratedPuzzleIds?.has(activeInstanceKey) || ratedPuzzleIdsRef.current.has(activeInstanceKey)))
-  );
+  const isPreviouslyCompleted = Boolean(savedState?.status === "solved");
 
   const [isReviewMode, setIsReviewMode] = useState<boolean>(() => isPreviouslyCompleted);
   const [boardOrientation, setBoardOrientation] = useState<"white" | "black">(
@@ -695,113 +694,27 @@ export function PuzzleCard({
     }, 2000);
   }, []);
 
-  // Send Elo update to server with persistent guestId
+  // Send Elo update: guards with puzzle.hasBeenRated and delegates to onEloPayout or onEloUpdate
   const sendEloResult = useCallback(
-    async (result: "win" | "loss") => {
+    (result: "win" | "loss") => {
       if (!puzzle) return;
+      if (puzzle.hasBeenRated) return;
+      puzzle.hasBeenRated = true;
 
-      // Strict Idempotency Guard:
-      // If in review mode, already rated, or in ratedPuzzleIds, never update Elo
-      if (
-        isReviewMode ||
-        isAlreadyRated ||
-        (activeInstanceKey && (ratedPuzzleIds?.has(activeInstanceKey) || ratedPuzzleIdsRef.current.has(activeInstanceKey)))
-      ) {
+      if (onEloPayout) {
+        onEloPayout(result, puzzle);
         return;
       }
 
-      // Immediately add activeInstanceKey to ratedPuzzleIds on the very first completion attempt (win or loss)
-      const nextRatingState: "solved" | "failed_once" | "redeemed" =
-        result === "win"
-          ? isRequeued
-            ? "redeemed"
-            : "solved"
-          : "failed_once";
-
-      if (activeInstanceKey) {
-        ratedPuzzleIdsRef.current.add(activeInstanceKey);
-        onMarkRated?.(activeInstanceKey, nextRatingState);
+      if (isCalibration) {
+        onEloUpdate(currentElo, result === "win" ? 1 : -1, result === "win", puzzle.id);
+        return;
       }
-
-      try {
-        let streakPayload: {
-          streakFreezes?: number;
-          perfectWeekCounter?: number;
-          isFrozenState?: boolean;
-          lastSolvedDate?: string;
-        } = {};
-        if (typeof window !== "undefined") {
-          try {
-            const raw = localStorage.getItem("chess_reel_streak_data");
-            if (raw) {
-              const parsed = JSON.parse(raw);
-              streakPayload = {
-                streakFreezes: parsed.streakFreezes,
-                perfectWeekCounter: parsed.perfectWeekCounter,
-                isFrozenState: parsed.isFrozenState,
-                lastSolvedDate: parsed.lastSolvedDate,
-              };
-            }
-          } catch {}
-        }
-
-        const response = await fetch("/api/user/update-elo", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            puzzleRating: puzzle.rating,
-            currentUserElo: currentElo,
-            result,
-            userId,
-            guestId,
-            puzzleId: puzzle.id,
-            dailyStreak: streak,
-            streakFreezes: streakPayload.streakFreezes,
-            perfectWeekCounter: streakPayload.perfectWeekCounter,
-            isFrozenState: streakPayload.isFrozenState,
-            lastSolvedDate: streakPayload.lastSolvedDate,
-            isRequeued,
-            attemptCount: puzzle.attemptCount,
-          }),
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          if (data.alreadyRated) {
-            return;
-          }
-          if (isCalibration) {
-            onEloUpdate(currentElo, result === "win" ? 1 : -1, result === "win", puzzle.id);
-            return;
-          }
-          if (typeof data.newElo === "number") {
-            onEloUpdate(data.newElo, data.eloChange ?? 0, result === "win", puzzle.id);
-          } else {
-            const normalDelta = result === "win" ? 10 : -10;
-            const delta = result === "win" && isRequeued ? Math.max(1, Math.round(normalDelta * 0.5)) : normalDelta;
-            onEloUpdate(currentElo + delta, delta, result === "win", puzzle.id);
-          }
-        } else {
-          if (isCalibration) {
-            onEloUpdate(currentElo, result === "win" ? 1 : -1, result === "win", puzzle.id);
-            return;
-          }
-          const normalDelta = result === "win" ? 10 : -10;
-          const delta = result === "win" && isRequeued ? Math.max(1, Math.round(normalDelta * 0.5)) : normalDelta;
-          onEloUpdate(currentElo + delta, delta, result === "win", puzzle.id);
-        }
-      } catch (err) {
-        console.error("Failed to update Elo:", err);
-        if (isCalibration) {
-          onEloUpdate(currentElo, result === "win" ? 1 : -1, result === "win", puzzle.id);
-          return;
-        }
-        const normalDelta = result === "win" ? 10 : -10;
-        const delta = result === "win" && isRequeued ? Math.max(1, Math.round(normalDelta * 0.5)) : normalDelta;
-        onEloUpdate(currentElo + delta, delta, result === "win", puzzle.id);
-      }
+      const normalDelta = result === "win" ? 10 : -10;
+      const delta = result === "win" && isRequeued ? Math.max(1, Math.round(normalDelta * 0.5)) : normalDelta;
+      onEloUpdate(currentElo + delta, delta, result === "win", puzzle.id);
     },
-    [puzzle, currentElo, userId, guestId, isCalibration, onEloUpdate, isReviewMode, isAlreadyRated, ratedPuzzleIds, streak, onMarkRated, isRequeued, activeInstanceKey]
+    [puzzle, onEloPayout, isCalibration, onEloUpdate, currentElo, isRequeued]
   );
 
   // Initialize or reset puzzle game state
@@ -1248,8 +1161,7 @@ export function PuzzleCard({
           });
           setPlacementFeedback("incorrect");
           onStatusChange("failed");
-          if (!hasPenalizedRef.current && !isReviewMode && !isAlreadyRated && (!activeInstanceKey || !ratedPuzzleIds?.has(activeInstanceKey))) {
-            hasPenalizedRef.current = true;
+          if (!puzzle?.hasBeenRated) {
             sendEloResult("loss");
           }
           if (puzzle) {
@@ -1268,9 +1180,8 @@ export function PuzzleCard({
           return false;
         }
 
-        // Penalize Elo once per puzzle and record in PuzzleHistory
-        if (!hasPenalizedRef.current && !isReviewMode && !isAlreadyRated && (!activeInstanceKey || !ratedPuzzleIds?.has(activeInstanceKey))) {
-          hasPenalizedRef.current = true;
+        // Penalize Elo once per puzzle
+        if (!puzzle?.hasBeenRated) {
           sendEloResult("loss");
         }
         if (puzzle) {
@@ -1339,8 +1250,7 @@ export function PuzzleCard({
           });
         }
 
-        if (!hasWonRef.current && !isReviewMode && !isAlreadyRated && (!activeInstanceKey || !ratedPuzzleIds?.has(activeInstanceKey))) {
-          hasWonRef.current = true;
+        if (!puzzle?.hasBeenRated) {
           sendEloResult("win");
         }
 
@@ -1407,8 +1317,7 @@ export function PuzzleCard({
               });
             }
 
-            if (!hasWonRef.current && !isReviewMode && !isAlreadyRated && (!activeInstanceKey || !ratedPuzzleIds?.has(activeInstanceKey))) {
-              hasWonRef.current = true;
+            if (!puzzle?.hasBeenRated) {
               sendEloResult("win");
             }
 

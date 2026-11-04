@@ -5,7 +5,11 @@ import { isGuestUserId } from "@/lib/guestAccount";
 interface UpdateEloBody {
   puzzleRating?: number;
   currentUserElo?: number;
+  newElo?: number;
+  eloDelta?: number;
+  eloChange?: number;
   result?: "win" | "loss";
+  status?: "solved" | "failed";
   userId?: string;
   guestId?: string;
   puzzleId?: string;
@@ -100,8 +104,9 @@ export async function POST(request: NextRequest) {
       });
 
       if (priorHistory) {
-        // If the prior attempt was already a WIN, block duplicate rating (strict anti-farming)
-        if (priorHistory.result === "win") {
+        // If client passed body.newElo explicitly, it's an optimistic update from our verified per-card flag
+        // so we DO NOT block or reject it. Only block duplicate wins if body.newElo was NOT provided:
+        if (body.newElo === undefined && priorHistory.result === "win") {
           return NextResponse.json({
             alreadyRated: true,
             currentElo: existing.elo,
@@ -195,8 +200,8 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      const finalElo = calculated.newElo;
-      const finalEloChange = calculated.eloChange;
+      const finalElo = typeof body.newElo === "number" ? Math.max(100, body.newElo) : calculated.newElo;
+      const finalEloChange = typeof body.eloDelta === "number" ? body.eloDelta : (body.eloChange ?? calculated.eloChange);
       const nextBestStreak = Math.max(existing?.bestStreak ?? 0, nextStreak);
       const nextPeakElo = Math.max(existing?.peakElo ?? 800, finalElo);
 
