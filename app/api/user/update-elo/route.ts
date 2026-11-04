@@ -11,12 +11,13 @@ interface UpdateEloBody {
   puzzleId?: string;
   dailyStreak?: number;
   isRequeued?: boolean;
+  attemptCount?: number;
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as UpdateEloBody;
-    const { puzzleRating, currentUserElo, result, userId, guestId, puzzleId, dailyStreak, isRequeued } = body;
+    const { puzzleRating, currentUserElo, result, userId, guestId, puzzleId, dailyStreak, isRequeued, attemptCount } = body;
 
     if (
       typeof puzzleRating !== "number" ||
@@ -32,6 +33,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const isRequeuedEffective = Boolean(isRequeued || (attemptCount && attemptCount > 1));
+
     // Standard Elo calculation
     const K = 32;
     const S = result === "win" ? 1 : 0;
@@ -40,28 +43,34 @@ export async function POST(request: NextRequest) {
     let eloChange = Math.round(K * (S - E));
 
     // For requeued puzzles, award lesser Elo than normal (50% of standard win, minimum +1)
-    if (isRequeued && result === "win") {
+    if (isRequeuedEffective && result === "win") {
       eloChange = Math.max(1, Math.round(eloChange * 0.5));
     }
     const newElo = Math.max(100, currentUserElo + eloChange);
 
-    const targetUserId = userId || guestId || "";
+    const sessionCookie = request.cookies.get("chess_reel_session")?.value;
+    const targetUserId = userId || sessionCookie || guestId || "";
     const calculated = {
       newElo,
       eloChange,
       expectedScore: Number(E.toFixed(4)),
       actualScore: S,
       userId: targetUserId || null,
-      isRequeued: Boolean(isRequeued),
+      isRequeued: isRequeuedEffective,
     };
 
     if (!targetUserId || isGuestUserId(targetUserId)) {
       return NextResponse.json(calculated);
     }
 
-    const existing = await prisma.user.findUnique({
+    let existing = await prisma.user.findUnique({
       where: { id: targetUserId },
     });
+    if (!existing && sessionCookie) {
+      existing = await prisma.user.findUnique({
+        where: { id: sessionCookie },
+      });
+    }
     const isRegistered =
       existing &&
       (Boolean(existing.email) ||
@@ -69,16 +78,18 @@ export async function POST(request: NextRequest) {
         Boolean(existing.passwordHash)) &&
       existing.displayName !== "Guest Tactician";
 
-    if (!isRegistered) {
+    if (!existing || !isRegistered) {
       return NextResponse.json(calculated);
     }
 
+    const resolvedUserId = existing.id;
+
     // Strict Backend Idempotency Guard & Requeued Solve Rating:
-    if (puzzleId && targetUserId) {
+    if (puzzleId && resolvedUserId) {
       const priorHistory = await prisma.puzzleHistory.findUnique({
         where: {
           userId_puzzleId: {
-            userId: targetUserId,
+            userId: resolvedUserId,
             puzzleId,
           },
         },
@@ -92,7 +103,7 @@ export async function POST(request: NextRequest) {
             currentElo: existing.elo,
             newElo: existing.elo,
             eloChange: 0,
-            userId: targetUserId,
+            userId: resolvedUserId,
             streak: existing.streak ?? 0,
             peakElo: existing.peakElo ?? 800,
           });
@@ -111,12 +122,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Record in PuzzleHistory for anti-repetition tracking
-    if (puzzleId && targetUserId) {
+    if (puzzleId && resolvedUserId) {
       await prisma.puzzleHistory
         .upsert({
           where: {
             userId_puzzleId: {
-              userId: targetUserId,
+              userId: resolvedUserId,
               puzzleId,
             },
           },
@@ -125,7 +136,7 @@ export async function POST(request: NextRequest) {
             solvedAt: new Date(),
           },
           create: {
-            userId: targetUserId,
+            userId: resolvedUserId,
             puzzleId,
             result,
             solvedAt: new Date(),

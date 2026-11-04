@@ -42,6 +42,7 @@ export interface PuzzleData {
   id: string;
   instanceId?: string;
   isRequeued?: boolean;
+  attemptCount?: number;
   attemptNumber?: number;
   fen: string;
   moves: string;
@@ -72,8 +73,10 @@ export interface PuzzleCardProps {
   instanceId?: string;
   isAlreadyRated?: boolean;
   ratedPuzzleIds?: Set<string>;
-  onMarkRated?: (puzzleId: string) => void;
+  puzzleRatingHistory?: Record<string, "solved" | "failed_once" | "redeemed">;
+  onMarkRated?: (puzzleId: string, ratingState?: "solved" | "failed_once" | "redeemed") => void;
   currentElo: number;
+  userId?: string;
   guestId?: string;
   streak?: number;
   combo?: number;
@@ -229,6 +232,7 @@ export function PuzzleCard({
   ratedPuzzleIds,
   onMarkRated,
   currentElo,
+  userId,
   guestId,
   streak = 0,
   combo = 0,
@@ -263,6 +267,7 @@ export function PuzzleCard({
   const isRequeued = Boolean(
     testIsRequeued ||
     puzzle?.isRequeued ||
+    (puzzle?.attemptCount && puzzle.attemptCount > 1) ||
     (activeInstanceKey && activeInstanceKey.includes("_attempt_") && !activeInstanceKey.endsWith("_attempt_1"))
   );
   const isDesktopPointer = useIsDesktopPointer();
@@ -697,9 +702,16 @@ export function PuzzleCard({
       }
 
       // Immediately add activeInstanceKey to ratedPuzzleIds on the very first completion attempt (win or loss)
+      const nextRatingState: "solved" | "failed_once" | "redeemed" =
+        result === "win"
+          ? isRequeued
+            ? "redeemed"
+            : "solved"
+          : "failed_once";
+
       if (activeInstanceKey) {
         ratedPuzzleIdsRef.current.add(activeInstanceKey);
-        onMarkRated?.(activeInstanceKey);
+        onMarkRated?.(activeInstanceKey, nextRatingState);
       }
 
       try {
@@ -710,10 +722,12 @@ export function PuzzleCard({
             puzzleRating: puzzle.rating,
             currentUserElo: currentElo,
             result,
+            userId,
             guestId,
             puzzleId: puzzle.id,
             dailyStreak: streak,
             isRequeued,
+            attemptCount: puzzle.attemptCount,
           }),
         });
 
@@ -753,7 +767,7 @@ export function PuzzleCard({
         onEloUpdate(currentElo + delta, delta, result === "win", puzzle.id);
       }
     },
-    [puzzle, currentElo, guestId, isCalibration, onEloUpdate, isReviewMode, isAlreadyRated, ratedPuzzleIds, streak, onMarkRated]
+    [puzzle, currentElo, userId, guestId, isCalibration, onEloUpdate, isReviewMode, isAlreadyRated, ratedPuzzleIds, streak, onMarkRated, isRequeued, activeInstanceKey]
   );
 
   // Initialize or reset puzzle game state

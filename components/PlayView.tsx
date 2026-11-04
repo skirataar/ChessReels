@@ -41,7 +41,10 @@ const ELO_STORAGE_KEY = "chess_reel_elo";
 const ACCOUNT_STORAGE_KEY = "chess_reel_account";
 const SOLVED_STORAGE_KEY = "chess_reel_solved_ids";
 const RATED_STORAGE_KEY = "chess_reel_rated_puzzle_ids";
+const RATING_HISTORY_STORAGE_KEY = "chess_reel_puzzle_rating_history";
 const PUZZLE_STATES_KEY = "chess_reel_puzzle_states";
+
+export type PuzzleRatingState = "solved" | "failed_once" | "redeemed";
 
 export interface UserAccount {
   id: string;
@@ -270,7 +273,53 @@ export function PlayView({
     }
   }, [ratedPuzzleIds]);
 
-  const markPuzzleRated = useCallback((puzzleId: string) => {
+  // Puzzle Rating State Machine: Record<puzzleId, 'solved' | 'failed_once' | 'redeemed'>
+  const [puzzleRatingHistory, setPuzzleRatingHistory] = useState<Record<string, PuzzleRatingState>>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const raw = window.localStorage.getItem(RATING_HISTORY_STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === "object") return parsed;
+        }
+      } catch {}
+    }
+    return {};
+  });
+
+  const puzzleRatingHistoryRef = useRef<Record<string, PuzzleRatingState>>(puzzleRatingHistory);
+  useEffect(() => {
+    puzzleRatingHistoryRef.current = puzzleRatingHistory;
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem(
+          RATING_HISTORY_STORAGE_KEY,
+          JSON.stringify(puzzleRatingHistory)
+        );
+      } catch {}
+    }
+  }, [puzzleRatingHistory]);
+
+  const updatePuzzleRatingState = useCallback((puzzleId: string, state: PuzzleRatingState) => {
+    if (!puzzleId) return;
+    const baseId = puzzleId.split("_attempt_")[0];
+    setPuzzleRatingHistory((prev) => {
+      if (prev[baseId] === state) return prev;
+      return { ...prev, [baseId]: state };
+    });
+  }, []);
+
+  const markPuzzleSolved = useCallback((puzzleId: string) => {
+    if (!puzzleId) return;
+    setSolvedPuzzleIds((prev) => {
+      if (prev.has(puzzleId)) return prev;
+      const next = new Set(prev);
+      next.add(puzzleId);
+      return next;
+    });
+  }, []);
+
+  const markPuzzleRated = useCallback((puzzleId: string, ratingState?: PuzzleRatingState) => {
     if (!puzzleId) return;
     setRatedPuzzleIds((prev) => {
       if (prev.has(puzzleId)) return prev;
@@ -278,6 +327,38 @@ export function PlayView({
       next.add(puzzleId);
       return next;
     });
+
+    if (ratingState) {
+      updatePuzzleRatingState(puzzleId, ratingState);
+    }
+  }, [updatePuzzleRatingState]);
+
+  // Anti-Farming Guard: checks whether a puzzle is already rated or eligible for redemption solve
+  const getIsPuzzleAlreadyRated = useCallback((p: PuzzleData | null | undefined): boolean => {
+    if (!p) return false;
+    const baseId = p.id;
+    const ratingState = puzzleRatingHistoryRef.current[baseId];
+
+    // Solved or redeemed puzzles can NEVER award Elo again
+    if (ratingState === "solved" || ratingState === "redeemed") {
+      return true;
+    }
+
+    // Failed once: allow ONE redemption attempt
+    if (ratingState === "failed_once") {
+      const isRequeued = Boolean(p.isRequeued || (p.attemptCount && p.attemptCount > 1));
+      if (isRequeued) {
+        // Only rated if this specific re-queued attempt instance was already marked rated
+        const instanceKey = p.instanceId || `${baseId}_attempt_${p.attemptCount || 2}`;
+        return ratedPuzzleIdsRef.current.has(instanceKey);
+      }
+      // Original failed attempt instance is already rated
+      return true;
+    }
+
+    // Fresh puzzle: rated if instance or base id is already recorded
+    const instanceKey = p.instanceId || `${baseId}_attempt_1`;
+    return ratedPuzzleIdsRef.current.has(instanceKey) || ratedPuzzleIdsRef.current.has(baseId);
   }, []);
 
   // Puzzle feed queue state & active pointer for bi-directional swiping.
@@ -293,12 +374,13 @@ export function PlayView({
 
   const ensurePuzzleInstanceId = useCallback((p: PuzzleData): PuzzleData => {
     if (!p) return p;
-    if (p.instanceId) return p;
-    const attempt = puzzleAttemptCountRef.current[p.id] || 1;
+    const attempt = p.attemptCount || puzzleAttemptCountRef.current[p.id] || 1;
     puzzleAttemptCountRef.current[p.id] = attempt;
     return {
       ...p,
-      instanceId: `${p.id}_attempt_${attempt}`,
+      attemptCount: attempt,
+      attemptNumber: attempt,
+      instanceId: p.instanceId || `${p.id}_attempt_${attempt}`,
     };
   }, []);
 
@@ -344,7 +426,7 @@ export function PlayView({
 
   // Account switch detection: tracks previous userId to wipe stale queues and cached state
   const previousUserIdRef = useRef<string | null>(null);
-  const handleEloUpdateRef = useRef<(newElo: number, change: number, isWin?: boolean, puzzleId?: string) => void>(() => {});
+  const handleEloUpdateRef = useRef<(newElo: number, change: number, isWin?: boolean, puzzleId?: string, isRequeued?: boolean) => void>(() => {});
 
   // Daily streak, solve combo & puzzle totals tracking
   const {
@@ -406,19 +488,32 @@ export function PlayView({
       }
     };
     const handleTestElo = (e: Event) => {
-      const customEvent = e as CustomEvent<{ delta: number; newElo?: number; isWin?: boolean; puzzleId?: string; bypassGuard?: boolean }>;
+      const customEvent = e as CustomEvent<{
+        delta: number;
+        newElo?: number;
+        isWin?: boolean;
+        puzzleId?: string;
+        bypassGuard?: boolean;
+        isRequeued?: boolean;
+      }>;
       if (customEvent.detail?.delta !== undefined) {
-        const delta = customEvent.detail.delta;
-        const targetElo = customEvent.detail.newElo ?? (currentEloRef.current + delta);
+        let delta = customEvent.detail.delta;
         const isWin = customEvent.detail.isWin !== undefined ? customEvent.detail.isWin : delta > 0;
         const pId = customEvent.detail.puzzleId;
-        if (!customEvent.detail.bypassGuard && pId && ratedPuzzleIdsRef.current.has(pId)) {
-          return;
+        const isRequeued = Boolean(customEvent.detail.isRequeued);
+        const ratingState = pId ? puzzleRatingHistoryRef.current[pId] : undefined;
+
+        if (isWin && (isRequeued || ratingState === "failed_once")) {
+          delta = Math.max(1, Math.round(delta * 0.5));
         }
-        if (pId) {
-          markPuzzleRated(pId);
+
+        const targetElo = customEvent.detail.newElo ?? (currentEloRef.current + delta);
+        if (!customEvent.detail.bypassGuard && pId) {
+          if (ratingState === "solved" || ratingState === "redeemed") {
+            return;
+          }
         }
-        handleEloUpdateRef.current(targetElo, delta, isWin, pId);
+        handleEloUpdateRef.current(targetElo, delta, isWin, pId, isRequeued);
       }
     };
     window.addEventListener("open-quota-paywall", handleOpenPaywall);
@@ -693,12 +788,13 @@ export function PlayView({
   const scheduleFailedPuzzleReinsertion = useCallback(
     async (failedPuzzle: PuzzleData, fromIndex: number) => {
       const offset = 10 + Math.floor(Math.random() * 5); // 10..14
-      const nextAttempt = (puzzleAttemptCountRef.current[failedPuzzle.id] || 1) + 1;
+      const nextAttempt = (failedPuzzle.attemptCount || puzzleAttemptCountRef.current[failedPuzzle.id] || 1) + 1;
       puzzleAttemptCountRef.current[failedPuzzle.id] = nextAttempt;
       const cleanResetCopy: PuzzleData = {
         ...failedPuzzle,
         instanceId: `${failedPuzzle.id}_attempt_${nextAttempt}`,
         isRequeued: true,
+        attemptCount: nextAttempt,
         attemptNumber: nextAttempt,
       };
       const currentGap = queue.length - fromIndex;
@@ -991,18 +1087,40 @@ export function PlayView({
   }, [hasMounted, userAccount?.id, canPlay, isPro, isCalibrating, setIsQuotaModalOpen]);
 
   // Handle Elo update and placement test logic
-  const handleEloUpdate = (newElo: number, change: number, isWin?: boolean, puzzleId?: string) => {
+  const handleEloUpdate = (newElo: number, change: number, isWin?: boolean, puzzleId?: string, isRequeuedParam?: boolean) => {
     const activePuzzle = queue[currentIndex] || currentPuzzle;
-    const activeId = puzzleId || activePuzzle?.instanceId || activePuzzle?.id;
-    const rawPuzzleId = activePuzzle?.id || currentPuzzle?.id;
-    const isAlreadyRated = Boolean(activeId && ratedPuzzleIdsRef.current.has(activeId) && !isCalibrating);
+    const rawPuzzleId = puzzleId || activePuzzle?.id || currentPuzzle?.id;
+    const activeId = activePuzzle?.instanceId || (rawPuzzleId ? `${rawPuzzleId}_attempt_${activePuzzle?.attemptCount || 1}` : "");
+    const isRequeued = isRequeuedParam !== undefined ? isRequeuedParam : Boolean(activePuzzle?.isRequeued || (activePuzzle?.attemptCount && activePuzzle.attemptCount > 1));
+    const currentRatingState = rawPuzzleId ? puzzleRatingHistoryRef.current[rawPuzzleId] : undefined;
 
-    if (!isAlreadyRated && activeId) {
-      markPuzzleRated(activeId);
+    const isAlreadyRated = getIsPuzzleAlreadyRated(activePuzzle) && !isCalibrating;
+
+    // Strict Elo Idempotency Guard: do not alter Elo or streak if this puzzle was already rated
+    if (isAlreadyRated) {
+      return;
     }
 
     const won = isWin !== undefined ? isWin : change > 0;
     recordPuzzlePlay(won ? "win" : "loss");
+
+    // Update puzzle rating history state machine and rated puzzle IDs
+    if (rawPuzzleId && !isCalibrating) {
+      if (won) {
+        if (isRequeued && currentRatingState === "failed_once") {
+          updatePuzzleRatingState(rawPuzzleId, "redeemed");
+        } else {
+          updatePuzzleRatingState(rawPuzzleId, "solved");
+        }
+        markPuzzleSolved(rawPuzzleId);
+        markPuzzleRated(rawPuzzleId);
+        if (activeId) markPuzzleRated(activeId);
+      } else {
+        // Failed attempt: record state as 'failed_once' (allows one redemption solve)
+        updatePuzzleRatingState(rawPuzzleId, "failed_once");
+        if (activeId) markPuzzleRated(activeId);
+      }
+    }
 
     if (won && currentPuzzle) {
       try {
@@ -1097,11 +1215,6 @@ export function PlayView({
     if (won && activeId && rawPuzzleId && !isCalibrating && !solvedPuzzleIdsRef.current.has(rawPuzzleId) && !countedQuotaPuzzleIdsRef.current.has(activeId)) {
       countedQuotaPuzzleIdsRef.current.add(activeId);
       recordPuzzlePlayed(true);
-    }
-
-    // Strict Elo Idempotency Guard: do not alter Elo or streak if this puzzle was already rated
-    if (isAlreadyRated) {
-      return;
     }
 
     // Standard Continuous Reel Mode
@@ -1575,10 +1688,12 @@ export function PlayView({
               status={puzzleStatus}
               savedState={currentPuzzle ? puzzleStates[currentPuzzle.instanceId || currentPuzzle.id] : undefined}
               onSavePuzzleState={handleSavePuzzleState}
-              isAlreadyRated={currentPuzzle ? ratedPuzzleIds.has(currentPuzzle.instanceId || currentPuzzle.id) : false}
+              isAlreadyRated={currentPuzzle ? getIsPuzzleAlreadyRated(currentPuzzle) : false}
               ratedPuzzleIds={ratedPuzzleIds}
+              puzzleRatingHistory={puzzleRatingHistory}
               onMarkRated={markPuzzleRated}
               currentElo={currentElo}
+              userId={userAccount?.id}
               guestId={userAccount?.id || guestId}
               streak={dailyStreak}
               combo={combo}
