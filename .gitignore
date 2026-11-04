@@ -68,7 +68,3 @@ temp/
 tmp/
 scratch/
 
-# Temporary QA harness & testing pages
-app/temp-qa/
-e2e/temp-qa.spec.ts
-

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useTransition } from "react";
+import React, { useState, useEffect, useRef, useTransition, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
@@ -26,6 +26,8 @@ import {
   Award,
   AlertTriangle,
   ArrowLeft,
+  Download,
+  Upload,
 } from "lucide-react";
 import {
   clearAllUserAndPuzzleCache,
@@ -46,6 +48,9 @@ import {
   getTodayDateString,
   getCalendarDaysDiff,
   addCalendarDays,
+  STREAK_DATA_KEY,
+  DAILY_STREAK_KEY,
+  LAST_PLAYED_DATE_KEY,
 } from "@/lib/useStreak";
 
 // Smooth animated Elo number counter matching PlayView.tsx
@@ -455,10 +460,79 @@ export default function TempQAPage() {
     perfectWeekCounter: 5,
     isFrozenState: false,
   });
+  const [liveStreakData, setLiveStreakData] = useState<StreakData | null>(null);
   const [streakLog, setStreakLog] = useState<string[]>([
     "Simulator loaded: Current Streak 5, 1/2 Freezes, 5/7 towards next Freeze.",
   ]);
   const [isTestingIgnition, setIsTestingIgnition] = useState<boolean>(false);
+
+  const refreshLiveStreak = useCallback(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = localStorage.getItem(STREAK_DATA_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        setLiveStreakData(parsed);
+      } else {
+        const legacyDaily = localStorage.getItem(DAILY_STREAK_KEY);
+        if (legacyDaily) {
+          setLiveStreakData({
+            currentStreak: parseInt(legacyDaily, 10) || 0,
+            lastSolvedDate: localStorage.getItem(LAST_PLAYED_DATE_KEY) || null,
+            streakFreezes: 0,
+            perfectWeekCounter: 0,
+            isFrozenState: false,
+          });
+        } else {
+          setLiveStreakData(null);
+        }
+      }
+    } catch {
+      setLiveStreakData(null);
+    }
+  }, []);
+
+  const handlePullLiveStreak = useCallback(() => {
+    refreshLiveStreak();
+    if (typeof window === "undefined") return;
+    try {
+      const raw = localStorage.getItem(STREAK_DATA_KEY);
+      if (raw) {
+        const parsed: StreakData = JSON.parse(raw);
+        setStreakData(parsed);
+        if (parsed.lastSolvedDate) {
+          setSimulatedDate(parsed.lastSolvedDate);
+        }
+        setStreakLog((prev) => [
+          `[Pull Live Streak] Imported from localStorage: ${parsed.currentStreak} Day(s), ${parsed.streakFreezes ?? 0}/2 Freezes, Frozen: ${Boolean(parsed.isFrozenState)}`,
+          ...prev.slice(0, 7),
+        ]);
+      } else {
+        setStreakLog((prev) => [
+          `[Pull Live Streak] No active streak saved in localStorage yet.`,
+          ...prev.slice(0, 7),
+        ]);
+      }
+    } catch {}
+  }, [refreshLiveStreak]);
+
+  const handlePushLiveStreak = useCallback(() => {
+    if (typeof window === "undefined") return;
+    try {
+      localStorage.setItem(STREAK_DATA_KEY, JSON.stringify(streakData));
+      localStorage.setItem(DAILY_STREAK_KEY, String(streakData.currentStreak));
+      if (streakData.lastSolvedDate) {
+        localStorage.setItem(LAST_PLAYED_DATE_KEY, streakData.lastSolvedDate);
+      }
+      refreshLiveStreak();
+      window.dispatchEvent(new Event("account-updated"));
+      window.dispatchEvent(new Event("tier-session-updated"));
+      setStreakLog((prev) => [
+        `[Push to Live App] Synced to localStorage: ${streakData.currentStreak} Day(s), ${streakData.streakFreezes}/2 Freezes. Live app updated!`,
+        ...prev.slice(0, 7),
+      ]);
+    } catch {}
+  }, [streakData, refreshLiveStreak]);
 
   const handleTestStreakIgnition = () => {
     const today = simulatedDate || "2026-11-04";
@@ -575,7 +649,8 @@ export default function TempQAPage() {
       ...prev,
       lastSolvedDate: today,
     }));
-  }, []);
+    refreshLiveStreak();
+  }, [refreshLiveStreak]);
 
   const handleStreakSolveNextDay = () => {
     const nextDate = addCalendarDays(simulatedDate, 1);
@@ -773,7 +848,7 @@ export default function TempQAPage() {
       </header>
 
       {/* Main Grid: 6 Modular Sections */}
-      <main className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-6 pb-20">
+      <main className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6 pb-20">
 
         {/* ------------------------------------------------------------- */}
         {/* MODULE 1: Onboarding Summary Pill & Pro Upsell Simulator */}
@@ -1492,9 +1567,46 @@ export default function TempQAPage() {
               </span>
             </div>
 
-            <p className="text-xs text-white/60 mb-4 leading-relaxed">
+            <p className="text-xs text-white/60 mb-3 leading-relaxed">
               Verify deterministic calendar-day streaks, earning freezes every 7-day perfect streak, consuming freezes upon 1 or 2 missed days, and resetting on 3+ missed days.
             </p>
+
+            {/* Live App LocalStorage Status Bar */}
+            <div className="mb-3 p-2.5 rounded-xl bg-black/40 border border-white/10 flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2">
+                <span className="text-white/40 text-[11px]">Live App State:</span>
+                <span className="font-mono font-bold text-amber-300">
+                  {liveStreakData ? `${liveStreakData.currentStreak} Day${liveStreakData.currentStreak === 1 ? "" : "s"} • ${liveStreakData.streakFreezes ?? 0}/2 Freezes` : "Not initialized"}
+                </span>
+                {liveStreakData?.isFrozenState && (
+                  <span className="text-[10px] text-sky-400 font-semibold bg-sky-500/10 px-1.5 py-0.5 rounded border border-sky-400/30">
+                    Frozen
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  data-testid="pull-live-streak-btn"
+                  onClick={handlePullLiveStreak}
+                  className="px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-white/80 border border-white/10 text-[10px] font-semibold transition-all flex items-center gap-1 cursor-pointer"
+                  title="Import current streak from live app localStorage"
+                >
+                  <Download className="w-3 h-3 text-[#c29b78]" />
+                  <span>Pull Live</span>
+                </button>
+                <button
+                  type="button"
+                  data-testid="push-live-streak-btn"
+                  onClick={handlePushLiveStreak}
+                  className="px-2 py-1 rounded-lg bg-[#c29b78]/20 hover:bg-[#c29b78]/30 text-[#c29b78] border border-[#c29b78]/40 text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer"
+                  title="Apply current simulator streak to live app localStorage"
+                >
+                  <Upload className="w-3 h-3" />
+                  <span>Push to App</span>
+                </button>
+              </div>
+            </div>
 
             {/* HUD Status Bar Simulation */}
             <div className="p-3.5 rounded-xl bg-[#0a0908] border border-white/10 mb-3 flex items-center justify-between">
@@ -1512,7 +1624,7 @@ export default function TempQAPage() {
                   size="md"
                 />
                 <span className="text-xs text-white/60 font-bold">
-                  {streakData.currentStreak} {streakData.currentStreak === 1 ? "Day" : "Days"}
+                  {" "}{streakData.currentStreak === 1 ? "Day" : "Days"}
                 </span>
               </div>
 
@@ -1666,7 +1778,7 @@ export default function TempQAPage() {
         {/* ------------------------------------------------------------- */}
         <section
           data-testid="module-db-cleanup"
-          className="lg:col-span-2 p-5 sm:p-6 rounded-2xl bg-[#12100e] border border-white/10 flex flex-col justify-between"
+          className="md:col-span-2 p-5 sm:p-6 rounded-2xl bg-[#12100e] border border-white/10 flex flex-col justify-between"
         >
           <div>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-white/10 mb-4 gap-2">
