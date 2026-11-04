@@ -222,6 +222,24 @@ export function PlayView({
     return new Set<string>();
   });
 
+  // Solved puzzle IDs ref to prevent fetch effects from re-running on solve
+  const solvedPuzzleIdsRef = useRef<Set<string>>(solvedPuzzleIds);
+  useEffect(() => {
+    solvedPuzzleIdsRef.current = solvedPuzzleIds;
+  }, [solvedPuzzleIds]);
+
+  // Sync solved puzzle IDs to localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem(
+          SOLVED_STORAGE_KEY,
+          JSON.stringify(Array.from(solvedPuzzleIds))
+        );
+      } catch {}
+    }
+  }, [solvedPuzzleIds]);
+
   // Per-puzzle completion state persisted in session state (and synced to solvedPuzzleIds)
   const [puzzleStates, setPuzzleStates] = useState<Record<string, SavedPuzzleState>>(() => {
     if (typeof window !== "undefined") {
@@ -335,10 +353,22 @@ export function PlayView({
 
   const markPuzzleSolved = useCallback((puzzleId: string) => {
     if (!puzzleId) return;
+    const baseId = puzzleId.split("_attempt_")[0];
+    if (!solvedPuzzleIdsRef.current.has(baseId)) {
+      solvedPuzzleIdsRef.current = new Set(solvedPuzzleIdsRef.current).add(baseId);
+      if (typeof window !== "undefined") {
+        try {
+          window.localStorage.setItem(
+            SOLVED_STORAGE_KEY,
+            JSON.stringify(Array.from(solvedPuzzleIdsRef.current))
+          );
+        } catch {}
+      }
+    }
     setSolvedPuzzleIds((prev) => {
-      if (prev.has(puzzleId)) return prev;
+      if (prev.has(baseId)) return prev;
       const next = new Set(prev);
-      next.add(puzzleId);
+      next.add(baseId);
       return next;
     });
   }, []);
@@ -809,24 +839,6 @@ export function PlayView({
     previousUserIdRef.current = currentUserId;
   }, [userAccount?.id]);
 
-  // Solved puzzle IDs ref to prevent fetch effects from re-running on solve
-  const solvedPuzzleIdsRef = useRef<Set<string>>(solvedPuzzleIds);
-  useEffect(() => {
-    solvedPuzzleIdsRef.current = solvedPuzzleIds;
-  }, [solvedPuzzleIds]);
-
-  // Sync solved puzzle IDs to localStorage
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      try {
-        window.localStorage.setItem(
-          SOLVED_STORAGE_KEY,
-          JSON.stringify(Array.from(solvedPuzzleIds))
-        );
-      } catch {}
-    }
-  }, [solvedPuzzleIds]);
-
   // When currentIndex changes, prepare fresh mistake tracking for this puzzle
   useEffect(() => {
     const p = queue[currentIndex];
@@ -1202,6 +1214,7 @@ export function PlayView({
 
       recordPuzzlePlay(result === "win" ? "win" : "loss");
       if (result === "win") {
+        markPuzzleSolved(puzzle.id);
         setStreak((prev) => prev + 1);
         try {
           if (typeof window !== "undefined") {
@@ -1328,7 +1341,7 @@ export function PlayView({
         }
       }
     },
-    [isCalibrating, userAccount, guestId, dailyStreak, updatePuzzleRatingState, triggerEloDeltaBadge, recordPuzzlePlay]
+    [isCalibrating, userAccount, guestId, dailyStreak, updatePuzzleRatingState, markPuzzleSolved, triggerEloDeltaBadge, recordPuzzlePlay]
   );
 
   // Handle direct Elo update (e.g. from test events or explicit triggers)
@@ -1370,9 +1383,12 @@ export function PlayView({
               : "solved"
             : "failed_once";
         updatePuzzleRatingState(puzzleId, nextRatingState);
+        if (change > 0) {
+          markPuzzleSolved(puzzleId);
+        }
       }
     },
-    [triggerEloDeltaBadge, updatePuzzleRatingState]
+    [triggerEloDeltaBadge, updatePuzzleRatingState, markPuzzleSolved]
   );
 
   useEffect(() => {
