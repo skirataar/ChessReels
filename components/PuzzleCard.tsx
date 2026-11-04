@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import dynamic from "next/dynamic";
-import { Chess, Square } from "chess.js";
+import { Chess, Square, Move } from "chess.js";
 import { sounds } from "@/lib/audio";
 import { haptics } from "@/lib/haptics";
 import confetti from "canvas-confetti";
@@ -313,25 +313,39 @@ export function PuzzleCard({
   );
 
   const [isReviewMode, setIsReviewMode] = useState<boolean>(() => isPreviouslyCompleted);
+  const [boardOrientation, setBoardOrientation] = useState<"white" | "black">(
+    initialPuzzleState.boardOrientation
+  );
+  const playerColor: "w" | "b" = boardOrientation === "white" ? "w" : "b";
+
+  // Click-to-move square highlights and selection state
+  const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
+  const [legalMoves, setLegalMoves] = useState<Move[]>([]);
+  const [highlightStyles, setHighlightStyles] = useState<
+    Record<string, React.CSSProperties>
+  >({});
+  const lastDropSameSquareTimeRef = useRef<number>(0);
+  const lastSquareClickTimeRef = useRef<{ square: string; time: number }>({ square: "", time: 0 });
+
+  const clearSquareSelection = useCallback(() => {
+    setSelectedSquare(null);
+    setLegalMoves([]);
+    setHighlightStyles({});
+  }, []);
 
   const handleStepBack = useCallback(() => {
     haptics.tap();
     setTouchArrows([]);
-    setSelectedSquare(null);
-    setHighlightStyles({});
+    clearSquareSelection();
     setViewMoveIndex((prev) => Math.max(0, prev - 1));
-  }, []);
+  }, [clearSquareSelection]);
 
   const handleStepForward = useCallback(() => {
     haptics.tap();
     setTouchArrows([]);
-    setSelectedSquare(null);
-    setHighlightStyles({});
+    clearSquareSelection();
     setViewMoveIndex((prev) => Math.min(moveHistory.length - 1, prev + 1));
-  }, [moveHistory.length]);
-  const [boardOrientation, setBoardOrientation] = useState<"white" | "black">(
-    initialPuzzleState.boardOrientation
-  );
+  }, [moveHistory.length, clearSquareSelection]);
   const [solutionStartIndex, setSolutionStartIndex] = useState<number>(
     initialPuzzleState.solutionStartIndex
   );
@@ -408,12 +422,6 @@ export function PuzzleCard({
     }
     return String(num);
   };
-
-  // Click-to-move square highlights
-  const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
-  const [highlightStyles, setHighlightStyles] = useState<
-    Record<string, React.CSSProperties>
-  >({});
 
   // King-in-check square detection for crimson highlight
   const inCheckKingSquare = useMemo(() => {
@@ -1144,7 +1152,16 @@ export function PuzzleCard({
         return false;
       }
 
+      if (!sourceSquare || !targetSquare || sourceSquare === targetSquare) {
+        return false;
+      }
+
       const game = gameRef.current;
+      const movingPiece = game.get(sourceSquare as Square);
+      if (!movingPiece || movingPiece.color !== playerColor || game.turn() !== playerColor) {
+        return false;
+      }
+
       const expectedMove = allMoves[currentMoveIndex];
 
       if (!expectedMove) {
@@ -1254,8 +1271,7 @@ export function PuzzleCard({
         }, 850);
 
         // Clear square selection & highlights
-        setSelectedSquare(null);
-        setHighlightStyles({});
+        clearSquareSelection();
 
         // Auto-retry: piece snaps back to previous state and board remains interactive!
         setFen(game.fen());
@@ -1277,8 +1293,7 @@ export function PuzzleCard({
       setMistakeFeedback(null);
       setIsFlashingRed(false);
       setIsShaking(false);
-      setSelectedSquare(null);
-      setHighlightStyles({});
+      clearSquareSelection();
       setHintActive(false);
 
       const nextIndex = currentMoveIndex + 1;
@@ -1400,138 +1415,248 @@ export function PuzzleCard({
 
       return true;
     },
-    [status, allMoves, currentMoveIndex, onStatusChange, sendEloResult, isCalibration, placementFeedback, canPlay, isPro, isPaywallOpen, viewMoveIndex, moveHistory.length]
+    [status, allMoves, currentMoveIndex, onStatusChange, sendEloResult, isCalibration, placementFeedback, canPlay, isPro, isPaywallOpen, viewMoveIndex, moveHistory.length, playerColor, clearSquareSelection]
   );
 
-  // Drag and drop drop handler - strictly locked when status !== 'playing' && status !== 'failed' or paywalled
-  const handlePieceDrop = ({
-    sourceSquare,
-    targetSquare,
-  }: {
-    sourceSquare: string;
-    targetSquare: string | null;
-  }): boolean => {
-    isPieceDragRef.current = false;
-    if (status !== "playing" && status !== "failed") return false;
-    if ((canPlay === false && !isPro) || isPaywallOpen) return false;
-    if (viewMoveIndex < moveHistory.length - 1) {
-      setViewMoveIndex(moveHistory.length - 1);
-      return false;
-    }
-    return executeUserMove(sourceSquare, targetSquare);
-  };
+  // Helper to compute legal moves & selection highlights for a given square
+  const computeSelectionHighlightStyles = useCallback((square: string, game: Chess) => {
+    const moves = game.moves({
+      square: square as Square,
+      verbose: true,
+    });
 
-  // Click-to-move / Tap-to-move handler
-  const handleSquareClick = ({ square }: { square: string }) => {
-    if (viewMoveIndex < moveHistory.length - 1) {
-      setViewMoveIndex(moveHistory.length - 1);
-      return;
-    }
-    if ((status !== "playing" && status !== "failed") || !gameRef.current) return;
-    if ((canPlay === false && !isPro) || isPaywallOpen) return;
-    const game = gameRef.current;
-    const myColor = boardOrientation === "white" ? "w" : "b";
+    const styles: Record<string, React.CSSProperties> = {
+      [square]: {
+        backgroundColor: "rgba(194, 155, 120, 0.35)",
+        boxShadow: "inset 0 0 0 2.5px #c29b78",
+        borderRadius: "4px",
+      },
+    };
 
-    // 1. If no square selected yet:
-    if (!selectedSquare) {
-      const piece = game.get(square as Square);
-      if (piece && piece.color === myColor) {
-        setSelectedSquare(square);
-        const legalMoves = game.moves({
-          square: square as Square,
-          verbose: true,
-        });
-
-        // Compute styling for reachable squares (refined gold selection & clean rings)
-        const styles: Record<string, React.CSSProperties> = {
-          [square]: {
-            backgroundColor: "rgba(194, 155, 120, 0.35)",
-            boxShadow: "inset 0 0 0 2.5px #c29b78",
-            borderRadius: "4px",
-          },
+    for (const m of moves) {
+      const pieceOnTarget = game.get(m.to as Square);
+      if (pieceOnTarget) {
+        styles[m.to] = {
+          background:
+            "radial-gradient(circle, transparent 52%, rgba(239, 68, 68, 0.75) 54%, rgba(239, 68, 68, 0.75) 64%, transparent 66%)",
+          cursor: "pointer",
         };
-
-        for (const m of legalMoves) {
-          const pieceOnTarget = game.get(m.to as Square);
-          if (pieceOnTarget) {
-            styles[m.to] = {
-              background:
-                "radial-gradient(circle, transparent 52%, rgba(239, 68, 68, 0.75) 54%, rgba(239, 68, 68, 0.75) 64%, transparent 66%)",
-              cursor: "pointer",
-            };
-          } else {
-            styles[m.to] = {
-              background:
-                "radial-gradient(circle, rgba(0, 0, 0, 0.25) 20%, transparent 22%)",
-              cursor: "pointer",
-            };
-          }
-        }
-
-        setHighlightStyles(styles);
-        haptics.tap();
+      } else {
+        styles[m.to] = {
+          background:
+            "radial-gradient(circle, rgba(0, 0, 0, 0.25) 20%, transparent 22%)",
+          cursor: "pointer",
+        };
       }
-      return;
     }
 
-    // 2. If clicking the already selected square: deselect
-    if (selectedSquare === square) {
-      setSelectedSquare(null);
-      setHighlightStyles({});
-      return;
-    }
+    return { moves, styles };
+  }, []);
 
-    // 3. If clicking another piece of the same color: change selection
-    const clickedPiece = game.get(square as Square);
-    if (clickedPiece && clickedPiece.color === myColor) {
+  // Synchronously select a friendly piece & compute its legal moves and highlights in a single state update
+  const selectFriendlyPiece = useCallback(
+    (square: string) => {
+      if (!gameRef.current) return;
+      const game = gameRef.current;
+      const { moves, styles } = computeSelectionHighlightStyles(square, game);
       setSelectedSquare(square);
-      const legalMoves = game.moves({
-        square: square as Square,
-        verbose: true,
-      });
-
-      const styles: Record<string, React.CSSProperties> = {
-        [square]: {
-          backgroundColor: "rgba(194, 155, 120, 0.35)",
-          boxShadow: "inset 0 0 0 2.5px #c29b78",
-          borderRadius: "4px",
-        },
-      };
-
-      for (const m of legalMoves) {
-        const pieceOnTarget = game.get(m.to as Square);
-        if (pieceOnTarget) {
-          styles[m.to] = {
-            background:
-              "radial-gradient(circle, transparent 52%, rgba(239, 68, 68, 0.75) 54%, rgba(239, 68, 68, 0.75) 64%, transparent 66%)",
-            cursor: "pointer",
-          };
-        } else {
-          styles[m.to] = {
-            background:
-              "radial-gradient(circle, rgba(0, 0, 0, 0.25) 20%, transparent 22%)",
-            cursor: "pointer",
-          };
-        }
-      }
-
+      setLegalMoves(moves);
       setHighlightStyles(styles);
       haptics.tap();
-      return;
-    }
+    },
+    [computeSelectionHighlightStyles]
+  );
 
-    // 4. If clicking a reachable target square: make the move!
-    if (highlightStyles[square]) {
-      const from = selectedSquare;
-      setSelectedSquare(null);
-      setHighlightStyles({});
-      executeUserMove(from, square);
-    } else {
-      // Clicked an invalid/unreachable square: deselect
-      setSelectedSquare(null);
-      setHighlightStyles({});
-    }
-  };
+  // Strictly block dragging opponent pieces or dragging when not the user's turn
+  const isDraggablePiece = useCallback(
+    (args: any) => {
+      if (viewMoveIndex < moveHistory.length - 1) {
+        return false;
+      }
+      if (status !== "playing" && status !== "failed") {
+        return false;
+      }
+      if ((canPlay === false && !isPro) || isPaywallOpen) {
+        return false;
+      }
+      if (!gameRef.current) return false;
+
+      const game = gameRef.current;
+      const rawPiece = args?.piece;
+      const pieceStr = typeof rawPiece === "string" ? rawPiece : rawPiece?.pieceType || "";
+      const square = args?.square;
+
+      let pieceColor: string | null = null;
+      if (pieceStr && pieceStr.length >= 1) {
+        pieceColor = pieceStr[0];
+      } else if (square) {
+        pieceColor = game.get(square as Square)?.color || null;
+      }
+
+      return (
+        pieceColor === playerColor &&
+        game.turn() === playerColor &&
+        (status === "playing" || status === "failed") &&
+        viewMoveIndex === moveHistory.length - 1
+      );
+    },
+    [viewMoveIndex, moveHistory.length, status, canPlay, isPro, isPaywallOpen, playerColor]
+  );
+
+  // Sync drag start with click selection: select source square & show legal move indicators
+  const handlePieceDragBegin = useCallback(
+    (args: any) => {
+      if (viewMoveIndex < moveHistory.length - 1) {
+        setViewMoveIndex(moveHistory.length - 1);
+        return;
+      }
+      if ((status !== "playing" && status !== "failed") || !gameRef.current) return;
+      if ((canPlay === false && !isPro) || isPaywallOpen) return;
+      const game = gameRef.current;
+      if (game.turn() !== playerColor) return;
+
+      isPieceDragRef.current = true;
+
+      const sourceSquare = args?.square || args?.sourceSquare;
+      if (!sourceSquare) return;
+
+      const piece = game.get(sourceSquare as Square);
+      if (piece && piece.color === playerColor) {
+        selectFriendlyPiece(sourceSquare);
+      }
+    },
+    [viewMoveIndex, moveHistory.length, status, canPlay, isPro, isPaywallOpen, playerColor, selectFriendlyPiece]
+  );
+
+  // Drag and drop drop handler:
+  // If dropped back onto sourceSquare, keep selection active and return false quietly
+  const handlePieceDrop = useCallback(
+    ({
+      sourceSquare,
+      targetSquare,
+    }: {
+      sourceSquare: string;
+      targetSquare: string | null;
+    }): boolean => {
+      isPieceDragRef.current = false;
+      if (status !== "playing" && status !== "failed") return false;
+      if ((canPlay === false && !isPro) || isPaywallOpen) return false;
+      if (viewMoveIndex < moveHistory.length - 1) {
+        setViewMoveIndex(moveHistory.length - 1);
+        return false;
+      }
+
+      // If dropped back onto sourceSquare or off board without moving to another square:
+      if (!targetSquare || targetSquare === sourceSquare) {
+        lastDropSameSquareTimeRef.current = Date.now();
+        if (gameRef.current) {
+          const piece = gameRef.current.get(sourceSquare as Square);
+          if (piece && piece.color === playerColor) {
+            selectFriendlyPiece(sourceSquare);
+          }
+        }
+        return false;
+      }
+
+      // Dropping onto a different square: clear selection state and execute move
+      clearSquareSelection();
+      return executeUserMove(sourceSquare, targetSquare);
+    },
+    [
+      status,
+      canPlay,
+      isPro,
+      isPaywallOpen,
+      viewMoveIndex,
+      moveHistory.length,
+      playerColor,
+      selectFriendlyPiece,
+      clearSquareSelection,
+      executeUserMove,
+    ]
+  );
+
+  // Click-to-move / Tap-to-move handler with instant friendly switching & opponent guards
+  const handleSquareClick = useCallback(
+    ({ square }: { square: string }) => {
+      lastSquareClickTimeRef.current = { square, time: Date.now() };
+
+      if (viewMoveIndex < moveHistory.length - 1) {
+        setViewMoveIndex(moveHistory.length - 1);
+        return;
+      }
+      if ((status !== "playing" && status !== "failed") || !gameRef.current) return;
+      if ((canPlay === false && !isPro) || isPaywallOpen) return;
+      const game = gameRef.current;
+      if (game.turn() !== playerColor) return;
+
+      const clickedPiece = game.get(square as Square);
+
+      // 1. Instant Friendly Piece Switching: check friendly piece first
+      if (clickedPiece && clickedPiece.color === playerColor) {
+        if (selectedSquare === square) {
+          // If click followed a same-square drop immediately, keep active
+          if (Date.now() - lastDropSameSquareTimeRef.current < 250) {
+            return;
+          }
+          clearSquareSelection();
+        } else {
+          // Immediately switch selection to the new friendly piece
+          selectFriendlyPiece(square);
+        }
+        return;
+      }
+
+      // 2. Guard against opponent pieces or empty squares if no piece selected
+      if (!selectedSquare) {
+        return;
+      }
+
+      // 3. A friendly piece is already selected: check if clicked square is a legal move
+      const isLegalDestination =
+        legalMoves.some((m) => m.to === square) || Boolean(highlightStyles[square]);
+
+      if (isLegalDestination) {
+        const from = selectedSquare;
+        clearSquareSelection();
+        executeUserMove(from, square);
+      } else {
+        // Invalid/unreachable destination (or opponent piece that cannot be captured): deselect
+        clearSquareSelection();
+      }
+    },
+    [
+      viewMoveIndex,
+      moveHistory.length,
+      status,
+      canPlay,
+      isPro,
+      isPaywallOpen,
+      playerColor,
+      selectedSquare,
+      legalMoves,
+      highlightStyles,
+      clearSquareSelection,
+      selectFriendlyPiece,
+      executeUserMove,
+    ]
+  );
+
+  // Deduplicated piece click handler to eliminate click-vs-drag race conditions
+  const handlePieceClick = useCallback(
+    (args: any) => {
+      const square = args?.square;
+      if (!square) return;
+      if (
+        Date.now() - lastSquareClickTimeRef.current.time < 150 &&
+        lastSquareClickTimeRef.current.square === square
+      ) {
+        return;
+      }
+      handleSquareClick({ square });
+    },
+    [handleSquareClick]
+  );
 
   // Right Rail Action: Bookmark Toggle
   const handleToggleBookmark = () => {
@@ -2199,6 +2324,7 @@ export function PuzzleCard({
         >
           {displayFen ? (
             <Chessboard
+              {...({ isDraggablePiece } as any)}
               options={{
                 id: "chess-reel-active-board",
                 position: displayFen,
@@ -2209,31 +2335,33 @@ export function PuzzleCard({
                   (canPlay !== false || isPro) &&
                   !isPaywallOpen &&
                   viewMoveIndex === moveHistory.length - 1,
-                canDragPiece: () => {
-                  if (viewMoveIndex < moveHistory.length - 1) {
-                    setViewMoveIndex(moveHistory.length - 1);
-                    return false;
-                  }
-                  return (
-                    (status === "playing" || status === "failed") &&
-                    (!isCalibration || placementFeedback === null) &&
-                    (canPlay !== false || isPro) &&
-                    !isPaywallOpen
-                  );
-                },
-                onPieceDrop: (args) => {
+                dragActivationDistance: 6,
+                canDragPiece: isDraggablePiece,
+                ...({ isDraggablePiece } as any),
+                onPieceClick: (args) => {
                   setTouchArrows([]);
-                  return handlePieceDrop(args);
+                  handlePieceClick(args);
                 },
-                onPieceDrag: () => {
+                onPieceDrag: (args) => {
                   if (viewMoveIndex < moveHistory.length - 1) {
                     setViewMoveIndex(moveHistory.length - 1);
                     return;
                   }
-                  isPieceDragRef.current = true;
+                  handlePieceDragBegin(args);
+                },
+                onPieceDragBegin: (args: any) => {
+                  if (viewMoveIndex < moveHistory.length - 1) {
+                    setViewMoveIndex(moveHistory.length - 1);
+                    return;
+                  }
+                  handlePieceDragBegin(args);
                 },
                 onPieceDragCancel: () => {
                   isPieceDragRef.current = false;
+                },
+                onPieceDrop: (args) => {
+                  setTouchArrows([]);
+                  return handlePieceDrop(args);
                 },
                 onSquareClick: (args) => {
                   setTouchArrows([]);
