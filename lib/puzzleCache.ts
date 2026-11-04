@@ -192,12 +192,15 @@ export function clearAllUserAndPuzzleCache(userId?: string): void {
       "chess_reel_tier_session",
       "chess_reel_tier_session_guest",
       "chess_reel_puzzle_queue",
+      "chess_reel_puzzle_rating_history",
+      "chess_reel_rated_puzzles",
     ];
 
     if (userId) {
       keysToRemove.push(getQueueKey(userId));
       keysToRemove.push(`chess_reel_tier_session_${userId}`);
       keysToRemove.push(`chess_reel_bookmarks_${userId}`);
+      keysToRemove.push(`chess_reel_puzzle_rating_history_${userId}`);
     }
 
     keysToRemove.forEach((key) => {

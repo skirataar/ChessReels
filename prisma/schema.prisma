@@ -67,7 +67,7 @@ model FriendRequest {
 model SystemSetting {
   key       String   @id
   value     String
-  updatedAt DateTime @default(now()) @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
   @@map("system_settings")
 }
