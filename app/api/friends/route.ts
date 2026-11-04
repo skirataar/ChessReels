@@ -13,10 +13,26 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Resolve user to canonical DB user id if possible
+    let targetId = userId;
+    if (userId && !userId.startsWith("guest_")) {
+      const user = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { id: userId },
+            { username: userId.toLowerCase().replace(/^@/, "") },
+            { email: userId.toLowerCase() },
+          ],
+        },
+        select: { id: true },
+      });
+      if (user) targetId = user.id;
+    }
+
     // 1. Fetch established friendships
     const friendships = await prisma.friendship.findMany({
       where: {
-        OR: [{ userId }, { friendId: userId }],
+        OR: [{ userId: targetId }, { friendId: targetId }],
       },
       include: {
         user: {
@@ -64,8 +80,8 @@ export async function GET(request: NextRequest) {
     >();
 
     for (const f of friendships) {
-      const other: (typeof f)["user"] = f.userId === userId ? f.friend : f.user;
-      if (other && other.id !== userId) {
+      const other: (typeof f)["user"] = f.userId === targetId ? f.friend : f.user;
+      if (other && other.id !== targetId) {
         friendMap.set(other.id, other);
       }
     }
@@ -77,7 +93,7 @@ export async function GET(request: NextRequest) {
     // 2. Fetch incoming pending friend requests (target is current user)
     const incomingRequestsRaw = await prisma.friendRequest.findMany({
       where: {
-        receiverId: userId,
+        receiverId: targetId,
         status: "pending",
       },
       include: {
@@ -110,7 +126,7 @@ export async function GET(request: NextRequest) {
     // 3. Fetch outgoing pending friend requests (sent by current user)
     const outgoingRequestsRaw = await prisma.friendRequest.findMany({
       where: {
-        senderId: userId,
+        senderId: targetId,
         status: "pending",
       },
       include: {
@@ -172,19 +188,34 @@ export async function POST(request: NextRequest) {
 
     // 1. Look up sender
     const sessionCookie = request.cookies.get("chess_reel_session")?.value;
-    let sender = await prisma.user.findUnique({
-      where: { id: userId },
-    });
+    let sender = null;
+    if (userId && !userId.startsWith("guest_")) {
+      sender = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { id: userId },
+            { username: userId.toLowerCase().replace(/^@/, "") },
+            { email: userId.toLowerCase() },
+          ],
+        },
+      });
+    }
 
-    if (!sender && sessionCookie) {
-      sender = await prisma.user.findUnique({
-        where: { id: sessionCookie },
+    if (!sender && sessionCookie && !sessionCookie.startsWith("guest_")) {
+      sender = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { id: sessionCookie },
+            { username: sessionCookie.toLowerCase().replace(/^@/, "") },
+            { email: sessionCookie.toLowerCase() },
+          ],
+        },
       });
     }
 
     if (!sender) {
       return NextResponse.json(
-        { error: "Current user account not found." },
+        { error: "Current user account not found. Please log in." },
         { status: 404 }
       );
     }
@@ -408,8 +439,24 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
+    // Resolve responding user to canonical ID
+    let respondingUserId = userId;
+    if (userId && !userId.startsWith("guest_")) {
+      const u = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { id: userId },
+            { username: userId.toLowerCase().replace(/^@/, "") },
+            { email: userId.toLowerCase() },
+          ],
+        },
+        select: { id: true },
+      });
+      if (u) respondingUserId = u.id;
+    }
+
     // Only the receiver can accept or decline
-    if (friendReq.receiverId !== userId) {
+    if (friendReq.receiverId !== respondingUserId) {
       return NextResponse.json(
         { error: "You are not authorized to respond to this request." },
         { status: 403 }
@@ -494,10 +541,40 @@ export async function DELETE(request: NextRequest) {
     const body = await request.json();
     const { userId, friendId, requestId } = body;
 
+    // Resolve canonical user IDs
+    let canonicalUserId = userId;
+    let canonicalFriendId = friendId;
+    if (userId && !userId.startsWith("guest_")) {
+      const u = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { id: userId },
+            { username: userId.toLowerCase().replace(/^@/, "") },
+            { email: userId.toLowerCase() },
+          ],
+        },
+        select: { id: true },
+      });
+      if (u) canonicalUserId = u.id;
+    }
+    if (friendId && !friendId.startsWith("guest_")) {
+      const f = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { id: friendId },
+            { username: friendId.toLowerCase().replace(/^@/, "") },
+            { email: friendId.toLowerCase() },
+          ],
+        },
+        select: { id: true },
+      });
+      if (f) canonicalFriendId = f.id;
+    }
+
     // Support cancelling an outgoing pending request by requestId
-    if (requestId && userId) {
+    if (requestId && canonicalUserId) {
       const targetReq = await prisma.friendRequest.findFirst({
-        where: { id: requestId, senderId: userId },
+        where: { id: requestId, senderId: canonicalUserId },
       });
       if (targetReq) {
         await prisma.friendRequest.delete({ where: { id: requestId } });
@@ -508,7 +585,7 @@ export async function DELETE(request: NextRequest) {
       }
     }
 
-    if (!userId || !friendId) {
+    if (!canonicalUserId || !canonicalFriendId) {
       return NextResponse.json(
         { error: "userId and friendId are required." },
         { status: 400 }
@@ -519,8 +596,8 @@ export async function DELETE(request: NextRequest) {
     await prisma.friendship.deleteMany({
       where: {
         OR: [
-          { userId, friendId },
-          { userId: friendId, friendId: userId },
+          { userId: canonicalUserId, friendId: canonicalFriendId },
+          { userId: canonicalFriendId, friendId: canonicalUserId },
         ],
       },
     });
@@ -529,8 +606,8 @@ export async function DELETE(request: NextRequest) {
     await prisma.friendRequest.deleteMany({
       where: {
         OR: [
-          { senderId: userId, receiverId: friendId },
-          { senderId: friendId, receiverId: userId },
+          { senderId: canonicalUserId, receiverId: canonicalFriendId },
+          { senderId: canonicalFriendId, receiverId: canonicalUserId },
         ],
       },
     });
