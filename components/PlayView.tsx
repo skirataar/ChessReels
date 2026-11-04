@@ -19,7 +19,6 @@ import { ProfileModal } from "@/components/ProfileModal";
 import { AuthModal } from "@/components/AuthModal";
 import { CalibrationCompleteModal } from "@/components/CalibrationCompleteModal";
 import { StatsModal } from "@/components/StatsModal";
-import { UserAvatar } from "@/components/UserAvatar";
 import { AdModal } from "@/components/AdModal";
 import { QuotaPaywallModal } from "@/components/QuotaPaywallModal";
 import {
@@ -1415,26 +1414,6 @@ export function PlayView({
             >
               <Trophy className="w-3.5 h-3.5" />
             </button>
-
-            {/* Profile Icon with Pro Gold Ring vs Free Grey Ring */}
-            <button
-              type="button"
-              onClick={() => setActiveTab("profile")}
-              aria-label="Profile and settings"
-              data-testid="header-profile-btn"
-              className={`relative w-7 h-7 rounded-full flex items-center justify-center transition-all cursor-pointer overflow-hidden ${
-                isPro
-                  ? "ring-2 ring-amber-400 ring-offset-1 ring-offset-[#0f0e0d] shadow-[0_0_8px_rgba(245,158,11,0.45)]"
-                  : "ring-2 ring-white/20 ring-offset-1 ring-offset-[#0f0e0d]"
-              }`}
-              title={isPro ? "Profile • Pro Member" : "Profile • Free Tier"}
-            >
-              <UserAvatar
-                avatar={userAccount?.avatar}
-                fallback="♟"
-                className="w-full h-full flex items-center justify-center text-xs font-bold bg-[#22201e]"
-              />
-            </button>
           </div>
         </div>
       </header>
@@ -1451,10 +1430,16 @@ export function PlayView({
       )}
 
       {/* 2. Main Gameplay Canvas */}
-      <main className="flex-1 flex flex-col relative w-full pt-14 pb-16 bg-[#151413] overflow-hidden overscroll-none touch-none select-none justify-between">
+      <main className="flex-1 flex flex-col relative w-full pt-14 pb-16 bg-[#151413] overflow-hidden overscroll-none touch-none select-none justify-between items-center">
         {/* Placement Calibration Banner */}
         {hasMounted && isCalibrating && (
-          <div className="w-full max-w-sm mx-auto px-3 mt-2 mb-1 animate-in fade-in duration-200">
+          <div
+            className="w-full mx-auto px-3 mt-2 mb-1 animate-in fade-in duration-200"
+            style={{
+              width: "min(calc(100vw - 24px), calc(100dvh - 230px), 520px)",
+              maxWidth: "min(calc(100vw - 24px), calc(100dvh - 230px), 520px)",
+            }}
+          >
             <div className="p-3 rounded-xl bg-gradient-to-r from-[#22201e] to-[#2d2a28] border border-[#c29b78]/40 shadow-lg flex flex-col gap-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
@@ -1489,12 +1474,18 @@ export function PlayView({
         )}
 
         {!currentPuzzle ? (
-          <div className="w-full flex-1 flex flex-col justify-between items-center px-4 py-3 max-w-sm mx-auto">
+          <div
+            className="w-full flex-1 flex flex-col justify-between items-center px-4 py-3 mx-auto"
+            style={{
+              width: "min(calc(100vw - 24px), calc(100dvh - 230px), 520px)",
+              maxWidth: "min(calc(100vw - 24px), calc(100dvh - 230px), 520px)",
+            }}
+          >
             {/* Top skeleton */}
-            <div className="w-full h-12 bg-[#22201e]/80 rounded-xl border border-white/5 animate-pulse" />
+            <div className="w-full h-10 bg-[#22201e]/80 rounded-xl border border-white/5 animate-pulse" />
 
             {/* Center chessboard skeleton */}
-            <div className="w-full aspect-square bg-[#22201e] rounded-xl border border-white/5 animate-pulse my-4 flex flex-col items-center justify-center gap-3 shadow-2xl">
+            <div className="w-full aspect-square bg-[#22201e] rounded-xl border border-white/5 animate-pulse my-2 flex flex-col items-center justify-center gap-3 shadow-2xl">
               <RefreshCw className="w-8 h-8 text-[#c29b78] animate-spin" />
               <div className="text-xs text-[#a3a3a3] font-semibold tracking-wider uppercase">
                 Preparing next reel...
@@ -1502,13 +1493,19 @@ export function PlayView({
             </div>
 
             {/* Bottom tactical card skeleton */}
-            <div className="w-full h-16 bg-[#22201e]/80 rounded-xl border border-white/5 animate-pulse" />
+            <div className="w-full h-14 bg-[#22201e]/80 rounded-xl border border-white/5 animate-pulse" />
           </div>
         ) : (
           <div className="w-full flex-1 flex flex-col items-center justify-between touch-none overscroll-none overflow-hidden">
             {/* Free Tier Quota Exhausted Banner with Refill Countdown & Upgrade CTA */}
             {hasMounted && !canPlay && !isPro && !isCalibrating && (
-              <div className="w-full max-w-sm mx-auto px-3 mt-1.5 mb-1 animate-in fade-in slide-in-from-top-1 duration-200">
+              <div
+                className="w-full mx-auto px-3 mt-1.5 mb-1 animate-in fade-in slide-in-from-top-1 duration-200"
+                style={{
+                  width: "min(calc(100vw - 24px), calc(100dvh - 230px), 520px)",
+                  maxWidth: "min(calc(100vw - 24px), calc(100dvh - 230px), 520px)",
+                }}
+              >
                 <div
                   data-testid="quota-depleted-banner"
                   onClick={() => {
