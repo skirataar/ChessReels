@@ -315,6 +315,18 @@ export function PlayView({
   const updatePuzzleRatingState = useCallback((puzzleId: string, state: PuzzleRatingState) => {
     if (!puzzleId) return;
     const baseId = puzzleId.split("_attempt_")[0];
+    puzzleRatingHistoryRef.current = {
+      ...puzzleRatingHistoryRef.current,
+      [baseId]: state,
+    };
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem(
+          RATING_HISTORY_STORAGE_KEY,
+          JSON.stringify(puzzleRatingHistoryRef.current)
+        );
+      } catch {}
+    }
     setPuzzleRatingHistory((prev) => {
       if (prev[baseId] === state) return prev;
       return { ...prev, [baseId]: state };
