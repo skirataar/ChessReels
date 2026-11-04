@@ -39,8 +39,9 @@ test.describe("7 UI and State Refinements Verification", () => {
     await loginUsernameInput.fill(DEVTEST_USER.email);
     await page.getByRole("textbox", { name: /password/i }).fill("TestPassword123!");
 
-    // Submit form (the Sign In button that is type=submit)
-    await page.locator('button[type="submit"]').click();
+    const submitButton = page.locator('button[type="submit"]');
+    await expect(submitButton).toBeEnabled({ timeout: 5000 });
+    await submitButton.click();
 
     // Wait for redirect to /play
     await page.waitForURL(/\/play/, { timeout: 10000 });
@@ -205,7 +206,7 @@ test.describe("7 UI and State Refinements Verification", () => {
     expect(modalText).not.toContain("✨");
 
     // 3) Clean outline Trophy icon
-    const trophy = page.locator('.w-12.h-12 svg').first();
+    const trophy = page.getByTestId("solved-trophy");
     await expect(trophy).toBeVisible();
 
     // 4) Next Reel button present
