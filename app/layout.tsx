@@ -37,6 +37,7 @@ export const metadata: Metadata = {
 
 import { BottomNav } from "@/components/BottomNav";
 import { PageTransition } from "@/components/PageTransition";
+import { PWAUpdater } from "@/components/PWAUpdater";
 
 export const viewport: Viewport = {
   themeColor: "#0f0e0d",
@@ -70,6 +71,7 @@ export default function RootLayout({
         />
       </head>
       <body suppressHydrationWarning className="min-h-full flex flex-col bg-[#151413] text-[#f5f5f5] select-none overscroll-none pb-20">
+        <PWAUpdater />
         <PageTransition>{children}</PageTransition>
         <BottomNav />
       </body>
