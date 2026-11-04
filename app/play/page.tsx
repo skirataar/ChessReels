@@ -10,16 +10,19 @@ export default function PlayPage() {
     const prevHtmlOverflow = document.documentElement.style.overflow;
     const prevBodyOverflow = document.body.style.overflow;
     const prevBodyOverscroll = document.body.style.overscrollBehaviorY;
+    const prevBodyPaddingBottom = document.body.style.paddingBottom;
 
     document.documentElement.style.overflow = "hidden";
     document.body.style.overflow = "hidden";
     document.body.style.overscrollBehaviorY = "none";
+    document.body.style.paddingBottom = "0px";
 
     return () => {
       // Cleanly remove/reset inline styles when navigating away to other routes (Profile, Practice, Settings)
       document.documentElement.style.overflow = prevHtmlOverflow;
       document.body.style.overflow = prevBodyOverflow;
       document.body.style.overscrollBehaviorY = prevBodyOverscroll;
+      document.body.style.paddingBottom = prevBodyPaddingBottom;
     };
   }, []);
 
