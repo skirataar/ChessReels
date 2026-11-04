@@ -4,34 +4,39 @@ const TEST_EMAIL = "devtest@doomchess.local";
 const TEST_PASSWORD = "TestPassword123!";
 
 async function loginAsDedicatedTestUser(page: Page) {
+  const DEVTEST_USER = {
+    id: "e1b4a7fd-d753-4cd1-8d17-937727cc3594",
+    email: "devtest@doomchess.local",
+    username: "devtest",
+    displayName: "Dev Tester",
+    avatar: "♟",
+    elo: 1244,
+    isCalibrated: true,
+    calibrationStep: 6,
+    plan: "free",
+  };
+
   await page.goto("/play");
-  await page.waitForLoadState("domcontentloaded");
+  await page.evaluate((user) => {
+    localStorage.setItem("chess_reel_account", JSON.stringify(user));
+    localStorage.setItem("chess_reel_elo", String(user.elo));
+    localStorage.setItem(
+      "chessreels_user_stats_v1",
+      JSON.stringify({
+        elo: user.elo,
+        currentStreak: 1,
+        lastSolvedDate: null,
+        streakFreezes: 0,
+        isFrozenState: false,
+        perfectWeekCounter: 0,
+        comboCount: 1,
+      })
+    );
+    document.cookie = `chess_reel_session=${user.id}; path=/; max-age=86400`;
+  }, DEVTEST_USER);
 
-  // Check if already authenticated on /play
-  const board = page.getByTestId("chessboard-container");
-  const isAlreadyOnBoard = await board.isVisible({ timeout: 2500 }).catch(() => false);
-  if (isAlreadyOnBoard) {
-    return;
-  }
-
-  // Otherwise, go to landing and sign in
-  await page.goto("/");
-  const signInBtn = page.getByRole("button", { name: "Sign In" });
-  if (await signInBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-    await signInBtn.click();
-    await page.fill('input[placeholder="Username or email"]', TEST_EMAIL);
-    await page.fill('input[placeholder="Password"]', TEST_PASSWORD);
-    await page.getByRole("button", { name: "Sign In" }).click();
-    await page.waitForURL(/\/play/, { timeout: 10000 });
-  } else {
-    const playNow = page.getByRole("button", { name: /Play Now|Play/i });
-    if (await playNow.isVisible()) {
-      await playNow.click();
-      await page.waitForURL(/\/play/, { timeout: 10000 });
-    }
-  }
-
-  await expect(page.getByTestId("chessboard-container")).toBeVisible({ timeout: 10000 });
+  await page.reload();
+  await expect(page.getByTestId("chessboard-container")).toBeVisible({ timeout: 15000 });
 }
 
 test.describe("Anti-Elo Farming & Per-Puzzle Completion State Persistence", () => {
