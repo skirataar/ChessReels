@@ -199,6 +199,7 @@ export function BottomNav() {
                           <img
                             src={userImage}
                             alt="Profile"
+                            data-testid="bottom-nav-profile-avatar"
                             onError={() => setAvatarError(true)}
                             className={`w-6 h-6 rounded-full object-cover transition-all ${
                               isPro
@@ -208,6 +209,7 @@ export function BottomNav() {
                           />
                         ) : (
                           <div
+                            data-testid="bottom-nav-profile-avatar"
                             className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
                               isPro
                                 ? "ring-2 ring-amber-400 ring-offset-1 ring-offset-[#201e1d] text-amber-400 shadow-[0_0_6px_rgba(245,158,11,0.35)]"
