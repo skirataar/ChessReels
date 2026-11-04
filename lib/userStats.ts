@@ -240,3 +240,4 @@ export function mergeDbStatsWithLocal(dbUser: {
 
   return merged;
 }
+

@@ -1171,8 +1171,14 @@ export function PlayView({
       let eloDelta: number;
       if (result === "win") {
         const rawGain = Math.max(5, Math.round(K * (1 - expectedScore)));
-        if (puzzle.isRequeued === true) {
-          // 50% redemption multiplier on requeued puzzle
+        const isRequeued = Boolean(puzzle.isRequeued);
+        const hasUsedHint = Boolean(puzzle.hintUsed);
+
+        if (isRequeued && hasUsedHint) {
+          // Both requeued and hint used: 25% gain (50% * 50%), min +1
+          eloDelta = Math.max(1, Math.round(rawGain * 0.25));
+        } else if (isRequeued || hasUsedHint) {
+          // Either requeued or hint used: 50% gain, min +2
           eloDelta = Math.max(2, Math.round(rawGain * 0.5));
         } else {
           eloDelta = rawGain;
@@ -1208,11 +1214,11 @@ export function PlayView({
         }
       }
 
-      // Combo update: on fail, immediately reset combo to 0; on solve, only increment if cleanly solved without wrong move and not requeued
+      // Combo update: on fail, immediately reset combo to 0; on solve, only increment if cleanly solved without wrong move, not requeued, and without hint
       let nextCombo = stats.comboCount;
       if (result === "loss") {
         nextCombo = 0;
-      } else if (!puzzle.hasFailed && !puzzle.isRequeued) {
+      } else if (!puzzle.hasFailed && !puzzle.isRequeued && !puzzle.hintUsed) {
         nextCombo = stats.comboCount + 1;
       }
 
@@ -1291,6 +1297,7 @@ export function PlayView({
             isFrozenState: nextIsFrozen,
             lastSolvedDate: nextLastDate,
             isRequeued: puzzle.isRequeued,
+            hintUsed: puzzle.hintUsed,
             attemptCount: puzzle.attemptCount,
           }),
         }).catch((err) => {

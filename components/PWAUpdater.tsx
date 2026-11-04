@@ -34,3 +34,4 @@ export function PWAUpdater() {
 
   return null;
 }
+
