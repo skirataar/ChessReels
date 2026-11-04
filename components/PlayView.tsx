@@ -31,6 +31,7 @@ import {
 } from "@/lib/puzzleCache";
 import { useStreak, resetStreakStats } from "@/lib/useStreak";
 import { StreakFlameBadge } from "@/components/StreakFlameBadge";
+import { StreakCalendarDropdown } from "@/components/StreakCalendarDropdown";
 import { useTierQuota } from "@/lib/useTierQuota";
 import { clearGuestLocalSession, isGuestAccount } from "@/lib/guestAccount";
 import { RefreshCw, WifiOff, UserPlus, BarChart2, Trophy, Zap, Flame, Crown, Sparkles, User, Snowflake } from "lucide-react";
@@ -337,8 +338,11 @@ export function PlayView({
     bestCombo,
     totalSolved,
     totalFailed,
+    lastPlayedDate,
     recordPuzzlePlay,
   } = useStreak();
+
+  const [isStreakDropdownOpen, setIsStreakDropdownOpen] = useState(false);
 
   // Tier Quota & Ad Rules: Free: 4 puzzles / 4h, Ads every 2 puzzles; Pro: Unlimited & 0 Ads
   const {
@@ -1304,24 +1308,49 @@ export function PlayView({
               </AnimatePresence>
             </div>
 
-            {/* Flush Daily Streak Indicator with Flame States and Ignition Micro-Animation */}
-            <StreakFlameBadge
-              streak={dailyStreak}
-              isFrozenState={isFrozenState}
-              testId="header-streak-indicator"
-              flameTestId="header-flame-icon"
-              size="sm"
-            />
+            {/* Flush Daily Streak Indicator with Flame States, Freezes, and Interactive Calendar Dropdown */}
+            <div className="relative">
+              <button
+                type="button"
+                data-testid="header-streak-dropdown-trigger"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsStreakDropdownOpen((prev) => !prev);
+                }}
+                className="flex items-center gap-2 cursor-pointer select-none group focus:outline-none bg-transparent border-none p-0"
+                title="Click to view streak calendar & freezes"
+                aria-expanded={isStreakDropdownOpen}
+              >
+                <StreakFlameBadge
+                  streak={dailyStreak}
+                  isFrozenState={isFrozenState}
+                  testId="header-streak-indicator"
+                  flameTestId="header-flame-icon"
+                  size="sm"
+                />
 
-            {/* Streak Freeze Badge */}
-            <div
-              data-testid="header-freeze-indicator"
-              suppressHydrationWarning
-              className="flex items-center gap-1 text-xs font-medium text-sky-400/90 cursor-help bg-transparent border-none p-0"
-              title="Earned every 7-day streak • Protects up to 2 missed days"
-            >
-              <Snowflake className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.5} />
-              <span suppressHydrationWarning>{streakFreezes}/2</span>
+                {/* Streak Freeze Badge */}
+                <div
+                  data-testid="header-freeze-indicator"
+                  suppressHydrationWarning
+                  className="flex items-center gap-1 text-xs font-medium text-sky-400/90 group-hover:text-sky-300 transition-colors bg-transparent border-none p-0 cursor-pointer"
+                  title="Earned every 7-day streak • Protects up to 2 missed days (Click to view)"
+                >
+                  <Snowflake className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.5} />
+                  <span suppressHydrationWarning>{streakFreezes}/2</span>
+                </div>
+              </button>
+
+              {/* Streak Calendar & Freezes Dropdown Menu */}
+              <StreakCalendarDropdown
+                isOpen={isStreakDropdownOpen}
+                onClose={() => setIsStreakDropdownOpen(false)}
+                streak={dailyStreak}
+                streakFreezes={streakFreezes}
+                perfectWeekCounter={perfectWeekCounter}
+                isFrozenState={isFrozenState}
+                lastSolvedDate={lastPlayedDate}
+              />
             </div>
 
             {/* Flush Solve Combo */}

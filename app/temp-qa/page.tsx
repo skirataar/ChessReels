@@ -35,6 +35,7 @@ import {
   saveQueue,
 } from "@/lib/puzzleCache";
 import { StreakFlameBadge } from "@/components/StreakFlameBadge";
+import { StreakCalendarDropdown } from "@/components/StreakCalendarDropdown";
 import {
   fetchRecentAccountsAction,
   purgeFlaggedTestAccountsAction,
@@ -465,6 +466,7 @@ export default function TempQAPage() {
     "Simulator loaded: Current Streak 5, 2/2 Freezes, 5/7 towards next Freeze.",
   ]);
   const [isTestingIgnition, setIsTestingIgnition] = useState<boolean>(false);
+  const [isQaStreakDropdownOpen, setIsQaStreakDropdownOpen] = useState<boolean>(false);
 
   const refreshLiveStreak = useCallback(() => {
     if (typeof window === "undefined") return;
@@ -1614,40 +1616,61 @@ export default function TempQAPage() {
               </div>
             </div>
 
-            {/* HUD Status Bar Simulation */}
-            <div className="p-3.5 rounded-xl bg-[#0a0908] border border-white/10 mb-3 flex items-center justify-between">
-              {/* Daily Streak Flame Badge (Hollow vs Ignited vs Icy Frozen) */}
+            {/* HUD Status Bar Simulation with Interactive Dropdown */}
+            <div className="relative mb-3">
               <div
-                data-testid="qa-streak-indicator"
-                className="flex items-center gap-1.5"
+                data-testid="qa-streak-dropdown-trigger"
+                className="p-3.5 rounded-xl bg-[#0a0908] border border-white/10 flex items-center justify-between cursor-pointer hover:border-white/20 transition-all select-none"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsQaStreakDropdownOpen((prev) => !prev);
+                }}
+                title="Click to toggle Streak Calendar & Freezes Dropdown"
               >
-                <StreakFlameBadge
-                  streak={streakData.currentStreak}
-                  isFrozenState={Boolean(streakData.isFrozenState)}
-                  isIgniting={isTestingIgnition}
-                  testId="qa-streak-flame-badge"
-                  flameTestId="qa-flame-icon"
-                  size="md"
-                />
-                <span className="text-xs text-white/60 font-bold">
-                  {" "}{streakData.currentStreak === 1 ? "Day" : "Days"}
-                </span>
+                {/* Daily Streak Flame Badge (Hollow vs Ignited vs Icy Frozen) */}
+                <div
+                  data-testid="qa-streak-indicator"
+                  className="flex items-center gap-1.5"
+                >
+                  <StreakFlameBadge
+                    streak={streakData.currentStreak}
+                    isFrozenState={Boolean(streakData.isFrozenState)}
+                    isIgniting={isTestingIgnition}
+                    testId="qa-streak-flame-badge"
+                    flameTestId="qa-flame-icon"
+                    size="md"
+                  />
+                  <span className="text-xs text-white/60 font-bold">
+                    {" "}{streakData.currentStreak === 1 ? "Day" : "Days"}
+                  </span>
+                </div>
+
+                {/* Snowflake Freeze Badge */}
+                <div
+                  data-testid="qa-freeze-indicator"
+                  className="flex items-center gap-1 text-xs font-medium text-sky-400/90 hover:text-sky-300 transition-colors"
+                  title="Earned every 7-day streak • Protects up to 2 missed days (Click to view)"
+                >
+                  <Snowflake className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.5} />
+                  <span>{streakData.streakFreezes}/2 Freezes</span>
+                </div>
+
+                {/* 7-Day Week Progress */}
+                <div className="text-[11px] text-white/60">
+                  Week: <span className="text-white font-bold">{streakData.perfectWeekCounter}/7</span>
+                </div>
               </div>
 
-              {/* Snowflake Freeze Badge */}
-              <div
-                data-testid="qa-freeze-indicator"
-                className="flex items-center gap-1 text-xs font-medium text-sky-400/90 cursor-help"
-                title="Earned every 7-day streak • Protects up to 2 missed days"
-              >
-                <Snowflake className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.5} />
-                <span>{streakData.streakFreezes}/2 Freezes</span>
-              </div>
-
-              {/* 7-Day Week Progress */}
-              <div className="text-[11px] text-white/60">
-                Week: <span className="text-white font-bold">{streakData.perfectWeekCounter}/7</span>
-              </div>
+              {/* Streak Calendar & Freezes Dropdown Menu */}
+              <StreakCalendarDropdown
+                isOpen={isQaStreakDropdownOpen}
+                onClose={() => setIsQaStreakDropdownOpen(false)}
+                streak={streakData.currentStreak}
+                streakFreezes={streakData.streakFreezes}
+                perfectWeekCounter={streakData.perfectWeekCounter}
+                isFrozenState={Boolean(streakData.isFrozenState)}
+                lastSolvedDate={streakData.lastSolvedDate}
+              />
             </div>
 
             {/* Visual State & Ignition Controls */}
