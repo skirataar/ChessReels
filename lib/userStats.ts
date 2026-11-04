@@ -46,8 +46,22 @@ export function getStoredUserStats(): UserStatsCache {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === "object") {
+        let resolvedElo =
+          typeof parsed.elo === "number" && !isNaN(parsed.elo) ? parsed.elo : 1200;
+        // If cached Elo is default 1200 or missing, verify if an authenticated user account has a higher/specific Elo
+        if (resolvedElo === 1200) {
+          try {
+            const accRaw = window.localStorage.getItem("chess_reel_account");
+            if (accRaw) {
+              const acc = JSON.parse(accRaw);
+              if (acc && typeof acc.elo === "number" && !isNaN(acc.elo) && acc.elo > 0) {
+                resolvedElo = acc.elo;
+              }
+            }
+          } catch {}
+        }
         return {
-          elo: typeof parsed.elo === "number" && !isNaN(parsed.elo) ? parsed.elo : 1200,
+          elo: resolvedElo,
           currentStreak:
             typeof parsed.currentStreak === "number" && !isNaN(parsed.currentStreak)
               ? parsed.currentStreak
@@ -71,6 +85,17 @@ export function getStoredUserStats(): UserStatsCache {
     }
 
     // Migrate from legacy keys if primary cache does not exist yet
+    let fallbackElo = 1200;
+    try {
+      const accRaw = window.localStorage.getItem("chess_reel_account");
+      if (accRaw) {
+        const acc = JSON.parse(accRaw);
+        if (acc && typeof acc.elo === "number" && !isNaN(acc.elo) && acc.elo > 0) {
+          fallbackElo = acc.elo;
+        }
+      }
+    } catch {}
+
     const legacyElo = window.localStorage.getItem("chess_reel_elo");
     const legacyStreak = window.localStorage.getItem("chess_reel_daily_streak");
     const legacyDate = window.localStorage.getItem("chess_reel_last_played_date");
@@ -83,11 +108,12 @@ export function getStoredUserStats(): UserStatsCache {
     } catch {}
 
     const eloParsed = legacyElo ? parseInt(legacyElo, 10) : NaN;
+    const finalElo = !isNaN(eloParsed) && eloParsed > 0 ? eloParsed : fallbackElo;
     const streakParsed = legacyDataParsed?.currentStreak ?? (legacyStreak ? parseInt(legacyStreak, 10) : NaN);
     const comboParsed = legacyCombo ? parseInt(legacyCombo, 10) : NaN;
 
     const migrated: UserStatsCache = {
-      elo: !isNaN(eloParsed) && eloParsed > 0 ? eloParsed : 1200,
+      elo: finalElo,
       currentStreak: !isNaN(streakParsed) && streakParsed >= 0 ? streakParsed : 0,
       lastSolvedDate: legacyDataParsed?.lastSolvedDate ?? legacyDate ?? null,
       streakFreezes: legacyDataParsed?.streakFreezes ?? 0,
@@ -96,10 +122,7 @@ export function getStoredUserStats(): UserStatsCache {
       comboCount: !isNaN(comboParsed) && comboParsed >= 0 ? comboParsed : 0,
     };
 
-    if (legacyElo || legacyStreak || legacyDate || legacyDataRaw) {
-      window.localStorage.setItem(USER_STATS_CACHE_KEY, JSON.stringify(migrated));
-    }
-
+    window.localStorage.setItem(USER_STATS_CACHE_KEY, JSON.stringify(migrated));
     return migrated;
   } catch {
     return { ...DEFAULT_STATS };

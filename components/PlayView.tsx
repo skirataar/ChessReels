@@ -1482,6 +1482,7 @@ export function PlayView({
 
     setUserAccount(user);
     setCurrentElo(user.elo || 800);
+    hydrateUserSession(user);
 
     try {
       if (typeof window !== "undefined") {

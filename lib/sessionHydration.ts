@@ -1,5 +1,6 @@
 import { hydrateStreakFromDb } from "./useStreak";
 import { sounds } from "./audio";
+import { saveUserStatsSync } from "./userStats";
 
 export interface UserAccountProgress {
   id: string;
@@ -41,9 +42,17 @@ export function hydrateUserSession(user: Partial<UserAccountProgress> & { id: st
     // 1. Account Object
     window.localStorage.setItem("chess_reel_account", JSON.stringify(user));
 
-    // 2. Elo & Rating
+    // 2. Elo & Rating & Synchronous Stats Cache
     if (typeof user.elo === "number") {
       window.localStorage.setItem("chess_reel_elo", String(user.elo));
+      saveUserStatsSync({
+        elo: user.elo,
+        currentStreak: typeof user.streak === "number" ? user.streak : 0,
+        lastSolvedDate: user.lastSolvedDate || null,
+        streakFreezes: typeof user.streakFreezes === "number" ? user.streakFreezes : 0,
+        isFrozenState: typeof user.isFrozenState === "boolean" ? user.isFrozenState : false,
+        perfectWeekCounter: typeof user.perfectWeekCounter === "number" ? user.perfectWeekCounter : 0,
+      });
     }
     if (typeof user.targetElo === "number") {
       window.localStorage.setItem("chess_reel_target_elo", String(user.targetElo));

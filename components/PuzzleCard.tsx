@@ -335,10 +335,39 @@ export function PuzzleCard({
     setHighlightStyles({});
   }, []);
 
+  const autoNextTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [autoNextCountdown, setAutoNextCountdown] = useState<number | null>(null);
+  const [isReviewing, setIsReviewing] = useState<boolean>(
+    () => Boolean(!canPlay && !isPro && status === "solved")
+  );
+  const [showSolvedModal, setShowSolvedModal] = useState<boolean>(false);
+
+  // Delay solved celebration modal by 900ms (800ms - 1000ms deliberate pause)
+  // so the player can visually process the final winning move / checkmate before overlay appears
+  useEffect(() => {
+    if (status === "solved" && !isReviewing && !isCalibration && !isReviewMode) {
+      const timer = setTimeout(() => {
+        setShowSolvedModal(true);
+      }, 900);
+      return () => clearTimeout(timer);
+    } else {
+      setShowSolvedModal(false);
+    }
+  }, [status, isReviewing, isCalibration, isReviewMode]);
+
   const handleStepBack = useCallback(() => {
     haptics.tap();
     setTouchArrows([]);
     clearSquareSelection();
+    // Dismiss solved celebration modal immediately when stepping back
+    setIsReviewing(true);
+    setShowSolvedModal(false);
+    if (autoNextTimerRef.current) {
+      clearTimeout(autoNextTimerRef.current);
+      autoNextTimerRef.current = null;
+    }
+    setAutoNextCountdown(null);
+
     setViewMoveIndex((prev) => {
       if (prev <= 0) return prev;
       const next = prev - 1;
@@ -395,12 +424,6 @@ export function PuzzleCard({
   const [isShaking, setIsShaking] = useState<boolean>(false);
   const [isFlashingRed, setIsFlashingRed] = useState<boolean>(false);
   const [retryCount, setRetryCount] = useState<number>(0);
-  const [autoNextCountdown, setAutoNextCountdown] = useState<number | null>(
-    null
-  );
-  const [isReviewing, setIsReviewing] = useState<boolean>(
-    () => Boolean(!canPlay && !isPro && status === "solved")
-  );
 
   // Placement / calibration game feedback and pause timer
   const [placementFeedback, setPlacementFeedback] = useState<"correct" | "incorrect" | null>(null);
@@ -549,7 +572,6 @@ export function PuzzleCard({
         })()
       : initialPuzzleState.game
   );
-  const autoNextTimerRef = useRef<NodeJS.Timeout | null>(null);
   const mistakeTimerRef = useRef<NodeJS.Timeout | null>(null);
   const toastTimerRef = useRef<NodeJS.Timeout | null>(null);
   const hasPenalizedRef = useRef<boolean>(
@@ -793,6 +815,7 @@ export function PuzzleCard({
     setPlacementFeedback(null);
     setAutoNextCountdown(null);
     setIsReviewing(false);
+    setShowSolvedModal(false);
     setMistakeFeedback(null);
     setIsShaking(false);
     setIsFlashingRed(false);
@@ -901,6 +924,7 @@ export function PuzzleCard({
       }
 
       setAutoNextCountdown(null);
+      setShowSolvedModal(false);
       setMistakeFeedback(null);
       setIsShaking(false);
       setIsFlashingRed(false);
@@ -1065,25 +1089,30 @@ export function PuzzleCard({
     }
 
     // 3. 3-second countdown giving feeling of achievement and control (only when autoAdvance is enabled)
+    // Synchronized to start when celebration modal appears after 900ms pause
     const timer = setTimeout(() => {
       setAutoNextCountdown(3);
-    }, 0);
+    }, 900);
 
-    const countdownInterval = setInterval(() => {
-      setAutoNextCountdown((prev) => {
-        if (prev !== null && prev > 1) return prev - 1;
-        clearInterval(countdownInterval);
-        return null;
-      });
-    }, 1000);
+    let countdownInterval: NodeJS.Timeout | null = null;
+    const intervalTimer = setTimeout(() => {
+      countdownInterval = setInterval(() => {
+        setAutoNextCountdown((prev) => {
+          if (prev !== null && prev > 1) return prev - 1;
+          if (countdownInterval) clearInterval(countdownInterval);
+          return null;
+        });
+      }, 1000);
+    }, 900);
 
     autoNextTimerRef.current = setTimeout(() => {
       onNextPuzzle();
-    }, 3000);
+    }, 3900);
 
     return () => {
       clearTimeout(timer);
-      clearInterval(countdownInterval);
+      clearTimeout(intervalTimer);
+      if (countdownInterval) clearInterval(countdownInterval);
       if (autoNextTimerRef.current) {
         clearTimeout(autoNextTimerRef.current);
       }
@@ -2323,7 +2352,7 @@ export function PuzzleCard({
       </div>
 
       {/* 2. The Hero Chessboard Theater (Edge-to-edge horizontal, 1:1 aspect-square) */}
-      <div className="relative w-full aspect-square flex items-center justify-center my-0.5 sm:my-1 rounded-lg overflow-hidden">
+      <div className="relative w-full aspect-square flex items-center justify-center my-0.5 sm:my-1 rounded-none overflow-hidden">
         <div
           data-testid="chessboard-container"
           data-fen={displayFen}
@@ -2332,7 +2361,7 @@ export function PuzzleCard({
           onTouchMove={handleBoardTouchMove}
           onTouchEnd={handleBoardTouchEnd}
           onContextMenu={(e) => e.preventDefault()}
-          className={`relative w-full h-full aspect-square overflow-hidden rounded-lg flex flex-col justify-between transition-all duration-300 ${
+          className={`relative w-full h-full aspect-square overflow-hidden rounded-none flex flex-col justify-between transition-all duration-300 ${
             isDesktopPointer ? "touch-none" : ""
           } ${
             isShaking ? "animate-board-shake" : ""
@@ -2340,6 +2369,7 @@ export function PuzzleCard({
         >
           {displayFen ? (
             <Chessboard
+              customBoardStyle={{ borderRadius: "0px" }}
               {...({ isDraggablePiece } as any)}
               options={{
                 id: "chess-reel-active-board",
@@ -2445,44 +2475,40 @@ export function PuzzleCard({
 
           {/* Solved Celebration Hero Overlay */}
           <AnimatePresence>
-            {status === "solved" && !isReviewing && !isCalibration && !isReviewMode && (
+            {status === "solved" && showSolvedModal && !isReviewing && !isCalibration && !isReviewMode && (
               <motion.div
-                initial={{ scale: 0.85, opacity: 0 }}
+                initial={{ scale: 0.95, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.85, opacity: 0 }}
-                transition={{ type: "spring", stiffness: 350, damping: 25 }}
-                className="absolute inset-0 bg-[#151413]/92 backdrop-blur-md flex flex-col items-center justify-center p-4 z-20"
+                exit={{ scale: 0.95, opacity: 0 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+                className="absolute inset-0 bg-[#12100e]/95 backdrop-blur-md flex flex-col items-center justify-center p-6 z-20"
               >
-                <div className="relative mb-3">
-                  <div className="absolute -inset-3 bg-[#c29b78]/30 rounded-full blur-xl animate-pulse" />
-                  <div className="relative p-3.5 bg-gradient-to-tr from-[#c29b78] to-[#e8d3b9] text-[#151413] rounded-full shadow-2xl">
-                    <Trophy className="w-9 h-9 stroke-[2.5]" />
-                  </div>
+                {/* Clean Flush Outline Trophy */}
+                <div className="w-12 h-12 rounded-xl bg-[#c29b78]/10 border border-[#c29b78]/20 flex items-center justify-center mb-3">
+                  <Trophy stroke="#c29b78" className="w-6 h-6" strokeWidth={1.5} />
                 </div>
 
-                <div className="text-xl sm:text-2xl font-black text-white tracking-tight uppercase mb-1 drop-shadow-md flex items-center gap-1.5">
+                {/* Title without Sparkle Star */}
+                <div className="text-xl sm:text-2xl font-bold text-[#f5f2eb] tracking-tight uppercase mb-1 drop-shadow-md">
                   <span>Puzzle Solved!</span>
-                  <Sparkles className="w-5 h-5 text-[#c29b78] fill-[#c29b78]" />
                 </div>
 
-                <div className="flex items-center gap-2 mb-4">
+                {/* Flush Elo Pill (No bulky background, No streak pill) */}
+                <div className="flex items-center justify-center gap-2 mb-4">
                   {lastEloChange !== null && (
-                    <span className="px-2.5 py-1 rounded-full bg-[#10b981]/20 border border-[#10b981]/40 text-[#10b981] text-xs font-black tracking-wide">
+                    <span
+                      className={`text-xs font-semibold tracking-wide ${
+                        lastEloChange >= 0 ? "text-emerald-400" : "text-rose-400"
+                      }`}
+                    >
                       {lastEloChange >= 0 ? `+${lastEloChange}` : lastEloChange} Elo
-                    </span>
-                  )}
-                  {streak > 0 && (
-                    <span className="px-2.5 py-1 rounded-full bg-[#c29b78]/20 border border-[#c29b78]/40 text-[#c29b78] text-xs font-black flex items-center gap-1">
-                      <Flame className="w-3.5 h-3.5 fill-[#c29b78]" />
-                      <span>{streak} Streak!</span>
                     </span>
                   )}
                   {combo > 1 && (
                     <span
                       data-testid="celebration-combo-badge"
-                      className="px-2.5 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-xs font-black flex items-center gap-1 animate-in zoom-in-95 duration-200"
+                      className="text-xs font-semibold text-emerald-400/90 tracking-wide flex items-center gap-1"
                     >
-                      <Sparkles className="w-3.5 h-3.5 fill-emerald-400" />
                       <span>{combo}x Combo!</span>
                     </span>
                   )}
@@ -2500,28 +2526,29 @@ export function PuzzleCard({
                       }
                       onNextPuzzle();
                     }}
-                    className="w-full h-11 bg-[#c29b78] hover:bg-[#d4b08f] text-[#151413] font-black rounded-xl shadow-lg shadow-[#c29b78]/30 flex items-center justify-center gap-2 transition-transform active:scale-95 cursor-pointer"
+                    className="w-full h-11 bg-[#c29b78] hover:bg-[#d4b08f] text-[#12100e] font-semibold rounded-xl shadow-lg shadow-[#c29b78]/20 flex items-center justify-center gap-2 transition-transform active:scale-95 cursor-pointer text-sm"
                   >
                     <span>Next Reel</span>
                     {autoNextCountdown !== null && (
-                      <span className="text-xs bg-[#151413]/20 px-2 py-0.5 rounded-full font-mono">
+                      <span className="text-xs bg-[#12100e]/20 px-2 py-0.5 rounded-full font-mono">
                         {autoNextCountdown}s
                       </span>
                     )}
-                    <ArrowRight className="w-4 h-4 stroke-[3]" />
+                    <ArrowRight className="w-4 h-4 stroke-[2]" />
                   </button>
 
                   <button
                     onClick={() => {
                       haptics.tap();
                       setIsReviewing(true);
+                      setShowSolvedModal(false);
                       if (autoNextTimerRef.current) {
                         clearTimeout(autoNextTimerRef.current);
                         autoNextTimerRef.current = null;
                       }
                       setAutoNextCountdown(null);
                     }}
-                    className="w-full h-9 text-xs text-[#a3a3a3] hover:text-[#f5f5f5] hover:bg-white/10 flex items-center justify-center gap-1.5 rounded-lg cursor-pointer"
+                    className="w-full h-9 text-xs text-[#78716c] hover:text-[#f5f2eb] hover:bg-white/[0.04] flex items-center justify-center gap-1.5 rounded-lg cursor-pointer transition-colors"
                   >
                     <Eye className="w-3.5 h-3.5" />
                     <span>Review Board</span>
