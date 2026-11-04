@@ -27,8 +27,10 @@ model User {
   createdAt       DateTime     @default(now())
 
   // Friendships
-  friendships     Friendship[] @relation("UserFriendships")
-  friendOf        Friendship[] @relation("FriendUsers")
+  friendships            Friendship[]    @relation("UserFriendships")
+  friendOf               Friendship[]    @relation("FriendUsers")
+  sentFriendRequests     FriendRequest[] @relation("SentFriendRequests")
+  receivedFriendRequests FriendRequest[] @relation("ReceivedFriendRequests")
 }
 
 model Friendship {
@@ -43,6 +45,31 @@ model Friendship {
   @@unique([userId, friendId])
   @@index([userId])
   @@index([friendId])
+}
+
+model FriendRequest {
+  id         String   @id @default(uuid())
+  senderId   String
+  receiverId String
+  status     String   @default("pending") // 'pending' | 'accepted' | 'declined'
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now()) @updatedAt
+
+  sender     User     @relation("SentFriendRequests", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver   User     @relation("ReceivedFriendRequests", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@unique([senderId, receiverId])
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([status])
+}
+
+model SystemSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@map("system_settings")
 }
 
 model Puzzle {
