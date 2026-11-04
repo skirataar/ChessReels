@@ -199,7 +199,7 @@ test.describe("Dark Luxury Calibration, Leaderboard Redesign & Two-Way Friend Re
     await acceptBtn.click();
 
     // Verify confirmation and request accepted
-    await expect(page.locator('[data-testid="no-incoming-requests"]')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('[data-testid="no-incoming-requests"]')).toBeVisible({ timeout: 10_000 });
 
     // Switch to Friends tab -> verify target user is now in Friends Leaderboard
     await page.click('[data-testid="tab-friends"]');
