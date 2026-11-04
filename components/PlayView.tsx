@@ -675,6 +675,8 @@ export function PlayView({
       const cleanResetCopy: PuzzleData = {
         ...failedPuzzle,
         instanceId: `${failedPuzzle.id}_attempt_${nextAttempt}`,
+        isRequeued: true,
+        attemptNumber: nextAttempt,
       };
       const currentGap = queue.length - fromIndex;
 

@@ -1,22 +1,40 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, Page } from "@playwright/test";
+
+const TEST_EMAIL = "devtest@doomchess.local";
+const TEST_PASSWORD = "TestPassword123!";
+
+async function loginAsDedicatedTestUser(page: Page) {
+  await page.goto("/play");
+  await page.waitForLoadState("domcontentloaded");
+
+  const board = page.getByTestId("chessboard-container");
+  const isAlreadyOnBoard = await board.isVisible({ timeout: 2500 }).catch(() => false);
+  if (isAlreadyOnBoard) {
+    return;
+  }
+
+  await page.goto("/");
+  const signInBtn = page.getByRole("button", { name: "Sign In" });
+  if (await signInBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+    await signInBtn.click();
+    await page.fill('input[placeholder="Username or email"]', TEST_EMAIL);
+    await page.fill('input[placeholder="Password"]', TEST_PASSWORD);
+    await page.getByRole("button", { name: "Sign In" }).click();
+    await page.waitForURL(/\/play/, { timeout: 10000 });
+  } else {
+    const playNow = page.getByRole("button", { name: /Play Now|Play/i });
+    if (await playNow.isVisible()) {
+      await playNow.click();
+      await page.waitForURL(/\/play/, { timeout: 10000 });
+    }
+  }
+
+  await expect(page.getByTestId("chessboard-container")).toBeVisible({ timeout: 10000 });
+}
 
 test.describe("Route-Scoped Viewport Lock & Puzzle Gesture Isolation", () => {
-  test.beforeEach(async ({ page }) => {
-    // 1. Visit homepage and sign in with the dedicated test account
-    await page.goto("http://localhost:3000/");
-
-    // Check if sign-in button is present (if not already authenticated)
-    const signInBtn = page.getByRole("button", { name: "Sign In" });
-    if (await signInBtn.isVisible()) {
-      await signInBtn.click();
-      await page.getByRole("textbox", { name: "Username or email" }).fill("devtest@doomchess.local");
-      await page.getByRole("textbox", { name: "Password" }).fill("TestPassword123!");
-      await page.getByRole("button", { name: "Sign In" }).click();
-      await page.waitForURL("http://localhost:3000/play");
-    }
-  });
-
   test("1. Route-Scoped Viewport Lock strictly locks native vertical page scrolling on /play", async ({ page }) => {
+    await loginAsDedicatedTestUser(page);
     await page.goto("http://localhost:3000/play");
     await page.waitForSelector('[data-testid="chessboard-container"]');
 
@@ -45,6 +63,7 @@ test.describe("Route-Scoped Viewport Lock & Puzzle Gesture Isolation", () => {
   });
 
   test("2. Navigating away from /play cleanly restores normal vertical page scrolling", async ({ page }) => {
+    await loginAsDedicatedTestUser(page);
     await page.goto("http://localhost:3000/play");
     await page.waitForSelector('[data-testid="chessboard-container"]');
 
@@ -102,3 +121,4 @@ test.describe("Route-Scoped Viewport Lock & Puzzle Gesture Isolation", () => {
     expect(hasHydrationError).toBe(false);
   });
 });
+

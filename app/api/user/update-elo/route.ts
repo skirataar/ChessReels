@@ -10,12 +10,13 @@ interface UpdateEloBody {
   guestId?: string;
   puzzleId?: string;
   dailyStreak?: number;
+  isRequeued?: boolean;
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as UpdateEloBody;
-    const { puzzleRating, currentUserElo, result, userId, guestId, puzzleId, dailyStreak } = body;
+    const { puzzleRating, currentUserElo, result, userId, guestId, puzzleId, dailyStreak, isRequeued } = body;
 
     if (
       typeof puzzleRating !== "number" ||
@@ -36,7 +37,12 @@ export async function POST(request: NextRequest) {
     const S = result === "win" ? 1 : 0;
     const exponent = (puzzleRating - currentUserElo) / 400;
     const E = 1 / (1 + Math.pow(10, exponent));
-    const eloChange = Math.round(K * (S - E));
+    let eloChange = Math.round(K * (S - E));
+
+    // For requeued puzzles, award lesser Elo than normal (50% of standard win, minimum +1)
+    if (isRequeued && result === "win") {
+      eloChange = Math.max(1, Math.round(eloChange * 0.5));
+    }
     const newElo = Math.max(100, currentUserElo + eloChange);
 
     const targetUserId = userId || guestId || "";
@@ -46,6 +52,7 @@ export async function POST(request: NextRequest) {
       expectedScore: Number(E.toFixed(4)),
       actualScore: S,
       userId: targetUserId || null,
+      isRequeued: Boolean(isRequeued),
     };
 
     if (!targetUserId || isGuestUserId(targetUserId)) {
@@ -66,7 +73,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(calculated);
     }
 
-    // Strict Backend Idempotency Guard: check if a solve record for (userId, puzzleId) already exists
+    // Strict Backend Idempotency Guard & Requeued Solve Rating:
     if (puzzleId && targetUserId) {
       const priorHistory = await prisma.puzzleHistory.findUnique({
         where: {
@@ -78,15 +85,28 @@ export async function POST(request: NextRequest) {
       });
 
       if (priorHistory) {
-        return NextResponse.json({
-          alreadyRated: true,
-          currentElo: existing.elo,
-          newElo: existing.elo,
-          eloChange: 0,
-          userId: targetUserId,
-          streak: existing.streak ?? 0,
-          peakElo: existing.peakElo ?? 800,
-        });
+        // If the prior attempt was already a WIN, block duplicate rating (strict anti-farming)
+        if (priorHistory.result === "win") {
+          return NextResponse.json({
+            alreadyRated: true,
+            currentElo: existing.elo,
+            newElo: existing.elo,
+            eloChange: 0,
+            userId: targetUserId,
+            streak: existing.streak ?? 0,
+            peakElo: existing.peakElo ?? 800,
+          });
+        }
+
+        // If priorHistory was a 'loss' and the new result is 'win', this is a requeued solve!
+        // Award lesser Elo than normal (50% of standard win, minimum +1)
+        if (result === "win") {
+          const normalWinDelta = Math.round(K * (1 - E));
+          const requeuedDelta = Math.max(1, Math.round(normalWinDelta * 0.5));
+          calculated.eloChange = requeuedDelta;
+          calculated.newElo = Math.max(100, currentUserElo + requeuedDelta);
+          calculated.isRequeued = true;
+        }
       }
     }
 
@@ -160,13 +180,15 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      const finalElo = calculated.newElo;
+      const finalEloChange = calculated.eloChange;
       const nextBestStreak = Math.max(existing?.bestStreak ?? 0, nextStreak);
-      const nextPeakElo = Math.max(existing?.peakElo ?? 800, newElo);
+      const nextPeakElo = Math.max(existing?.peakElo ?? 800, finalElo);
 
       const updatedUser = await prisma.user.update({
         where: { id: targetUserId },
         data: {
-          elo: newElo,
+          elo: finalElo,
           peakElo: nextPeakElo,
           streak: nextStreak,
           bestStreak: nextBestStreak,
@@ -176,12 +198,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         alreadyRated: false,
         newElo: updatedUser.elo,
-        eloChange,
+        eloChange: finalEloChange,
         expectedScore: Number(E.toFixed(4)),
         actualScore: S,
         userId: updatedUser.id,
         streak: updatedUser.streak,
         peakElo: updatedUser.peakElo,
+        isRequeued: calculated.isRequeued,
       });
     } catch (dbError) {
       console.warn(
@@ -190,11 +213,12 @@ export async function POST(request: NextRequest) {
       );
       return NextResponse.json({
         alreadyRated: false,
-        newElo,
-        eloChange,
+        newElo: calculated.newElo,
+        eloChange: calculated.eloChange,
         expectedScore: Number(E.toFixed(4)),
         actualScore: S,
         userId: targetUserId,
+        isRequeued: calculated.isRequeued,
       });
     }
   } catch (error) {

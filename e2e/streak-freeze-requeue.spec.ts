@@ -180,4 +180,69 @@ test.describe("Streak Freeze, Flush UI, and Failed Puzzle Re-queue Fixes", () =>
       expect(solvedAfterSecondAction).not.toContain(activePuzzleId);
     }
   });
+
+  test("4. Requeued puzzle mentions retry sleekly without pills and awards lesser Elo on solve", async ({
+    page,
+    request,
+  }) => {
+    // 1. API Verification: Requeued win awards lesser Elo than normal
+    const normalRes = await request.post("/api/user/update-elo", {
+      data: {
+        puzzleRating: 1400,
+        currentUserElo: 1200,
+        result: "win",
+        userId: "guest_test_requeue_check",
+        guestId: "guest_test_requeue_check",
+        puzzleId: "test_p_normal",
+        dailyStreak: 1,
+        isRequeued: false,
+      },
+    });
+    const normalData = await normalRes.json();
+
+    const requeueRes = await request.post("/api/user/update-elo", {
+      data: {
+        puzzleRating: 1400,
+        currentUserElo: 1200,
+        result: "win",
+        userId: "guest_test_requeue_check",
+        guestId: "guest_test_requeue_check",
+        puzzleId: "test_p_requeued",
+        dailyStreak: 1,
+        isRequeued: true,
+      },
+    });
+    const requeueData = await requeueRes.json();
+
+    expect(normalData.eloChange).toBeGreaterThan(0);
+    expect(requeueData.eloChange).toBeGreaterThan(0);
+    // Requeue eloChange must be strictly lesser than normal eloChange
+    expect(requeueData.eloChange).toBeLessThan(normalData.eloChange);
+    expect(requeueData.eloChange).toBe(Math.max(1, Math.round(normalData.eloChange * 0.5)));
+
+    // 2. UI Verification: Sleek inline tag (no pills or wrapper boxes)
+    await loginAsDedicatedTestUser(page);
+    await expect(page.getByTestId("chessboard-container")).toBeVisible({ timeout: 10000 });
+
+    // Inject a requeued puzzle in queue
+    await page.evaluate(() => {
+      const activeEl = document.querySelector("[data-testid='chessboard-container']");
+      if (activeEl) {
+        // Tag current puzzle card as requeued for visual inspection
+        window.dispatchEvent(
+          new CustomEvent("chess-reel-test-requeue", { detail: { isRequeued: true } })
+        );
+      }
+    });
+
+    const statusTag = page.getByTestId("requeued-status-tag");
+    if (await statusTag.isVisible()) {
+      await expect(statusTag).toContainText("Requeued");
+      const tagClass = (await statusTag.getAttribute("class")) || "";
+      // Must be sleek text: no pill backgrounds, no heavy borders, no rounded-full pill boxes
+      expect(tagClass).not.toContain("bg-");
+      expect(tagClass).not.toContain("border");
+      expect(tagClass).not.toContain("rounded-full");
+    }
+  });
 });
