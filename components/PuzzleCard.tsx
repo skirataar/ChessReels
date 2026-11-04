@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { Chess, Square, Move } from "chess.js";
-import { sounds } from "@/lib/audio";
+import { sounds, playSoundForMove, soundManager } from "@/lib/audio";
 import { haptics } from "@/lib/haptics";
 import confetti from "canvas-confetti";
 import {
@@ -337,15 +337,48 @@ export function PuzzleCard({
     haptics.tap();
     setTouchArrows([]);
     clearSquareSelection();
-    setViewMoveIndex((prev) => Math.max(0, prev - 1));
+    setViewMoveIndex((prev) => {
+      if (prev <= 0) return prev;
+      const next = prev - 1;
+      sounds.playMove();
+      return next;
+    });
   }, [clearSquareSelection]);
 
   const handleStepForward = useCallback(() => {
     haptics.tap();
     setTouchArrows([]);
     clearSquareSelection();
-    setViewMoveIndex((prev) => Math.min(moveHistory.length - 1, prev + 1));
-  }, [moveHistory.length, clearSquareSelection]);
+    setViewMoveIndex((prev) => {
+      if (prev >= moveHistory.length - 1) return prev;
+      const next = prev + 1;
+      try {
+        const fromFen = moveHistory[prev];
+        const toFen = moveHistory[next];
+        if (fromFen && toFen) {
+          const tempGame = new Chess(fromFen);
+          const legalMoves = tempGame.moves({ verbose: true });
+          const matchingMove = legalMoves.find((m) => {
+            const clone = new Chess(fromFen);
+            clone.move(m);
+            return clone.fen() === toFen;
+          });
+          if (matchingMove) {
+            const nextGame = new Chess(toFen);
+            const isOpponent = matchingMove.color !== playerColor;
+            playSoundForMove(matchingMove, nextGame, isOpponent);
+          } else {
+            sounds.playMove();
+          }
+        } else {
+          sounds.playMove();
+        }
+      } catch {
+        sounds.playMove();
+      }
+      return next;
+    });
+  }, [moveHistory, playerColor, clearSquareSelection]);
   const [solutionStartIndex, setSolutionStartIndex] = useState<number>(
     initialPuzzleState.solutionStartIndex
   );
@@ -684,6 +717,7 @@ export function PuzzleCard({
       }
     } catch {}
     setIsMuted(sounds.getIsMuted());
+    soundManager.preloadAll();
   }, [puzzle]);
 
   const showToast = useCallback((msg: string) => {
@@ -1143,7 +1177,7 @@ export function PuzzleCard({
       if (moveUci !== expectedUciNormalized) {
         // Legal chess move, but INCORRECT puzzle solution
         game.undo();
-        sounds.playError();
+        sounds.playIllegal();
         haptics.error();
 
         if (isCalibration) {
@@ -1225,7 +1259,13 @@ export function PuzzleCard({
         setViewMoveIndex(next.length - 1);
         return next;
       });
-      sounds.playMove();
+
+      const nextIndex = currentMoveIndex + 1;
+      const isSolved = nextIndex >= allMoves.length;
+
+      // Strict Priority SFX (check/checkmate, promote, castle, capture, standard)
+      // Automatically triggers game-end 150ms later if isSolved
+      playSoundForMove(moveMade, game, false, isSolved);
       haptics.success();
       setMistakeFeedback(null);
       setIsFlashingRed(false);
@@ -1233,11 +1273,8 @@ export function PuzzleCard({
       clearSquareSelection();
       setHintActive(false);
 
-      const nextIndex = currentMoveIndex + 1;
-
       // Check if the puzzle sequence is complete
-      if (nextIndex >= allMoves.length) {
-        sounds.playSuccess();
+      if (isSolved) {
         haptics.success();
         onStatusChange("solved");
 
@@ -1284,7 +1321,7 @@ export function PuzzleCard({
         if (!oppReply || !gameRef.current) return;
 
         try {
-          gameRef.current.move({
+          const oppMoveResult = gameRef.current.move({
             from: oppReply.slice(0, 2),
             to: oppReply.slice(2, 4),
             promotion: oppReply.length === 5 ? oppReply[4].toLowerCase() : undefined,
@@ -1296,13 +1333,14 @@ export function PuzzleCard({
             setViewMoveIndex(next.length - 1);
             return next;
           });
-          sounds.playMove();
 
           const afterOppIndex = nextIndex + 1;
+          const isSolvedAfterOpp = afterOppIndex >= allMoves.length;
+          playSoundForMove(oppMoveResult, gameRef.current, true, isSolvedAfterOpp);
+
           setCurrentMoveIndex(afterOppIndex);
 
-          if (afterOppIndex >= allMoves.length) {
-            sounds.playSuccess();
+          if (isSolvedAfterOpp) {
             haptics.success();
             onStatusChange("solved");
 
