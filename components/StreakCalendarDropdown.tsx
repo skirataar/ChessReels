@@ -559,23 +559,25 @@ export function StreakCalendarDropdown({
               </div>
             </div>
 
-            {/* Progress to next freeze */}
-            <div className="space-y-1 pt-0.5">
-              <div className="flex items-center justify-between text-[10px] text-white/50">
-                <span>Earn next freeze (7-day streak)</span>
-                <span className="font-mono text-white/70">
-                  {perfectWeekCounter}/7 Days
-                </span>
+            {/* Progress to next freeze - hidden when at full 2/2 capacity */}
+            {streakFreezes < 2 && (
+              <div className="space-y-1 pt-0.5">
+                <div className="flex items-center justify-between text-[10px] text-white/50">
+                  <span>Earn next freeze (7-day streak)</span>
+                  <span className="font-mono text-white/70">
+                    {perfectWeekCounter}/7 Days
+                  </span>
+                </div>
+                <div className="w-full h-1.5 rounded-full bg-white/10 overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-sky-400 to-sky-300 transition-all duration-300"
+                    style={{
+                      width: `${Math.min(100, (perfectWeekCounter / 7) * 100)}%`,
+                    }}
+                  />
+                </div>
               </div>
-              <div className="w-full h-1.5 rounded-full bg-white/10 overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-sky-400 to-sky-300 transition-all duration-300"
-                  style={{
-                    width: `${Math.min(100, (perfectWeekCounter / 7) * 100)}%`,
-                  }}
-                />
-              </div>
-            </div>
+            )}
 
             {/* Explainer Alert / Status Banner */}
             {isFrozenState ? (

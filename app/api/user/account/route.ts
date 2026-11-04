@@ -150,6 +150,17 @@ export async function POST(request: NextRequest) {
           passwordHash,
           isTestAccount: isTest,
           plan: "free",
+          targetElo: 1500,
+          lastSolvedDate: null,
+          streakFreezes: 0,
+          perfectWeekCounter: 0,
+          isFrozenState: false,
+          solvedPuzzleIds: [],
+          savedPuzzleIds: [],
+          likedPuzzleIds: [],
+          autoAdvance: false,
+          soundEnabled: true,
+          showCoordinates: true,
         },
       });
     }
@@ -161,8 +172,19 @@ export async function POST(request: NextRequest) {
       avatar: user.avatar,
       elo: user.elo,
       peakElo: user.peakElo,
+      targetElo: user.targetElo ?? 1500,
       streak: user.streak,
       bestStreak: user.bestStreak,
+      lastSolvedDate: user.lastSolvedDate ?? null,
+      streakFreezes: user.streakFreezes ?? 0,
+      perfectWeekCounter: user.perfectWeekCounter ?? 0,
+      isFrozenState: user.isFrozenState ?? false,
+      solvedPuzzleIds: user.solvedPuzzleIds ?? [],
+      savedPuzzleIds: user.savedPuzzleIds ?? [],
+      likedPuzzleIds: user.likedPuzzleIds ?? [],
+      autoAdvance: user.autoAdvance ?? false,
+      soundEnabled: user.soundEnabled ?? true,
+      showCoordinates: user.showCoordinates ?? true,
       isCalibrated: user.isCalibrated,
       calibrationStep: user.calibrationStep,
       isTestAccount: Boolean(user.isTestAccount),
@@ -216,8 +238,19 @@ export async function GET(request: NextRequest) {
         avatar: true,
         elo: true,
         peakElo: true,
+        targetElo: true,
         streak: true,
         bestStreak: true,
+        lastSolvedDate: true,
+        streakFreezes: true,
+        perfectWeekCounter: true,
+        isFrozenState: true,
+        solvedPuzzleIds: true,
+        savedPuzzleIds: true,
+        likedPuzzleIds: true,
+        autoAdvance: true,
+        soundEnabled: true,
+        showCoordinates: true,
         isCalibrated: true,
         calibrationStep: true,
         plan: true,
@@ -242,7 +275,22 @@ export async function GET(request: NextRequest) {
 
     const { email: _email, googleId: _googleId, passwordHash: _passwordHash, ...safeUser } = user;
 
-    return NextResponse.json({ user: safeUser });
+    return NextResponse.json({
+      user: {
+        ...safeUser,
+        targetElo: safeUser.targetElo ?? 1500,
+        lastSolvedDate: safeUser.lastSolvedDate ?? null,
+        streakFreezes: safeUser.streakFreezes ?? 0,
+        perfectWeekCounter: safeUser.perfectWeekCounter ?? 0,
+        isFrozenState: safeUser.isFrozenState ?? false,
+        solvedPuzzleIds: safeUser.solvedPuzzleIds ?? [],
+        savedPuzzleIds: safeUser.savedPuzzleIds ?? [],
+        likedPuzzleIds: safeUser.likedPuzzleIds ?? [],
+        autoAdvance: safeUser.autoAdvance ?? false,
+        soundEnabled: safeUser.soundEnabled ?? true,
+        showCoordinates: safeUser.showCoordinates ?? true,
+      },
+    });
   } catch (error) {
     console.error("Failed to fetch user:", error);
     return NextResponse.json(
@@ -255,7 +303,25 @@ export async function GET(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json();
-    const { userId, avatar, displayName, username } = body;
+    const {
+      userId,
+      avatar,
+      displayName,
+      username,
+      targetElo,
+      autoAdvance,
+      soundEnabled,
+      showCoordinates,
+      savedPuzzleIds,
+      likedPuzzleIds,
+      solvedPuzzleIds,
+      streak,
+      bestStreak,
+      lastSolvedDate,
+      streakFreezes,
+      perfectWeekCounter,
+      isFrozenState,
+    } = body;
 
     if (!userId) {
       return NextResponse.json(
@@ -269,6 +335,26 @@ export async function PATCH(request: NextRequest) {
     if (displayName !== undefined && typeof displayName === "string") {
       dataToUpdate.displayName = displayName.trim();
     }
+    if (typeof targetElo === "number") dataToUpdate.targetElo = targetElo;
+    if (typeof autoAdvance === "boolean") dataToUpdate.autoAdvance = autoAdvance;
+    if (typeof soundEnabled === "boolean") dataToUpdate.soundEnabled = soundEnabled;
+    if (typeof showCoordinates === "boolean") dataToUpdate.showCoordinates = showCoordinates;
+    if (Array.isArray(savedPuzzleIds)) dataToUpdate.savedPuzzleIds = savedPuzzleIds;
+    if (Array.isArray(likedPuzzleIds)) dataToUpdate.likedPuzzleIds = likedPuzzleIds;
+    if (Array.isArray(solvedPuzzleIds)) dataToUpdate.solvedPuzzleIds = solvedPuzzleIds;
+    if (typeof streak === "number") dataToUpdate.streak = Math.max(0, streak);
+    if (typeof bestStreak === "number") dataToUpdate.bestStreak = Math.max(0, bestStreak);
+    if (lastSolvedDate !== undefined) dataToUpdate.lastSolvedDate = lastSolvedDate;
+    if (typeof streakFreezes === "number") {
+      const freezes = Math.min(2, Math.max(0, streakFreezes));
+      dataToUpdate.streakFreezes = freezes;
+      if (freezes >= 2) dataToUpdate.perfectWeekCounter = 0;
+    }
+    if (typeof perfectWeekCounter === "number" && (dataToUpdate.streakFreezes ?? 0) < 2) {
+      dataToUpdate.perfectWeekCounter = Math.min(7, Math.max(0, perfectWeekCounter));
+    }
+    if (typeof isFrozenState === "boolean") dataToUpdate.isFrozenState = isFrozenState;
+
     if (username !== undefined && typeof username === "string") {
       const cleanUsername = username.trim().toLowerCase();
       if (!/^[a-z0-9_]{3,20}$/.test(cleanUsername)) {
@@ -307,6 +393,22 @@ export async function PATCH(request: NextRequest) {
         displayName: true,
         avatar: true,
         elo: true,
+        peakElo: true,
+        targetElo: true,
+        streak: true,
+        bestStreak: true,
+        lastSolvedDate: true,
+        streakFreezes: true,
+        perfectWeekCounter: true,
+        isFrozenState: true,
+        solvedPuzzleIds: true,
+        savedPuzzleIds: true,
+        likedPuzzleIds: true,
+        autoAdvance: true,
+        soundEnabled: true,
+        showCoordinates: true,
+        isCalibrated: true,
+        calibrationStep: true,
         plan: true,
       },
     });

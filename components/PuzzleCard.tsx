@@ -37,6 +37,7 @@ import { motion, AnimatePresence } from "framer-motion";
 
 import { Chessboard, defaultArrowOptions } from "react-chessboard";
 import { useBoardTheme } from "@/lib/boardThemes";
+import { isGuestUserId } from "@/lib/guestAccount";
 
 export interface PuzzleData {
   id: string;
@@ -723,6 +724,27 @@ export function PuzzleCard({
       }
 
       try {
+        let streakPayload: {
+          streakFreezes?: number;
+          perfectWeekCounter?: number;
+          isFrozenState?: boolean;
+          lastSolvedDate?: string;
+        } = {};
+        if (typeof window !== "undefined") {
+          try {
+            const raw = localStorage.getItem("chess_reel_streak_data");
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              streakPayload = {
+                streakFreezes: parsed.streakFreezes,
+                perfectWeekCounter: parsed.perfectWeekCounter,
+                isFrozenState: parsed.isFrozenState,
+                lastSolvedDate: parsed.lastSolvedDate,
+              };
+            }
+          } catch {}
+        }
+
         const response = await fetch("/api/user/update-elo", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -734,6 +756,10 @@ export function PuzzleCard({
             guestId,
             puzzleId: puzzle.id,
             dailyStreak: streak,
+            streakFreezes: streakPayload.streakFreezes,
+            perfectWeekCounter: streakPayload.perfectWeekCounter,
+            isFrozenState: streakPayload.isFrozenState,
+            lastSolvedDate: streakPayload.lastSolvedDate,
             isRequeued,
             attemptCount: puzzle.attemptCount,
           }),
@@ -1691,6 +1717,14 @@ export function PuzzleCard({
       localStorage.setItem(puzzlesKey, JSON.stringify(savedPuzzlesMap));
       localStorage.setItem("chess_reel_saved_puzzles", JSON.stringify(savedPuzzlesMap));
       window.dispatchEvent(new Event("bookmarks-updated"));
+
+      if (userId && !isGuestUserId(userId)) {
+        fetch("/api/user/account", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId, savedPuzzleIds: ids }),
+        }).catch(() => {});
+      }
     } catch {}
   };
 

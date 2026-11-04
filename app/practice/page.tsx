@@ -33,6 +33,7 @@ import {
 import { useTierQuota } from "@/lib/useTierQuota";
 import { QuotaPaywallModal } from "@/components/QuotaPaywallModal";
 import { clearGuestLocalSession, isGuestAccount } from "@/lib/guestAccount";
+import { hydrateUserSession } from "@/lib/sessionHydration";
 
 interface PracticeTheme {
   id: string;
@@ -104,11 +105,7 @@ export default function PracticePage() {
             .then((data) => {
               if (data?.user) {
                 setAccount(data.user);
-                window.localStorage.setItem("chess_reel_account", JSON.stringify(data.user));
-                if (data.user.plan) {
-                  window.localStorage.setItem("chess_reel_plan", data.user.plan);
-                  window.dispatchEvent(new Event("plan-updated"));
-                }
+                hydrateUserSession(data.user);
               }
             })
             .catch(() => {});

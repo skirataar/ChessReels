@@ -22,6 +22,7 @@ import {
 import { BOARD_THEMES, BoardTheme, useBoardTheme } from "@/lib/boardThemes";
 import { sounds } from "@/lib/audio";
 import { UserAvatar } from "@/components/UserAvatar";
+import { isGuestUserId } from "@/lib/guestAccount";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -124,6 +125,13 @@ export function SettingsModal({
         sounds.playMove();
       } catch {}
     }
+    if (userAccount?.id && !isGuestUserId(userAccount.id)) {
+      fetch("/api/user/account", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: userAccount.id, soundEnabled: nextState }),
+      }).catch(() => {});
+    }
   };
 
   // Toggle haptics
@@ -146,6 +154,13 @@ export function SettingsModal({
       window.localStorage.setItem("chess_reel_auto_advance", next ? "1" : "0");
       window.dispatchEvent(new Event("auto-advance-updated"));
     }
+    if (userAccount?.id && !isGuestUserId(userAccount.id)) {
+      fetch("/api/user/account", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: userAccount.id, autoAdvance: next }),
+      }).catch(() => {});
+    }
   };
 
   // Toggle board markings / coordinates
@@ -157,6 +172,13 @@ export function SettingsModal({
       window.dispatchEvent(
         new CustomEvent("board-coordinates-updated", { detail: { show: nextState } })
       );
+    }
+    if (userAccount?.id && !isGuestUserId(userAccount.id)) {
+      fetch("/api/user/account", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: userAccount.id, showCoordinates: nextState }),
+      }).catch(() => {});
     }
   };
 
