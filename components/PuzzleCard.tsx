@@ -553,7 +553,9 @@ export function PuzzleCard({
           setMoveHistory(history);
           setViewMoveIndex(history.length - 1);
           setPlayerTurnMessage("Solved");
+          hasWonRef.current = true;
           if (puzzle) {
+            onMarkRated?.(puzzle.id);
             onSavePuzzleState?.(puzzle.id, {
               status: "solved",
               moveHistory: history,
