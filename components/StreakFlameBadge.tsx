@@ -12,6 +12,7 @@ export interface StreakFlameBadgeProps {
   className?: string;
   testId?: string;
   flameTestId?: string;
+  onClick?: () => void;
 }
 
 export function StreakFlameBadge({
@@ -22,6 +23,7 @@ export function StreakFlameBadge({
   className = "",
   testId = "header-streak-indicator",
   flameTestId = "header-flame-icon",
+  onClick,
 }: StreakFlameBadgeProps) {
   const prevStreakRef = useRef(streak);
   const prevFrozenRef = useRef(isFrozenState);
@@ -66,11 +68,28 @@ export function StreakFlameBadge({
     <div
       data-testid={testId}
       suppressHydrationWarning
-      className={`inline-flex items-center gap-1 cursor-default select-none transition-all duration-300 bg-transparent border-none p-0 ${className}`}
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={
+        onClick
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onClick();
+              }
+            }
+          : undefined
+      }
+      className={`inline-flex items-center gap-1 ${
+        onClick
+          ? "cursor-pointer hover:opacity-90 active:scale-[0.98]"
+          : "cursor-default"
+      } select-none transition-all duration-300 bg-transparent border-none p-0 ${className}`}
       title={
         isFrozen
-          ? `Streak Protected by Freeze: ${streak} ${streak === 1 ? "day" : "days"} (Solve today to thaw & advance)`
-          : `Daily Streak: ${streak} ${streak === 1 ? "day" : "days"}`
+          ? `Streak Protected by Freeze: ${streak} ${streak === 1 ? "day" : "days"} (Click to view calendar)`
+          : `Daily Streak: ${streak} ${streak === 1 ? "day" : "days"} (Click to view calendar)`
       }
     >
       {/* Screen-reader text for accessibility and test suites */}
