@@ -1152,7 +1152,10 @@ export function PlayView({
     const isRequeued = isRequeuedParam !== undefined ? isRequeuedParam : Boolean(activePuzzle?.isRequeued || (activePuzzle?.attemptCount && activePuzzle.attemptCount > 1));
     const currentRatingState = rawPuzzleId ? puzzleRatingHistoryRef.current[rawPuzzleId] : undefined;
 
-    const isAlreadyRated = getIsPuzzleAlreadyRated(activePuzzle) && !isCalibrating;
+    const isAlreadyRated =
+      (puzzleId
+        ? currentRatingState === "solved" || currentRatingState === "redeemed"
+        : getIsPuzzleAlreadyRated(activePuzzle)) && !isCalibrating;
 
     // Strict Elo Idempotency Guard: do not alter Elo or streak if this puzzle was already rated
     if (isAlreadyRated) {
