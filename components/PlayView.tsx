@@ -1432,7 +1432,7 @@ export function PlayView({
               title="Global Standings & Friends"
             >
               <Trophy className="w-3.5 h-3.5" />
-              {incomingFriendRequestsCount > 0 && (
+              {hasMounted && incomingFriendRequestsCount > 0 && (
                 <span
                   data-testid="header-friend-requests-dot"
                   className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-[#c29b78] shadow-[0_0_6px_rgba(194,155,120,0.8)]"
