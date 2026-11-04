@@ -1565,14 +1565,18 @@ export function PuzzleCard({
   // Drag and drop drop handler:
   // If dropped back onto sourceSquare, keep selection active and return false quietly
   const handlePieceDrop = useCallback(
-    ({
-      sourceSquare,
-      targetSquare,
-    }: {
-      sourceSquare: string;
-      targetSquare: string | null;
-    }): boolean => {
+    (...args: any[]): boolean => {
+      let sourceSquare: string | undefined;
+      let targetSquare: string | null = null;
+      if (typeof args[0] === "string" && typeof args[1] === "string") {
+        sourceSquare = args[0];
+        targetSquare = args[1];
+      } else if (args[0]?.sourceSquare) {
+        sourceSquare = args[0].sourceSquare;
+        targetSquare = args[0].targetSquare ?? null;
+      }
       isPieceDragRef.current = false;
+      if (!sourceSquare || !targetSquare) return false;
       if (status !== "playing" && status !== "failed") return false;
       if ((canPlay === false && !isPro) || isPaywallOpen) return false;
       if (viewMoveIndex < moveHistory.length - 1) {
@@ -1612,7 +1616,14 @@ export function PuzzleCard({
 
   // Click-to-move / Tap-to-move handler with instant friendly switching & opponent guards
   const handleSquareClick = useCallback(
-    ({ square }: { square: string }) => {
+    (...args: any[]) => {
+      let square: string | undefined;
+      if (typeof args[0] === "string" && args[0].length === 2) {
+        square = args[0];
+      } else if (args[0]?.square) {
+        square = args[0].square;
+      }
+      if (!square) return;
       lastSquareClickTimeRef.current = { square, time: Date.now() };
 
       if (viewMoveIndex < moveHistory.length - 1) {
@@ -1678,8 +1689,15 @@ export function PuzzleCard({
 
   // Deduplicated piece click handler to eliminate click-vs-drag race conditions
   const handlePieceClick = useCallback(
-    (args: any) => {
-      const square = args?.square;
+    (...args: any[]) => {
+      let square: string | undefined;
+      if (typeof args[0] === "string" && args[0].length === 2) {
+        square = args[0];
+      } else if (typeof args[1] === "string" && args[1].length === 2) {
+        square = args[1];
+      } else if (args[0]?.square) {
+        square = args[0].square;
+      }
       if (!square) return;
       if (
         Date.now() - lastSquareClickTimeRef.current.time < 150 &&
@@ -1687,7 +1705,7 @@ export function PuzzleCard({
       ) {
         return;
       }
-      handleSquareClick({ square });
+      handleSquareClick(square);
     },
     [handleSquareClick]
   );
@@ -2484,10 +2502,7 @@ export function PuzzleCard({
                 className="absolute inset-0 bg-[#12100e]/95 backdrop-blur-md flex flex-col items-center justify-center p-6 z-20"
               >
                 {/* Clean Flush Outline Trophy */}
-                <div className="w-12 h-12 rounded-xl bg-[#c29b78]/10 border border-[#c29b78]/20 flex items-center justify-center mb-3">
-                  <Trophy stroke="#c29b78" className="w-6 h-6" strokeWidth={1.5} />
-                </div>
-
+                <Trophy stroke="#c29b78" className="w-6 h-6 mb-3" strokeWidth={1.5} />
                 {/* Title without Sparkle Star */}
                 <div className="text-xl sm:text-2xl font-bold text-[#f5f2eb] tracking-tight uppercase mb-1 drop-shadow-md">
                   <span>Puzzle Solved!</span>
