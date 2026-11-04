@@ -1378,6 +1378,7 @@ export function PlayView({
       setCurrentElo((prev) => {
         const next = typeof newElo === "number" ? Math.max(100, newElo) : Math.max(100, prev + change);
         currentEloRef.current = next;
+        saveUserStatsSync({ elo: next });
         try {
           if (typeof window !== "undefined") {
             window.localStorage.setItem(ELO_STORAGE_KEY, next.toString());
