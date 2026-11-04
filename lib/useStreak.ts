@@ -254,7 +254,7 @@ export interface StreakStats {
 
 const SERVER_SNAPSHOT: StreakStats = {
   dailyStreak: 0,
-  streakFreezes: 0,
+  streakFreezes: 2,
   perfectWeekCounter: 0,
   combo: 0,
   bestCombo: 0,
@@ -285,7 +285,7 @@ function getSnapshot(): StreakStats {
         streakData = {
           currentStreak: typeof parsed.currentStreak === "number" ? parsed.currentStreak : 0,
           lastSolvedDate: parsed.lastSolvedDate || null,
-          streakFreezes: Math.min(2, Math.max(0, parsed.streakFreezes || 0)),
+          streakFreezes: typeof parsed.streakFreezes === "number" ? Math.min(2, Math.max(0, parsed.streakFreezes)) : 2,
           perfectWeekCounter: Math.min(7, Math.max(0, parsed.perfectWeekCounter || 0)),
           isFrozenState: Boolean(parsed.isFrozenState),
         };
@@ -293,7 +293,7 @@ function getSnapshot(): StreakStats {
         streakData = {
           currentStreak: rawLegacyStreak,
           lastSolvedDate: rawLegacyLastDate,
-          streakFreezes: 0,
+          streakFreezes: 2,
           perfectWeekCounter: 0,
           isFrozenState: false,
         };
@@ -302,7 +302,7 @@ function getSnapshot(): StreakStats {
       streakData = {
         currentStreak: rawLegacyStreak,
         lastSolvedDate: rawLegacyLastDate,
-        streakFreezes: 0,
+        streakFreezes: 2,
         perfectWeekCounter: 0,
         isFrozenState: false,
       };
@@ -310,6 +310,17 @@ function getSnapshot(): StreakStats {
 
     // Resolve active state on load
     const effectiveStreakData = resolveStreakOnLoad(streakData, today);
+
+    // Persist if newly initialized or state changed on load (e.g. freeze consumed or streak lapsed)
+    if (!storedStreakDataRaw || JSON.stringify(effectiveStreakData) !== JSON.stringify(streakData)) {
+      try {
+        window.localStorage.setItem(STREAK_DATA_KEY, JSON.stringify(effectiveStreakData));
+        window.localStorage.setItem(DAILY_STREAK_KEY, String(effectiveStreakData.currentStreak));
+        if (effectiveStreakData.lastSolvedDate) {
+          window.localStorage.setItem(LAST_PLAYED_DATE_KEY, effectiveStreakData.lastSolvedDate);
+        }
+      } catch {}
+    }
 
     const rawCombo = parseInt(
       window.localStorage.getItem(SOLVE_COMBO_KEY) || "0",
@@ -387,11 +398,18 @@ export function resetStreakStats() {
   try {
     window.localStorage.removeItem(DAILY_STREAK_KEY);
     window.localStorage.removeItem(LAST_PLAYED_DATE_KEY);
-    window.localStorage.removeItem(STREAK_DATA_KEY);
     window.localStorage.removeItem(TOTAL_SOLVED_KEY);
     window.localStorage.removeItem(TOTAL_FAILED_KEY);
     window.localStorage.removeItem(SOLVE_COMBO_KEY);
     window.localStorage.removeItem(BEST_COMBO_KEY);
+    const initialFresh: StreakData = {
+      currentStreak: 0,
+      lastSolvedDate: null,
+      streakFreezes: 2,
+      perfectWeekCounter: 0,
+      isFrozenState: false,
+    };
+    window.localStorage.setItem(STREAK_DATA_KEY, JSON.stringify(initialFresh));
     cachedSnapshot = SERVER_SNAPSHOT;
     notifyListeners();
   } catch {}
@@ -420,7 +438,7 @@ export function useStreak() {
           currentStreakData = {
             currentStreak: typeof parsed.currentStreak === "number" ? parsed.currentStreak : 0,
             lastSolvedDate: parsed.lastSolvedDate || null,
-            streakFreezes: Math.min(2, Math.max(0, parsed.streakFreezes || 0)),
+            streakFreezes: typeof parsed.streakFreezes === "number" ? Math.min(2, Math.max(0, parsed.streakFreezes)) : 2,
             perfectWeekCounter: Math.min(7, Math.max(0, parsed.perfectWeekCounter || 0)),
             isFrozenState: Boolean(parsed.isFrozenState),
           };
@@ -428,7 +446,7 @@ export function useStreak() {
           currentStreakData = {
             currentStreak: rawLegacyStreak,
             lastSolvedDate: rawLegacyLastDate,
-            streakFreezes: 0,
+            streakFreezes: 2,
             perfectWeekCounter: 0,
             isFrozenState: false,
           };
@@ -437,7 +455,7 @@ export function useStreak() {
         currentStreakData = {
           currentStreak: rawLegacyStreak,
           lastSolvedDate: rawLegacyLastDate,
-          streakFreezes: 0,
+          streakFreezes: 2,
           perfectWeekCounter: 0,
           isFrozenState: false,
         };
