@@ -282,6 +282,66 @@ test.describe("Temp QA Test Harness Page (/temp-qa)", () => {
     await expect(streakInd).toContainText("0 Days");
   });
 
+  test("Module 6: Multi-Day Miss, 30-Day Streak, Freezes 2->1->0 and 3rd Day Lapsed to 0", async ({
+    page,
+  }) => {
+    const streakInd = page.locator('[data-testid="qa-streak-indicator"]');
+    const freezeInd = page.locator('[data-testid="qa-freeze-indicator"]');
+    const stateBadge = page.locator('[data-testid="qa-streak-state-badge"]');
+    const numDisplay = page.locator('[data-testid="streak-number-display"]');
+
+    // 1. Preset 30 Streak (2 Freezes)
+    await page.getByTestId("load-scenario-30-btn").click();
+    await page.waitForTimeout(300);
+    await expect(numDisplay.last()).toHaveText("30");
+    await expect(freezeInd).toContainText("2/2 Freezes");
+    await expect(stateBadge).toContainText("State C: Ignited Amber");
+
+    // 2. Miss 1 Day -> Freezes at 30 with 1/2 freezes remaining
+    await page.getByTestId("streak-miss-1-day-btn").click();
+    await page.waitForTimeout(300);
+    await expect(numDisplay.last()).toHaveText("30");
+    await expect(freezeInd).toContainText("1/2 Freezes");
+    await expect(stateBadge).toContainText("State B: Icy Frozen");
+
+    // 3. Solve Today -> Thaws ice, advances to 31, strictly preserves 1/2 freezes
+    await page.getByTestId("streak-solve-today-btn").click();
+    await page.waitForTimeout(300);
+    await expect(numDisplay.last()).toHaveText("31");
+    await expect(freezeInd).toContainText("1/2 Freezes");
+    await expect(stateBadge).toContainText("State C: Ignited Amber");
+
+    // 4. Miss another day -> Freezes at 31 with 0/2 freezes remaining
+    await page.getByTestId("streak-miss-1-day-btn").click();
+    await page.waitForTimeout(300);
+    await expect(numDisplay.last()).toHaveText("31");
+    await expect(freezeInd).toContainText("0/2 Freezes");
+    await expect(stateBadge).toContainText("State B: Icy Frozen");
+
+    // 5. Solve Today -> Thaws ice, advances to 32, 0/2 freezes
+    await page.getByTestId("streak-solve-today-btn").click();
+    await page.waitForTimeout(300);
+    await expect(numDisplay.last()).toHaveText("32");
+    await expect(freezeInd).toContainText("0/2 Freezes");
+    await expect(stateBadge).toContainText("State C: Ignited Amber");
+
+    // 6. Test 2-Day consecutive miss: 30 -> 2 day miss -> 0 freezes left, still frozen at 30
+    await page.getByTestId("load-scenario-30-btn").click();
+    await page.waitForTimeout(300);
+    await page.getByTestId("streak-miss-2-days-btn").click();
+    await page.waitForTimeout(300);
+    await expect(numDisplay.last()).toHaveText("30");
+    await expect(freezeInd).toContainText("0/2 Freezes");
+    await expect(stateBadge).toContainText("State B: Icy Frozen");
+
+    // 7. On 3rd day miss -> strictly reset to 0!
+    await page.getByTestId("streak-miss-1-day-btn").click();
+    await page.waitForTimeout(300);
+    await expect(numDisplay.last()).toHaveText("0");
+    await expect(freezeInd).toContainText("0/2 Freezes");
+    await expect(stateBadge).toContainText("State A: Hollow (0)");
+  });
+
   test("Module 7: Database Test Account Cleanup & Inspector renders and supports selective / bulk deletion", async ({
     page,
   }) => {

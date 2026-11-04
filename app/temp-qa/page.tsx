@@ -131,6 +131,11 @@ const INITIAL_MOCK_PUZZLES: MockPuzzle[] = [
 
 export default function TempQAPage() {
   const router = useRouter();
+  const [hasMounted, setHasMounted] = useState<boolean>(false);
+
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
 
   // -------------------------------------------------------------
   // MODULE 1: Onboarding Summary Pill & Pro Upsell Simulator
@@ -672,6 +677,56 @@ export default function TempQAPage() {
     refreshLiveStreak();
   }, [refreshLiveStreak]);
 
+  const handleSolveToday = () => {
+    const beforeStreak = streakData.currentStreak;
+    const beforeFreezes = streakData.streakFreezes;
+    const wasFrozen = Boolean(streakData.isFrozenState);
+
+    const resolved = resolveStreakOnSolve(streakData, simulatedDate);
+    setStreakData(resolved);
+    setIsTestingIgnition(true);
+
+    let msg = "";
+    if (wasFrozen) {
+      msg = `[Solve on Frozen Day (${simulatedDate})] Thawed! Streak incremented ${beforeStreak} -> ${resolved.currentStreak}, remaining freezes PRESERVED at ${resolved.streakFreezes}/2!`;
+    } else {
+      msg = `[Solve Today (${simulatedDate})] Streak: ${beforeStreak} -> ${resolved.currentStreak}, Freezes: ${resolved.streakFreezes}/2, Week: ${resolved.perfectWeekCounter}/7`;
+    }
+
+    setStreakLog((prev) => [msg, ...prev.slice(0, 7)]);
+    setTimeout(() => setIsTestingIgnition(false), 700);
+  };
+
+  const handleLoadScenario30 = () => {
+    const today = simulatedDate || "2026-11-04";
+    setStreakData({
+      currentStreak: 30,
+      lastSolvedDate: today,
+      streakFreezes: 2,
+      perfectWeekCounter: 0,
+      isFrozenState: false,
+    });
+    setStreakLog((prev) => [
+      `[Scenario Preset] Loaded 30-Day Streak with 2/2 Freezes on ${today}. Test 1-day or 2-day miss now!`,
+      ...prev.slice(0, 7),
+    ]);
+  };
+
+  const handleLoadScenario10 = () => {
+    const today = simulatedDate || "2026-11-04";
+    setStreakData({
+      currentStreak: 10,
+      lastSolvedDate: today,
+      streakFreezes: 2,
+      perfectWeekCounter: 0,
+      isFrozenState: false,
+    });
+    setStreakLog((prev) => [
+      `[Scenario Preset] Loaded 10-Day Streak with 2/2 Freezes on ${today}. Test 1-day or 2-day miss now!`,
+      ...prev.slice(0, 7),
+    ]);
+  };
+
   const handleStreakSolveNextDay = () => {
     const nextDate = addCalendarDays(simulatedDate, 1);
     const resolved = resolveStreakOnSolve(streakData, nextDate);
@@ -825,6 +880,15 @@ export default function TempQAPage() {
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
     );
   };
+
+  if (!hasMounted) {
+    return (
+      <div className="min-h-screen bg-[#0a0908] text-[#f5f2eb] flex flex-col items-center justify-center p-6 font-sans antialiased">
+        <div className="w-8 h-8 rounded-full border-2 border-[#c29b78] border-t-transparent animate-spin mb-4" />
+        <div className="text-sm font-semibold text-white/70">Loading QA Test Harness...</div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -1694,6 +1758,7 @@ export default function TempQAPage() {
                 perfectWeekCounter={streakData.perfectWeekCounter}
                 isFrozenState={Boolean(streakData.isFrozenState)}
                 lastSolvedDate={streakData.lastSolvedDate}
+                todayDate={simulatedDate}
               />
             </div>
 
@@ -1799,44 +1864,82 @@ export default function TempQAPage() {
 
           {/* Time-Travel Action Buttons */}
           <div className="space-y-2 pt-2 border-t border-white/10">
+            {/* Primary Solve Actions */}
             <div className="grid grid-cols-2 gap-2">
+              <button
+                data-testid="streak-solve-today-btn"
+                onClick={handleSolveToday}
+                className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-500/25 to-emerald-600/20 text-emerald-300 border border-emerald-500/40 text-xs font-black hover:bg-emerald-500/30 active:scale-[0.99] transition-all flex items-center justify-center gap-1.5 shadow-sm"
+                title="Solve a puzzle on the current simulated date. If frozen, thaws ice, increments streak, and strictly preserves freezes!"
+              >
+                <Check className="w-4 h-4 stroke-[3]" />
+                <span>Solve Today ({simulatedDate.slice(5)})</span>
+              </button>
               <button
                 data-testid="streak-plus-one-day-btn"
                 onClick={handleStreakSolveNextDay}
-                className="py-2 px-3 rounded-xl bg-white/5 border border-white/10 text-xs font-semibold hover:bg-white/10 text-white flex items-center justify-center gap-1.5"
+                className="py-2.5 px-3 rounded-xl bg-white/5 border border-white/10 text-xs font-semibold hover:bg-white/10 text-white flex items-center justify-center gap-1.5 transition-all"
+                title="Advance date to tomorrow (+1 Day) and solve a puzzle"
               >
-                <span>+1 Day (Solve)</span>
+                <span>+1 Day &amp; Solve</span>
               </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
               <button
                 data-testid="streak-perfect-week-btn"
                 onClick={handleSimulatePerfectWeek}
-                className="py-2 px-3 rounded-xl bg-sky-500/20 text-sky-300 border border-sky-500/30 text-xs font-bold hover:bg-sky-500/30 flex items-center justify-center gap-1.5"
+                className="col-span-2 py-2 px-3 rounded-xl bg-sky-500/20 text-sky-300 border border-sky-500/30 text-xs font-bold hover:bg-sky-500/30 flex items-center justify-center gap-1.5"
               >
                 <span>7-Day Perfect Week (+1 ❄️)</span>
               </button>
             </div>
 
+            {/* Miss Days (Rollover Simulations) */}
             <div className="grid grid-cols-3 gap-2">
               <button
                 data-testid="streak-miss-1-day-btn"
                 onClick={() => handleMissDays(1)}
-                className="py-2 px-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] font-medium text-amber-200 hover:bg-amber-500/20 text-center"
+                className="py-2 px-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] font-bold text-amber-200 hover:bg-amber-500/20 text-center transition-all"
+                title="Miss 1 day (advances 2 days to morning rollover). Consumes 1 freeze, preserves streak, enters Icy Frozen state."
               >
                 Miss 1 Day
               </button>
               <button
                 data-testid="streak-miss-2-days-btn"
                 onClick={() => handleMissDays(2)}
-                className="py-2 px-2 rounded-xl bg-orange-500/10 border border-orange-500/20 text-[11px] font-medium text-orange-200 hover:bg-orange-500/20 text-center"
+                className="py-2 px-2 rounded-xl bg-orange-500/10 border border-orange-500/20 text-[11px] font-bold text-orange-200 hover:bg-orange-500/20 text-center transition-all"
+                title="Miss 2 consecutive days. Consumes 2 freezes, preserves streak, enters Icy Frozen state."
               >
                 Miss 2 Days
               </button>
               <button
                 data-testid="streak-miss-3-days-btn"
                 onClick={() => handleMissDays(3)}
-                className="py-2 px-2 rounded-xl bg-rose-500/10 border border-rose-500/20 text-[11px] font-medium text-rose-300 hover:bg-rose-500/20 text-center"
+                className="py-2 px-2 rounded-xl bg-rose-500/10 border border-rose-500/20 text-[11px] font-bold text-rose-300 hover:bg-rose-500/20 text-center transition-all"
+                title="Miss 3 consecutive days. Exceeds max 2 freezes: streak strictly lapses to 0."
               >
                 Miss 3 Days
+              </button>
+            </div>
+
+            {/* Quick Test Scenarios */}
+            <div className="grid grid-cols-2 gap-2 pt-1 border-t border-white/5">
+              <button
+                data-testid="load-scenario-30-btn"
+                onClick={handleLoadScenario30}
+                className="py-1.5 px-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[10px] font-bold text-amber-300 hover:bg-amber-500/20 text-center transition-all"
+                title="Load 30-Day Streak with 2/2 Freezes (User Scenario)"
+              >
+                Preset: 30 Streak (2 ❄️)
+              </button>
+              <button
+                data-testid="load-scenario-10-btn"
+                onClick={handleLoadScenario10}
+                className="py-1.5 px-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[10px] font-bold text-amber-300 hover:bg-amber-500/20 text-center transition-all"
+                title="Load 10-Day Streak with 2/2 Freezes (User Scenario)"
+              >
+                Preset: 10 Streak (2 ❄️)
               </button>
             </div>
           </div>
