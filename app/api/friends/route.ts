@@ -171,9 +171,16 @@ export async function POST(request: NextRequest) {
     const cleanUsername = requestedUsername.toLowerCase().replace(/^@/, "");
 
     // 1. Look up sender
-    const sender = await prisma.user.findUnique({
+    const sessionCookie = request.cookies.get("chess_reel_session")?.value;
+    let sender = await prisma.user.findUnique({
       where: { id: userId },
     });
+
+    if (!sender && sessionCookie) {
+      sender = await prisma.user.findUnique({
+        where: { id: sessionCookie },
+      });
+    }
 
     if (!sender) {
       return NextResponse.json(

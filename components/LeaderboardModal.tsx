@@ -153,7 +153,20 @@ export function LeaderboardModal({
   const [isSendingRequest, setIsSendingRequest] = useState<boolean>(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
-  const effectiveUserId = userAccount?.id || guestId;
+  const effectiveUserId =
+    userAccount?.id ||
+    (typeof window !== "undefined"
+      ? (() => {
+          try {
+            const raw = window.localStorage.getItem("chess_reel_account");
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              if (parsed?.id) return parsed.id;
+            }
+          } catch {}
+          return guestId;
+        })()
+      : guestId);
 
   // Load friends and pending requests from API
   const loadFriendsAndRequests = useCallback(async () => {
