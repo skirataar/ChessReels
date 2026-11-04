@@ -409,6 +409,44 @@ export function PuzzleCard({
   const [highlightStyles, setHighlightStyles] = useState<
     Record<string, React.CSSProperties>
   >({});
+
+  // King-in-check square detection for crimson highlight
+  const inCheckKingSquare = useMemo(() => {
+    if (!displayFen) return null;
+    try {
+      const c = new Chess(displayFen);
+      if (c.inCheck()) {
+        const turn = c.turn();
+        const board = c.board();
+        const files = ["a", "b", "c", "d", "e", "f", "g", "h"];
+        for (let r = 0; r < 8; r++) {
+          for (let f = 0; f < 8; f++) {
+            const piece = board[r][f];
+            if (piece && piece.type === "k" && piece.color === turn) {
+              return `${files[f]}${8 - r}`;
+            }
+          }
+        }
+      }
+    } catch {}
+    return null;
+  }, [displayFen]);
+
+  // Combined square styles: Move hints + Crimson check highlight on the King in check
+  const customSquareStyles = useMemo(() => {
+    const styles: Record<string, React.CSSProperties> = { ...highlightStyles };
+    if (inCheckKingSquare) {
+      styles[inCheckKingSquare] = {
+        ...(styles[inCheckKingSquare] || {}),
+        background:
+          "radial-gradient(circle, rgba(239, 68, 68, 0.75) 0%, rgba(220, 38, 38, 0.4) 60%, transparent 100%)",
+        backgroundColor: "rgba(239, 68, 68, 0.45)",
+        boxShadow: "inset 0 0 16px rgba(239, 68, 68, 0.8)",
+        borderRadius: "4px",
+      };
+    }
+    return styles;
+  }, [highlightStyles, inCheckKingSquare]);
   // Board markings (coordinates notation) state
   const [showCoordinates, setShowCoordinates] = useState<boolean>(() => {
     if (typeof window === "undefined") return true;
@@ -2044,7 +2082,11 @@ export function PuzzleCard({
       onTouchCancel={handleTouchCancel}
       onMouseDown={handleMouseDown}
       onWheel={handleWheel}
-      className="w-full flex flex-col items-center justify-start max-w-md mx-auto relative select-none touch-none overscroll-none"
+      className="w-full flex flex-col items-center justify-center mx-auto relative select-none touch-none overscroll-none"
+      style={{
+        width: "min(calc(100vw - 24px), calc(100dvh - 230px), 520px)",
+        maxWidth: "min(calc(100vw - 24px), calc(100dvh - 230px), 520px)",
+      }}
     >
       {/* Toast Notification Pill */}
       {toastMessage && (
@@ -2054,12 +2096,12 @@ export function PuzzleCard({
       )}
 
       {/* Breathing space above the chessboard utility box */}
-      <div className="w-full h-2.5 sm:h-3.5" />
+      <div className="w-full h-1 sm:h-2" />
 
       {/* Top Metadata Row: Time, Tagline & Controls Flush across Chessboard Width */}
       <div
         data-testid="puzzle-board-header-bar"
-        className="w-full px-0 py-2 flex items-center justify-between text-xs text-[#f5f5f5]"
+        className="w-full px-0 py-1 sm:py-1.5 flex items-center justify-between text-xs text-[#f5f5f5]"
       >
         {/* Time (Flush on left) */}
         <div
@@ -2126,10 +2168,11 @@ export function PuzzleCard({
       </div>
 
       {/* 2. The Hero Chessboard Theater (Edge-to-edge horizontal, 1:1 aspect-square) */}
-      <div className="relative w-full aspect-square flex items-center justify-center my-1 rounded-lg overflow-hidden">
+      <div className="relative w-full aspect-square flex items-center justify-center my-0.5 sm:my-1 rounded-lg overflow-hidden">
         <div
           data-testid="chessboard-container"
           data-fen={displayFen}
+          data-in-check-square={inCheckKingSquare || undefined}
           onTouchStart={handleBoardTouchStart}
           onTouchMove={handleBoardTouchMove}
           onTouchEnd={handleBoardTouchEnd}
@@ -2182,7 +2225,7 @@ export function PuzzleCard({
                   setTouchArrows([]);
                   handleSquareClick(args);
                 },
-                squareStyles: highlightStyles,
+                squareStyles: customSquareStyles,
                 animationDurationInMs: 250,
                 showNotation: showCoordinates,
                 darkSquareNotationStyle: {
@@ -2436,7 +2479,7 @@ export function PuzzleCard({
       </div>
 
       {/* 3. Flush Action Row & Compact Mission Subtitle */}
-      <div className="w-full px-0 mt-3 space-y-2">
+      <div className="w-full px-0 mt-1.5 sm:mt-2 space-y-1.5 sm:space-y-2">
         {/* Flush Action Bar (Like, Bookmark, Share | Reset, Hint, Prev, Next) */}
         <div className="w-full flex items-center justify-between">
           {/* Left: Engagement (Like, Bookmark, Share) */}
