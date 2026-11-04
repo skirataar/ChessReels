@@ -47,6 +47,7 @@ export interface PuzzleData {
   attemptNumber?: number;
   hasBeenRated?: boolean;
   hasFailed?: boolean;
+  hintUsed?: boolean;
   fen: string;
   moves: string;
   rating: number;
@@ -741,6 +742,11 @@ export function PuzzleCard({
     (result: "win" | "loss") => {
       if (!puzzle) return;
 
+      const hasUsedHint = Boolean(hintUsed || puzzle.hintUsed);
+      if (hasUsedHint) {
+        puzzle.hintUsed = true;
+      }
+
       if (onEloPayout) {
         onEloPayout(result, puzzle);
         return;
@@ -754,10 +760,17 @@ export function PuzzleCard({
         return;
       }
       const normalDelta = result === "win" ? 10 : -10;
-      const delta = result === "win" && isRequeued ? Math.max(1, Math.round(normalDelta * 0.5)) : normalDelta;
+      let delta = normalDelta;
+      if (result === "win") {
+        if (isRequeued && hasUsedHint) {
+          delta = Math.max(1, Math.round(normalDelta * 0.25));
+        } else if (isRequeued || hasUsedHint) {
+          delta = Math.max(1, Math.round(normalDelta * 0.5));
+        }
+      }
       onEloUpdate(currentElo + delta, delta, result === "win", puzzle.id);
     },
-    [puzzle, onEloPayout, isCalibration, onEloUpdate, currentElo, isRequeued]
+    [puzzle, hintUsed, onEloPayout, isCalibration, onEloUpdate, currentElo, isRequeued]
   );
 
   // Initialize or reset puzzle game state
@@ -1784,6 +1797,9 @@ export function PuzzleCard({
 
     setHintActive(true);
     setHintUsed(true);
+    if (puzzle) {
+      puzzle.hintUsed = true;
+    }
 
     // Highlight the hint squares with glowing gold aura
     setHighlightStyles({
@@ -1808,7 +1824,7 @@ export function PuzzleCard({
       k: "King",
     };
     const pieceLabel = piece ? ` (${pieceNames[piece.type] || piece.type.toUpperCase()})` : "";
-    showToast(`Hint: Focus on ${fromSquare.toUpperCase()}${pieceLabel}!`);
+    showToast(`Hint: Focus on ${fromSquare.toUpperCase()}${pieceLabel}! (Reduced Elo gain)`);
   };
 
   // Calculate puzzle completion steps
@@ -2770,6 +2786,11 @@ export function PuzzleCard({
                     • Requeued
                   </span>
                 )}
+                {Boolean(hintUsed || puzzle?.hintUsed) && (
+                  <span data-testid="hint-used-tag" className="text-[12px] text-[#c29b78]/90 font-normal">
+                    • Hint Used
+                  </span>
+                )}
                 {isReviewMode && (
                   <span className="text-[12px] text-[#78716c] font-normal">• Review Mode</span>
                 )}
@@ -2790,6 +2811,11 @@ export function PuzzleCard({
                 {isRequeued && (
                   <span data-testid="requeued-status-tag" className="text-[12px] text-amber-400/80 font-normal">
                     • Requeued
+                  </span>
+                )}
+                {Boolean(hintUsed || puzzle?.hintUsed) && (
+                  <span data-testid="hint-used-tag" className="text-[12px] text-[#c29b78]/90 font-normal">
+                    • Hint Used
                   </span>
                 )}
                 {isReviewMode && (

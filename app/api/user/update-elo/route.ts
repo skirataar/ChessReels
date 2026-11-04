@@ -15,6 +15,7 @@ interface UpdateEloBody {
   puzzleId?: string;
   dailyStreak?: number;
   isRequeued?: boolean;
+  hintUsed?: boolean;
   attemptCount?: number;
   streakFreezes?: number;
   perfectWeekCounter?: number;
@@ -25,7 +26,7 @@ interface UpdateEloBody {
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as UpdateEloBody;
-    const { puzzleRating, currentUserElo, result, userId, guestId, puzzleId, dailyStreak, isRequeued, attemptCount } = body;
+    const { puzzleRating, currentUserElo, result, userId, guestId, puzzleId, dailyStreak, isRequeued, hintUsed, attemptCount } = body;
 
     if (
       typeof puzzleRating !== "number" ||
@@ -42,6 +43,7 @@ export async function POST(request: NextRequest) {
     }
 
     const isRequeuedEffective = Boolean(isRequeued || (attemptCount && attemptCount > 1));
+    const isHintUsedEffective = Boolean(hintUsed);
 
     // Standard Elo calculation
     const K = 32;
@@ -50,9 +52,13 @@ export async function POST(request: NextRequest) {
     const E = 1 / (1 + Math.pow(10, exponent));
     let eloChange = Math.round(K * (S - E));
 
-    // For requeued puzzles, award lesser Elo than normal (50% of standard win, minimum +1)
-    if (isRequeuedEffective && result === "win") {
-      eloChange = Math.max(1, Math.round(eloChange * 0.5));
+    // When hint is used or puzzle is requeued, award reduced Elo on solve (50% reduction)
+    if (result === "win") {
+      if (isRequeuedEffective && isHintUsedEffective) {
+        eloChange = Math.max(1, Math.round(eloChange * 0.25));
+      } else if (isRequeuedEffective || isHintUsedEffective) {
+        eloChange = Math.max(1, Math.round(eloChange * 0.5));
+      }
     }
     const newElo = Math.max(100, currentUserElo + eloChange);
 
@@ -65,6 +71,7 @@ export async function POST(request: NextRequest) {
       actualScore: S,
       userId: targetUserId || null,
       isRequeued: isRequeuedEffective,
+      hintUsed: isHintUsedEffective,
     };
 
     if (!targetUserId || isGuestUserId(targetUserId)) {
