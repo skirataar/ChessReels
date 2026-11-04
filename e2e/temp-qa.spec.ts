@@ -164,7 +164,7 @@ test.describe("Temp QA Test Harness Page (/temp-qa)", () => {
     const stateBadge = page.locator('[data-testid="qa-streak-state-badge"]');
 
     await expect(streakInd).toContainText("5 Days");
-    await expect(freezeInd).toContainText("1/2 Freezes");
+    await expect(freezeInd).toContainText("2/2 Freezes");
     await expect(stateBadge).toContainText("State C: Ignited Amber");
 
     // 1. Advance +1 day solve
@@ -176,7 +176,7 @@ test.describe("Temp QA Test Harness Page (/temp-qa)", () => {
     // 2. Miss 1 day: should consume 1 freeze and strictly PRESERVE streak (stays 6 days, never increments to 7)
     const miss1Btn = page.locator('[data-testid="streak-miss-1-day-btn"]');
     await miss1Btn.click();
-    await expect(freezeInd).toContainText("0/2 Freezes");
+    await expect(freezeInd).toContainText("1/2 Freezes");
     await expect(streakInd).toContainText("6 Days");
     await expect(stateBadge).toContainText("State B: Icy Frozen");
 

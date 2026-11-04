@@ -456,13 +456,13 @@ export default function TempQAPage() {
   const [streakData, setStreakData] = useState<StreakData>({
     currentStreak: 5,
     lastSolvedDate: "2026-11-04",
-    streakFreezes: 1,
+    streakFreezes: 2,
     perfectWeekCounter: 5,
     isFrozenState: false,
   });
   const [liveStreakData, setLiveStreakData] = useState<StreakData | null>(null);
   const [streakLog, setStreakLog] = useState<string[]>([
-    "Simulator loaded: Current Streak 5, 1/2 Freezes, 5/7 towards next Freeze.",
+    "Simulator loaded: Current Streak 5, 2/2 Freezes, 5/7 towards next Freeze.",
   ]);
   const [isTestingIgnition, setIsTestingIgnition] = useState<boolean>(false);
 
@@ -711,11 +711,11 @@ export default function TempQAPage() {
     setStreakData({
       currentStreak: 1,
       lastSolvedDate: today,
-      streakFreezes: 1,
+      streakFreezes: 2,
       perfectWeekCounter: 1,
       isFrozenState: false,
     });
-    setStreakLog(["Streak state reset to: 1-Day Streak, 1 Freeze, 1/7 Week."]);
+    setStreakLog(["Streak state reset to: 1-Day Streak, 2 Freezes, 1/7 Week."]);
   };
 
   // -------------------------------------------------------------
