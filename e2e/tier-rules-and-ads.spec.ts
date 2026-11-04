@@ -148,8 +148,9 @@ test.describe("Tier Rules, Ads, Pricing & Placement Calibration", () => {
     await page.reload();
     await page.waitForTimeout(1500);
 
-    const proBadge = page.locator("[data-testid='header-pro-badge']");
-    await expect(proBadge).toBeVisible();
+    const profileBtn = page.locator("[data-testid='header-profile-btn']");
+    await expect(profileBtn).toBeVisible();
+    await expect(profileBtn).toHaveClass(/ring-amber-400/);
 
     await page.screenshot({
       path: path.join(ARTIFACT_DIR, "pro_tier_unlimited_header.png"),

@@ -151,5 +151,36 @@ test.describe("Streak Calendar & Freezes Dropdown Menu", () => {
     const ignitedFill = await flameIcon.getAttribute("fill");
     expect(ignitedFill).toBe("#f59e0b");
   });
+
+  test("6. Decluttered header: freeze indicator and pro badge removed; profile icon has gold ring when pro, grey when free", async ({ page }) => {
+    await loginAsDedicatedTestUser(page);
+
+    // 1. Freeze indicator is removed from header
+    await expect(page.getByTestId("header-freeze-indicator")).not.toBeVisible();
+
+    // 2. Pro text badge is removed from header
+    await expect(page.getByTestId("header-pro-badge")).not.toBeVisible();
+
+    // 3. Profile button exists in header
+    const profileBtn = page.getByTestId("header-profile-btn");
+    await expect(profileBtn).toBeVisible();
+
+    // Test Free account state (grey ring)
+    await page.evaluate(() => {
+      window.localStorage.setItem("chess_reel_plan", "free");
+      window.dispatchEvent(new Event("plan-updated"));
+      window.dispatchEvent(new Event("storage"));
+    });
+    await expect(profileBtn).toHaveClass(/ring-white\/20/);
+
+    // Test Pro account state (gold ring)
+    await page.evaluate(() => {
+      window.localStorage.setItem("chess_reel_plan", "premium");
+      window.dispatchEvent(new Event("plan-updated"));
+      window.dispatchEvent(new Event("storage"));
+    });
+    await expect(profileBtn).toHaveClass(/ring-amber-400/);
+    await expect(page.getByTestId("header-pro-badge")).not.toBeVisible();
+  });
 });
 

@@ -200,14 +200,22 @@ export function BottomNav() {
                             src={userImage}
                             alt="Profile"
                             onError={() => setAvatarError(true)}
-                            className={`w-6 h-6 rounded-full object-cover ${
-                              isActive
-                                ? "ring-1.5 ring-[#c29b78] ring-offset-1 ring-offset-[#0a0908]"
-                                : "opacity-75"
+                            className={`w-6 h-6 rounded-full object-cover transition-all ${
+                              isPro
+                                ? "ring-2 ring-amber-400 ring-offset-1 ring-offset-[#201e1d] shadow-[0_0_6px_rgba(245,158,11,0.35)]"
+                                : "ring-2 ring-white/20 ring-offset-1 ring-offset-[#201e1d]"
                             }`}
                           />
                         ) : (
-                          <User className="w-5 h-5" strokeWidth={1.5} />
+                          <div
+                            className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
+                              isPro
+                                ? "ring-2 ring-amber-400 ring-offset-1 ring-offset-[#201e1d] text-amber-400 shadow-[0_0_6px_rgba(245,158,11,0.35)]"
+                                : "ring-2 ring-white/20 ring-offset-1 ring-offset-[#201e1d] text-[#a3a3a3]"
+                            }`}
+                          >
+                            <User className="w-4 h-4" strokeWidth={1.5} />
+                          </div>
                         )
                       ) : (
                         <Icon

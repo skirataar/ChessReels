@@ -104,11 +104,11 @@ test.describe("Profile Settings, Change Password, Saved Puzzles & Flush Under-Bo
     const hintBtn = page.getByTestId("hint-btn");
     await expect(hintBtn).toBeVisible();
 
-    const nextBtn = page.getByRole("button", { name: /next puzzle/i });
+    const nextBtn = page.getByTestId("next-puzzle-btn");
     await expect(nextBtn).toBeVisible();
 
     // Verify Flush Turn & Rating info
-    await expect(page.getByText(/to move/i)).toBeVisible();
+    await expect(page.getByText(/(white|black) to move/i)).toBeVisible();
     await expect(page.getByText(/elo/i).first()).toBeVisible();
 
     // Verify bookmarking a puzzle updates scoped localStorage
@@ -213,8 +213,8 @@ test.describe("Profile Settings, Change Password, Saved Puzzles & Flush Under-Bo
     });
     await page.reload();
 
-    // Wait for pro badge indicating hydration is complete
-    await expect(page.getByTestId("header-pro-badge")).toBeVisible({ timeout: 10000 });
+    // Wait for pro gold ring on profile button indicating hydration is complete
+    await expect(page.getByTestId("header-profile-btn")).toHaveClass(/ring-amber-400/, { timeout: 10000 });
     await page.waitForTimeout(300);
 
     // Open profile modal for Pro account

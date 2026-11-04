@@ -60,10 +60,13 @@ test.describe("Streak Freeze, Flush UI, and Failed Puzzle Re-queue Fixes", () =>
     await page.waitForLoadState("domcontentloaded");
     await expect(page.getByTestId("chessboard-container")).toBeVisible({ timeout: 10000 });
 
-    // Verify header freeze indicator displays 1/2
-    const freezeIndicator = page.getByTestId("header-freeze-indicator");
-    await expect(freezeIndicator).toBeVisible();
-    await expect(freezeIndicator).toContainText("1/2");
+    // Verify header freeze indicator is removed to declutter, and shown in dropdown
+    await expect(page.getByTestId("header-freeze-indicator")).not.toBeVisible();
+    await page.getByTestId("header-streak-dropdown-trigger").click();
+    const dropdownFreeze = page.getByTestId("dropdown-freeze-count");
+    await expect(dropdownFreeze).toBeVisible();
+    await expect(dropdownFreeze).toContainText("1 / 2");
+    await page.keyboard.press("Escape");
 
     // Simulate solve for the current puzzle
     await page.evaluate(() => {
@@ -114,10 +117,10 @@ test.describe("Streak Freeze, Flush UI, and Failed Puzzle Re-queue Fixes", () =>
     await page.waitForLoadState("domcontentloaded");
 
     const streakIndicator = page.getByTestId("header-streak-indicator");
-    const freezeIndicator = page.getByTestId("header-freeze-indicator");
-
     await expect(streakIndicator).toBeVisible();
-    await expect(freezeIndicator).toBeVisible();
+
+    // Verify freeze indicator is removed from header (decluttered into calendar dropdown)
+    await expect(page.getByTestId("header-freeze-indicator")).not.toBeVisible();
 
     // Verify streakIndicator has no pill background or border classes
     const streakClass = (await streakIndicator.getAttribute("class")) || "";
@@ -125,11 +128,6 @@ test.describe("Streak Freeze, Flush UI, and Failed Puzzle Re-queue Fixes", () =>
     expect(streakClass).toContain("border-none");
     expect(streakClass).not.toContain("border-sky-400/30");
     expect(streakClass).not.toContain("bg-sky-500/10");
-
-    // Verify freezeIndicator is also flush and borderless
-    const freezeClass = (await freezeIndicator.getAttribute("class")) || "";
-    expect(freezeClass).toContain("bg-transparent");
-    expect(freezeClass).toContain("border-none");
   });
 
   test("3. Failed puzzle re-queued slot loads fresh & unsolved without being marked in solvedPuzzleIds", async ({

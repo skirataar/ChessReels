@@ -243,15 +243,15 @@ test.describe("Task 1 & Task 2: UI Integration & In-App Saved Puzzle Player", ()
     });
 
     await page.goto("/play");
+    await expect(page.getByTestId("chessboard-container")).toBeVisible({ timeout: 10000 });
 
-    // 1. Verify Header freeze indicator
-    const headerFreeze = page.getByTestId("header-freeze-indicator");
-    await expect(headerFreeze).toBeVisible({ timeout: 10000 });
-    await expect(headerFreeze).toContainText("2/2");
-    await expect(headerFreeze).toHaveAttribute(
-      "title",
-      "Earned every 7-day streak • Protects up to 2 missed days"
-    );
+    // 1. Verify Header freeze indicator is removed to declutter, and shown in dropdown
+    await expect(page.getByTestId("header-freeze-indicator")).not.toBeVisible();
+    await page.getByTestId("header-streak-dropdown-trigger").click();
+    const dropdownFreeze = page.getByTestId("dropdown-freeze-count");
+    await expect(dropdownFreeze).toBeVisible({ timeout: 10000 });
+    await expect(dropdownFreeze).toContainText("2 / 2");
+    await page.keyboard.press("Escape");
 
     // 1b. Verify Header streak indicator is ignited (fill="#f59e0b", stroke="#fbbf24", text in #f5f2eb)
     const headerStreak = page.getByTestId("header-streak-indicator");
@@ -265,9 +265,9 @@ test.describe("Task 1 & Task 2: UI Integration & In-App Saved Puzzle Player", ()
     await expect(streakNum).toHaveClass(/text-\[#f5f2eb\]/);
 
     // 2. Open Profile via Bottom Dock
-    const dockProfileBtn = page.getByTestId("bottom-nav-profile");
-    await expect(dockProfileBtn).toBeVisible({ timeout: 10000 });
-    await dockProfileBtn.click();
+    const profileBtn = page.getByTestId("header-profile-btn");
+    await expect(profileBtn).toBeVisible({ timeout: 10000 });
+    await profileBtn.click();
 
     // 3. Verify Profile freeze indicator
     const profileFreeze = page.getByTestId("profile-freeze-indicator");
@@ -303,10 +303,11 @@ test.describe("Task 1 & Task 2: UI Integration & In-App Saved Puzzle Player", ()
     });
 
     await page.goto("/play");
+    await expect(page.getByTestId("chessboard-container")).toBeVisible({ timeout: 10000 });
 
-    const dockProfileBtn = page.getByTestId("bottom-nav-profile");
-    await expect(dockProfileBtn).toBeVisible({ timeout: 10000 });
-    await dockProfileBtn.click();
+    const profileBtn = page.getByTestId("header-profile-btn");
+    await expect(profileBtn).toBeVisible({ timeout: 10000 });
+    await profileBtn.click();
 
     // Switch to Saved Puzzles Tab
     const savedTab = page.getByRole("button", { name: /saved puzzles/i });
@@ -363,10 +364,11 @@ test.describe("Task 1 & Task 2: UI Integration & In-App Saved Puzzle Player", ()
     }, samplePuzzle);
 
     await page.goto("/play");
+    await expect(page.getByTestId("chessboard-container")).toBeVisible({ timeout: 10000 });
 
-    const dockProfileBtn = page.getByTestId("bottom-nav-profile");
-    await expect(dockProfileBtn).toBeVisible({ timeout: 10000 });
-    await dockProfileBtn.click();
+    const profileBtn = page.getByTestId("header-profile-btn");
+    await expect(profileBtn).toBeVisible({ timeout: 10000 });
+    await profileBtn.click();
 
     // Switch to Saved Puzzles Tab
     const savedTab = page.getByRole("button", { name: /saved puzzles/i });
@@ -429,6 +431,7 @@ test.describe("Task 1 & Task 2: UI Integration & In-App Saved Puzzle Player", ()
     });
 
     await page.goto("/play");
+    await expect(page.getByTestId("chessboard-container")).toBeVisible({ timeout: 10000 });
 
     const headerStreak = page.getByTestId("header-streak-indicator");
     await expect(headerStreak).toBeVisible({ timeout: 10000 });
