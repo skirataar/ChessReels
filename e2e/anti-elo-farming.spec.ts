@@ -1,30 +1,62 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, Page } from "@playwright/test";
+
+const TEST_EMAIL = "devtest@doomchess.local";
+const TEST_PASSWORD = "TestPassword123!";
+
+async function loginAsDedicatedTestUser(page: Page) {
+  await page.goto("/play");
+  await page.waitForLoadState("domcontentloaded");
+
+  // Check if already authenticated on /play
+  const board = page.getByTestId("chessboard-container");
+  const isAlreadyOnBoard = await board.isVisible({ timeout: 2500 }).catch(() => false);
+  if (isAlreadyOnBoard) {
+    return;
+  }
+
+  // Otherwise, go to landing and sign in
+  await page.goto("/");
+  const signInBtn = page.getByRole("button", { name: "Sign In" });
+  if (await signInBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+    await signInBtn.click();
+    await page.fill('input[placeholder="Username or email"]', TEST_EMAIL);
+    await page.fill('input[placeholder="Password"]', TEST_PASSWORD);
+    await page.getByRole("button", { name: "Sign In" }).click();
+    await page.waitForURL(/\/play/, { timeout: 10000 });
+  } else {
+    const playNow = page.getByRole("button", { name: /Play Now|Play/i });
+    if (await playNow.isVisible()) {
+      await playNow.click();
+      await page.waitForURL(/\/play/, { timeout: 10000 });
+    }
+  }
+
+  await expect(page.getByTestId("chessboard-container")).toBeVisible({ timeout: 10000 });
+}
 
 test.describe("Anti-Elo Farming & Per-Puzzle Completion State Persistence", () => {
   test("1. Backend API prevents Elo farming with strict idempotency check", async ({
     request,
   }) => {
-    // Create a fresh test user
-    const username = `anti_farm_${Date.now().toString().slice(-8)}`;
-    const createRes = await request.post("/api/user/account", {
+    // 1. Authenticate using the single dedicated test account
+    const loginRes = await request.post("/api/user/login", {
       data: {
-        username,
-        password: "password123",
-        displayName: "Anti Farm Tester",
-        elo: 1000,
-        startingElo: 1000,
-        isCalibrated: true,
-        calibrationStep: 6,
+        username: TEST_EMAIL,
+        password: TEST_PASSWORD,
       },
     });
-    expect(createRes.ok()).toBe(true);
-    const { user } = await createRes.json();
-    const puzzleId = `test_puzzle_${Date.now()}`;
+    expect(loginRes.ok()).toBe(true);
+    const { user } = await loginRes.json();
+    expect(user.username).toBe("devtest");
+    expect(user.id).toBeTruthy();
+
+    // Use a unique puzzle ID for this run to test idempotency
+    const puzzleId = `anti_farm_guard_${Date.now()}`;
 
     // First solve call: should award Elo and record history
     const solve1 = await request.post("/api/user/update-elo", {
       data: {
-        puzzleRating: 1100,
+        puzzleRating: 1200,
         currentUserElo: user.elo,
         result: "win",
         userId: user.id,
@@ -36,12 +68,11 @@ test.describe("Anti-Elo Farming & Per-Puzzle Completion State Persistence", () =
     expect(res1.alreadyRated).toBe(false);
     expect(res1.eloChange).toBeGreaterThan(0);
     const awardedElo = res1.newElo;
-    expect(awardedElo).toBeGreaterThan(1000);
 
     // Second solve call for SAME puzzleId: must be rejected by backend idempotency guard
     const solve2 = await request.post("/api/user/update-elo", {
       data: {
-        puzzleRating: 1100,
+        puzzleRating: 1200,
         currentUserElo: awardedElo,
         result: "win",
         userId: user.id,
@@ -63,39 +94,9 @@ test.describe("Anti-Elo Farming & Per-Puzzle Completion State Persistence", () =
 
   test("2. Swiping back to solved puzzle restores completed state & does not farm Elo", async ({
     page,
-    request,
   }) => {
-    // 1. Create a calibrated test user
-    const username = `af_ui_${Date.now().toString().slice(-8)}`;
-    const createRes = await request.post("/api/user/account", {
-      data: {
-        username,
-        password: "password123",
-        displayName: "UI Anti-Farm Tester",
-        elo: 1000,
-        startingElo: 1000,
-        isCalibrated: true,
-        calibrationStep: 6,
-      },
-    });
-    expect(createRes.ok()).toBe(true);
-    const { user } = await createRes.json();
-
-    // 2. Sign in and navigate to /play
-    await page.goto("/");
-    await page.getByRole("button", { name: "Sign In" }).click();
-    await page.fill('input[placeholder="Username or email"]', username);
-    await page.fill('input[placeholder="Password"]', "password123");
-    await page.getByRole("button", { name: "Sign In" }).click();
-    await page.waitForURL(/\/play/, { timeout: 10000 });
-
-    await page.evaluate((u) => {
-      const acc = { ...u, isCalibrated: true, calibrationStep: 6 };
-      localStorage.setItem("chess_reel_account", JSON.stringify(acc));
-      window.dispatchEvent(new Event("account-updated"));
-    }, user);
-    await page.reload();
-    await page.waitForTimeout(1000);
+    // Authenticate using dedicated test account
+    await loginAsDedicatedTestUser(page);
 
     // Wait for chessboard container
     const boardContainer = page.getByTestId("chessboard-container");
@@ -104,8 +105,6 @@ test.describe("Anti-Elo Farming & Per-Puzzle Completion State Persistence", () =
     // Initial Elo check
     const ratingPill = page.getByTestId("rating-pill");
     await expect(ratingPill).toBeVisible({ timeout: 10000 });
-    const initialEloText = await ratingPill.textContent();
-    const initialElo = parseInt(initialEloText?.replace(/\D/g, "") || "1000", 10);
 
     // Simulate solve for Puzzle 0
     await page.evaluate(() => {
@@ -115,17 +114,15 @@ test.describe("Anti-Elo Farming & Per-Puzzle Completion State Persistence", () =
     });
     await page.waitForTimeout(500);
 
-    // Verify celebration or solved status
+    // Verify celebration or advance to next puzzle
     const nextReelBtn = page.getByRole("button", { name: "Next Reel" });
     if (await nextReelBtn.isVisible()) {
       await nextReelBtn.click();
     } else {
-      // Advance using keyboard ArrowDown
       await page.keyboard.press("ArrowDown");
     }
     await page.waitForTimeout(1000);
 
-    // Now we are on Puzzle 1
     // Read Elo after solving Puzzle 0
     const eloAfterPuzzle0 = await page.evaluate(() => {
       const eloEl = document.querySelector('[data-testid="rating-pill"]');
@@ -171,39 +168,9 @@ test.describe("Anti-Elo Farming & Per-Puzzle Completion State Persistence", () =
 
   test("3. Retry on completed puzzle enters Review Mode with zero Elo awarded", async ({
     page,
-    request,
   }) => {
-    // 1. Create a calibrated test user
-    const username = `review_mode_${Date.now().toString().slice(-8)}`;
-    const createRes = await request.post("/api/user/account", {
-      data: {
-        username,
-        password: "password123",
-        displayName: "Review Mode Tester",
-        elo: 1000,
-        startingElo: 1000,
-        isCalibrated: true,
-        calibrationStep: 6,
-      },
-    });
-    expect(createRes.ok()).toBe(true);
-    const { user } = await createRes.json();
-
-    // 2. Sign in and navigate to /play
-    await page.goto("/");
-    await page.getByRole("button", { name: "Sign In" }).click();
-    await page.fill('input[placeholder="Username or email"]', username);
-    await page.fill('input[placeholder="Password"]', "password123");
-    await page.getByRole("button", { name: "Sign In" }).click();
-    await page.waitForURL(/\/play/, { timeout: 10000 });
-
-    await page.evaluate((u) => {
-      const acc = { ...u, isCalibrated: true, calibrationStep: 6 };
-      localStorage.setItem("chess_reel_account", JSON.stringify(acc));
-      window.dispatchEvent(new Event("account-updated"));
-    }, user);
-    await page.reload();
-    await page.waitForTimeout(1000);
+    // Authenticate using dedicated test account
+    await loginAsDedicatedTestUser(page);
 
     // Solve the puzzle first
     await page.evaluate(() => {
@@ -254,4 +221,3 @@ test.describe("Anti-Elo Farming & Per-Puzzle Completion State Persistence", () =
     await expect(celebrationNextReel).not.toBeVisible();
   });
 });
-

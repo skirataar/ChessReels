@@ -25,12 +25,26 @@ export function getDbPool(): Pool {
   return poolInstance;
 }
 
+export const DEDICATED_TEST_EMAIL = "devtest@doomchess.local";
+export const DEDICATED_TEST_USERNAME = "devtest";
+
+export function isDedicatedTestAccount(account: {
+  email?: string | null;
+  username?: string | null;
+}): boolean {
+  const email = (account.email || "").toLowerCase().trim();
+  const username = (account.username || "").toLowerCase().trim();
+  return email === DEDICATED_TEST_EMAIL || username === DEDICATED_TEST_USERNAME || username === "devtester";
+}
+
 export function isTestAccountPattern(account: {
   isTestAccount?: boolean | null;
   email?: string | null;
   username?: string | null;
   displayName?: string | null;
 }): boolean {
+  if (isDedicatedTestAccount(account)) return false;
+
   if (account.isTestAccount) return true;
 
   const email = (account.email || "").toLowerCase().trim();
@@ -85,11 +99,18 @@ export async function executeCascadingUserDelete(
   userIds: string[],
   emails: string[] = []
 ): Promise<{ deletedCount: number; deletedUserIds: string[] }> {
+  // Query to ensure the dedicated test account id is never deleted
+  const dedicatedRes = await client.query(
+    `SELECT id FROM "User" WHERE email = $1 OR username = $2;`,
+    [DEDICATED_TEST_EMAIL, DEDICATED_TEST_USERNAME]
+  );
+  const dedicatedIds = new Set(dedicatedRes.rows.map((r: { id: string }) => r.id));
+
   const validIds = Array.from(
-    new Set(userIds.filter((id): id is string => typeof id === "string" && id.trim().length > 0))
+    new Set(userIds.filter((id): id is string => typeof id === "string" && id.trim().length > 0 && !dedicatedIds.has(id)))
   );
   const validEmails = Array.from(
-    new Set(emails.filter((e): e is string => typeof e === "string" && e.trim().length > 0))
+    new Set(emails.filter((e): e is string => typeof e === "string" && e.trim().length > 0 && e.toLowerCase().trim() !== DEDICATED_TEST_EMAIL))
   );
 
   if (validIds.length === 0 && validEmails.length === 0) {
@@ -280,7 +301,7 @@ export async function purgeFlaggedTestAccounts(): Promise<{
   try {
     const candidates = await client.query(`
       SELECT id, email FROM "User"
-      WHERE "isTestAccount" = true
+      WHERE ("isTestAccount" = true
          OR email ILIKE '%@test.%'
          OR email ILIKE '%@example.com'
          OR email ILIKE 'test%'
@@ -297,19 +318,22 @@ export async function purgeFlaggedTestAccounts(): Promise<{
          OR username ILIKE 'lo_%'
          OR username ILIKE 'hi_%'
          OR username ILIKE 'lgt_%'
-         OR username ILIKE 'db_%';
+         OR username ILIKE 'db_%')
+        AND (email IS NULL OR email != '${DEDICATED_TEST_EMAIL}')
+        AND (username IS NULL OR (username != '${DEDICATED_TEST_USERNAME}' AND username != 'devtester'));
     `);
 
     // Also check Better Auth user table
     const baCandidates = await client.query(`
       SELECT id, email FROM "user"
-      WHERE "isTestAccount" = true
+      WHERE ("isTestAccount" = true
          OR email ILIKE '%@test.%'
          OR email ILIKE '%@example.com'
          OR email ILIKE 'test%'
          OR email ILIKE 'qa%'
          OR name ILIKE 'test%'
-         OR name ILIKE 'qa%';
+         OR name ILIKE 'qa%')
+        AND (email IS NULL OR email != '${DEDICATED_TEST_EMAIL}');
     `);
 
     const userIds = [
