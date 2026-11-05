@@ -69,6 +69,33 @@ export interface SavedPuzzleState {
   eloDelta?: number;
 }
 
+export function resolveExpectedMove(fen: string, rawMove: string): { from: string; to: string } | null {
+  if (!rawMove) return null;
+  const clean = rawMove.trim();
+  const temp = new Chess(fen);
+
+  try {
+    const res = temp.move(clean);
+    if (res) return { from: res.from, to: res.to };
+  } catch {}
+
+  if (/^[a-h][1-8][a-h][1-8][qrbnQRBN]?$/.test(clean)) {
+    try {
+      const from = clean.slice(0, 2);
+      const to = clean.slice(2, 4);
+      const promotion = clean[4] ? clean[4].toLowerCase() : "q";
+      const res = temp.move({ from, to, promotion });
+      if (res) return { from: res.from, to: res.to };
+    } catch {}
+  }
+
+  const normalized = clean.replace(/[+#!?]/g, "");
+  const match = temp.moves({ verbose: true }).find(
+    (m) => m.san.replace(/[+#!?]/g, "") === normalized || `${m.from}${m.to}` === normalized
+  );
+  return match ? { from: match.from, to: match.to } : null;
+}
+
 export interface PuzzleCardProps {
   puzzle: PuzzleData | null;
   status: PuzzleStatus;
@@ -1201,6 +1228,17 @@ export function PuzzleCard({
       const expectedPromo =
         expectedMove.length === 5 ? expectedMove[4].toLowerCase() : undefined;
 
+      let alternateCheckmate = false;
+      try {
+        const tempChess = new Chess(game.fen());
+        const moveResult = tempChess.move({
+          from: sourceSquare,
+          to: targetSquare,
+          promotion: "q",
+        });
+        alternateCheckmate = moveResult !== null && tempChess.isCheckmate();
+      } catch {}
+
       // 1. Check chess legality with chess.js
       let moveMade = null;
       try {
@@ -1228,8 +1266,8 @@ export function PuzzleCard({
         (expectedPromo ?? "")
       ).toLowerCase();
 
-      // 2. Strict UCI string comparison against next move in solution array
-      if (moveUci !== expectedUciNormalized) {
+      // 2. Alternate checkmate validation overrides the hardcoded solution.
+      if (!alternateCheckmate && moveUci !== expectedUciNormalized) {
         // Legal chess move, but INCORRECT puzzle solution
         game.undo();
         sounds.playIllegal();
@@ -1324,7 +1362,7 @@ export function PuzzleCard({
       });
 
       const nextIndex = currentMoveIndex + 1;
-      const isSolved = nextIndex >= allMoves.length;
+      const isSolved = alternateCheckmate || nextIndex >= allMoves.length;
 
       // Strict Priority SFX (check/checkmate, promote, castle, capture, standard)
       // Automatically triggers game-end 150ms later if isSolved
@@ -1843,14 +1881,14 @@ export function PuzzleCard({
     const expectedMove = allMoves[currentMoveIndex];
     if (!expectedMove) return;
 
-    const fromSquare = expectedMove.slice(0, 2);
-    const toSquare = expectedMove.slice(2, 4);
+    const resolvedMove = resolveExpectedMove(gameRef.current?.fen() || puzzle?.fen || "", expectedMove);
+    if (!resolvedMove) return;
+
+    const fromSquare = resolvedMove.from;
+    const toSquare = resolvedMove.to;
 
     setHintActive(true);
-    setHintArrow({
-      from: fromSquare.toLowerCase(),
-      to: toSquare.toLowerCase(),
-    });
+    setHintArrow({ from: fromSquare, to: toSquare });
     setHintUsed(true);
     if (puzzle) {
       puzzle.hintUsed = true;
@@ -2505,32 +2543,32 @@ export function PuzzleCard({
               const file = square.charCodeAt(0) - 97;
               const rank = Number(square[1]);
               return boardOrientation === "white"
-                ? { x: (file + 0.5) * 100, y: (8.5 - rank) * 100 }
-                : { x: (7.5 - file) * 100, y: (rank - 0.5) * 100 };
+                ? { x: (file + 0.5) * 12.5, y: (8.5 - rank) * 12.5 }
+                : { x: (7.5 - file) * 12.5, y: (rank - 0.5) * 12.5 };
             };
             const from = squareCenter(hintArrow.from);
             const to = squareCenter(hintArrow.to);
             return (
               <svg
                 aria-hidden="true"
-                className="absolute inset-0 z-[30] h-full w-full pointer-events-none"
-                viewBox="0 0 800 800"
+                className="absolute inset-0 z-30 h-full w-full pointer-events-none"
+                viewBox="0 0 100 100"
                 preserveAspectRatio="none"
               >
                 <defs>
                   <marker
                     id="hint-arrowhead"
-                    markerWidth="12"
-                    markerHeight="12"
-                    refX="10"
-                    refY="6"
+                    markerWidth="2.5"
+                    markerHeight="2.5"
+                    refX="2.2"
+                    refY="1.25"
                     orient="auto"
                     markerUnits="userSpaceOnUse"
                   >
-                    <path d="M 0 0 L 12 6 L 0 12 z" fill="#c29b78" />
+                    <path d="M 0 0 L 2.5 1.25 L 0 2.5 z" fill="#c29b78" />
                   </marker>
                   <filter id="hint-arrow-shadow" x="-20%" y="-20%" width="140%" height="140%">
-                    <feDropShadow dx="0" dy="2" stdDeviation="2.5" floodColor="#000000" floodOpacity="0.55" />
+                    <feDropShadow dx="0" dy="0.25" stdDeviation="0.35" floodColor="#000000" floodOpacity="0.55" />
                   </filter>
                 </defs>
                 <line
@@ -2539,7 +2577,7 @@ export function PuzzleCard({
                   x2={to.x}
                   y2={to.y}
                   stroke="#c29b78"
-                  strokeWidth="7"
+                  strokeWidth="1"
                   strokeLinecap="round"
                   opacity="0.88"
                   markerEnd="url(#hint-arrowhead)"
