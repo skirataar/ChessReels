@@ -2539,7 +2539,7 @@ export function PuzzleCard({
                   x2={to.x}
                   y2={to.y}
                   stroke="#c29b78"
-                  strokeWidth="5"
+                  strokeWidth="7"
                   strokeLinecap="round"
                   opacity="0.88"
                   markerEnd="url(#hint-arrowhead)"
