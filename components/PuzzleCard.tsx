@@ -469,6 +469,7 @@ export function PuzzleCard({
   });
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [hintActive, setHintActive] = useState<boolean>(false);
+  const [hintArrow, setHintArrow] = useState<{ from: string; to: string } | null>(null);
   const [hintUsed, setHintUsed] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const isHintGlowing =
@@ -823,6 +824,7 @@ export function PuzzleCard({
     setSelectedSquare(null);
     setHighlightStyles({});
     setHintActive(false);
+    setHintArrow(null);
     setHintUsed(false);
     hasPenalizedRef.current = false;
     hasWonRef.current = false;
@@ -1179,6 +1181,8 @@ export function PuzzleCard({
       if (!sourceSquare || !targetSquare || sourceSquare === targetSquare) {
         return false;
       }
+
+      setHintArrow(null);
 
       const game = gameRef.current;
       const movingPiece = game.get(sourceSquare as Square);
@@ -1843,6 +1847,10 @@ export function PuzzleCard({
     const toSquare = expectedMove.slice(2, 4);
 
     setHintActive(true);
+    setHintArrow({
+      from: fromSquare.toLowerCase(),
+      to: toSquare.toLowerCase(),
+    });
     setHintUsed(true);
     if (puzzle) {
       puzzle.hintUsed = true;
@@ -1965,9 +1973,10 @@ export function PuzzleCard({
   const touchArrowStartRef = useRef<{ square: string; x: number; y: number } | null>(null);
   const touchArrowCurrentRef = useRef<string | null>(null);
 
-  // Clear drawn arrows on puzzle change or retry
+  // Clear drawn arrows and tactical hints on puzzle change or retry
   useEffect(() => {
     setTouchArrows([]);
+    setHintArrow(null);
   }, [fen, puzzle?.id]);
 
   const handleBoardTouchStart = (e: React.TouchEvent) => {
@@ -2385,6 +2394,55 @@ export function PuzzleCard({
             isShaking ? "animate-board-shake" : ""
           }`}
         >
+          {hintArrow && (() => {
+            const squareCenter = (square: string) => {
+              const file = square.charCodeAt(0) - 97;
+              const rank = Number(square[1]);
+              return boardOrientation === "white"
+                ? { x: (file + 0.5) * 100, y: (8.5 - rank) * 100 }
+                : { x: (7.5 - file) * 100, y: (rank - 0.5) * 100 };
+            };
+            const from = squareCenter(hintArrow.from);
+            const to = squareCenter(hintArrow.to);
+            return (
+              <svg
+                aria-hidden="true"
+                className="absolute inset-0 z-[10] h-full w-full pointer-events-none"
+                viewBox="0 0 800 800"
+                preserveAspectRatio="none"
+              >
+                <defs>
+                  <marker
+                    id="hint-arrowhead"
+                    markerWidth="12"
+                    markerHeight="12"
+                    refX="10"
+                    refY="6"
+                    orient="auto"
+                    markerUnits="userSpaceOnUse"
+                  >
+                    <path d="M 0 0 L 12 6 L 0 12 z" fill="#c29b78" />
+                  </marker>
+                  <filter id="hint-arrow-shadow" x="-20%" y="-20%" width="140%" height="140%">
+                    <feDropShadow dx="0" dy="2" stdDeviation="2.5" floodColor="#000000" floodOpacity="0.55" />
+                  </filter>
+                </defs>
+                <line
+                  x1={from.x}
+                  y1={from.y}
+                  x2={to.x}
+                  y2={to.y}
+                  stroke="#c29b78"
+                  strokeWidth="5"
+                  strokeLinecap="round"
+                  opacity="0.88"
+                  markerEnd="url(#hint-arrowhead)"
+                  filter="url(#hint-arrow-shadow)"
+                />
+              </svg>
+            );
+          })()}
+
           {displayFen ? (
             <Chessboard
               customBoardStyle={{ borderRadius: "0px" }}
