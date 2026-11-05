@@ -2394,55 +2394,6 @@ export function PuzzleCard({
             isShaking ? "animate-board-shake" : ""
           }`}
         >
-          {hintArrow && (() => {
-            const squareCenter = (square: string) => {
-              const file = square.charCodeAt(0) - 97;
-              const rank = Number(square[1]);
-              return boardOrientation === "white"
-                ? { x: (file + 0.5) * 100, y: (8.5 - rank) * 100 }
-                : { x: (7.5 - file) * 100, y: (rank - 0.5) * 100 };
-            };
-            const from = squareCenter(hintArrow.from);
-            const to = squareCenter(hintArrow.to);
-            return (
-              <svg
-                aria-hidden="true"
-                className="absolute inset-0 z-[10] h-full w-full pointer-events-none"
-                viewBox="0 0 800 800"
-                preserveAspectRatio="none"
-              >
-                <defs>
-                  <marker
-                    id="hint-arrowhead"
-                    markerWidth="12"
-                    markerHeight="12"
-                    refX="10"
-                    refY="6"
-                    orient="auto"
-                    markerUnits="userSpaceOnUse"
-                  >
-                    <path d="M 0 0 L 12 6 L 0 12 z" fill="#c29b78" />
-                  </marker>
-                  <filter id="hint-arrow-shadow" x="-20%" y="-20%" width="140%" height="140%">
-                    <feDropShadow dx="0" dy="2" stdDeviation="2.5" floodColor="#000000" floodOpacity="0.55" />
-                  </filter>
-                </defs>
-                <line
-                  x1={from.x}
-                  y1={from.y}
-                  x2={to.x}
-                  y2={to.y}
-                  stroke="#c29b78"
-                  strokeWidth="5"
-                  strokeLinecap="round"
-                  opacity="0.88"
-                  markerEnd="url(#hint-arrowhead)"
-                  filter="url(#hint-arrow-shadow)"
-                />
-              </svg>
-            );
-          })()}
-
           {displayFen ? (
             <Chessboard
               customBoardStyle={{ borderRadius: "0px" }}
@@ -2548,6 +2499,55 @@ export function PuzzleCard({
               <div className="w-8 h-8 border-2 border-[#c29b78] border-t-transparent rounded-full animate-spin" />
             </div>
           )}
+
+          {hintArrow && (() => {
+            const squareCenter = (square: string) => {
+              const file = square.charCodeAt(0) - 97;
+              const rank = Number(square[1]);
+              return boardOrientation === "white"
+                ? { x: (file + 0.5) * 100, y: (8.5 - rank) * 100 }
+                : { x: (7.5 - file) * 100, y: (rank - 0.5) * 100 };
+            };
+            const from = squareCenter(hintArrow.from);
+            const to = squareCenter(hintArrow.to);
+            return (
+              <svg
+                aria-hidden="true"
+                className="absolute inset-0 z-[30] h-full w-full pointer-events-none"
+                viewBox="0 0 800 800"
+                preserveAspectRatio="none"
+              >
+                <defs>
+                  <marker
+                    id="hint-arrowhead"
+                    markerWidth="12"
+                    markerHeight="12"
+                    refX="10"
+                    refY="6"
+                    orient="auto"
+                    markerUnits="userSpaceOnUse"
+                  >
+                    <path d="M 0 0 L 12 6 L 0 12 z" fill="#c29b78" />
+                  </marker>
+                  <filter id="hint-arrow-shadow" x="-20%" y="-20%" width="140%" height="140%">
+                    <feDropShadow dx="0" dy="2" stdDeviation="2.5" floodColor="#000000" floodOpacity="0.55" />
+                  </filter>
+                </defs>
+                <line
+                  x1={from.x}
+                  y1={from.y}
+                  x2={to.x}
+                  y2={to.y}
+                  stroke="#c29b78"
+                  strokeWidth="5"
+                  strokeLinecap="round"
+                  opacity="0.88"
+                  markerEnd="url(#hint-arrowhead)"
+                  filter="url(#hint-arrow-shadow)"
+                />
+              </svg>
+            );
+          })()}
 
           {/* Solved Celebration Hero Overlay */}
           <AnimatePresence>
