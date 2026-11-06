@@ -588,10 +588,22 @@ export function PlayView({
     getOnlineServerSnapshot
   );
 
-  const [hasMounted, setHasMounted] = useState<boolean>(false);
+  const [isHydrated, setIsHydrated] = useState<boolean>(false);
 
   useEffect(() => {
-    setHasMounted(true);
+    // Hydrate the HUD from the synchronous localStorage caches before revealing
+    // dynamic values. SSR renders the same neutral skeleton as the first client
+    // render, so React never sees a server/client text mismatch.
+    if (typeof window !== "undefined") {
+      try {
+        const cachedStats = getStoredUserStats();
+        if (cachedStats.elo > 0) {
+          setCurrentElo((prev) => (prev === cachedStats.elo ? prev : cachedStats.elo));
+        }
+      } catch {}
+      window.dispatchEvent(new Event("tier-session-updated"));
+    }
+    setIsHydrated(true);
     const handleAccountSync = () => {
       try {
         const raw = window.localStorage.getItem(ACCOUNT_STORAGE_KEY);
@@ -615,7 +627,7 @@ export function PlayView({
   }, [router]);
 
   useEffect(() => {
-    if (!hasMounted) return;
+    if (!isHydrated) return;
     try {
       const raw = window.localStorage.getItem(ACCOUNT_STORAGE_KEY);
       if (!raw) return;
@@ -626,20 +638,20 @@ export function PlayView({
         router.replace("/");
       }
     } catch {}
-  }, [hasMounted, userAccount, router]);
+  }, [isHydrated, userAccount, router]);
 
   // Initialize persistent guest ID, saved account, and saved Elo from localStorage
   // Sync landing visibility to hide/show dock
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const isLanding = !userAccount && hasMounted;
+      const isLanding = !userAccount && isHydrated;
       window.dispatchEvent(
         new CustomEvent("landing-visibility", {
           detail: { visible: isLanding },
         })
       );
     }
-  }, [userAccount, hasMounted]);
+  }, [userAccount, isHydrated]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1084,7 +1096,7 @@ export function PlayView({
   // Initial puzzle fetch on mount: wait until user session is loaded
   const initialFetchDoneRef = useRef(false);
   useEffect(() => {
-    if (!hasMounted) return;
+    if (!isHydrated) return;
     if (!userAccount || !userAccount.id) return;
 
     if (canPlay || isPro || isCalibrating) {
@@ -1144,7 +1156,7 @@ export function PlayView({
         setIsQuotaModalOpen(true);
       }
     }
-  }, [hasMounted, userAccount?.id, canPlay, isPro, isCalibrating, setIsQuotaModalOpen]);
+  }, [isHydrated, userAccount?.id, canPlay, isPro, isCalibrating, setIsQuotaModalOpen]);
 
   // Exact standard Elo calculation and instant optimistic UI payout
   const processEloResult = useCallback(
@@ -1540,12 +1552,12 @@ export function PlayView({
 
   // Route guard: unauthenticated users redirect cleanly to '/'
   useEffect(() => {
-    if (hasMounted && !userAccount) {
+    if (isHydrated && !userAccount) {
       router.replace("/");
     }
-  }, [hasMounted, userAccount, router]);
+  }, [isHydrated, userAccount, router]);
 
-  if (!userAccount && hasMounted) {
+  if (!userAccount && isHydrated) {
     return (
       <div className="min-h-screen bg-[#0a0908] flex items-center justify-center">
         <RefreshCw className="w-8 h-8 text-[#c29b78] animate-spin" />
@@ -1582,7 +1594,7 @@ export function PlayView({
             <span className="font-black text-sm tracking-tight text-[#f5f5f5]">
               Doom<span className="text-[#c29b78]">Chess</span>
             </span>
-            {hasMounted && isCalibrating && (
+            {isHydrated && isCalibrating && (
               <span className="text-[9px] tracking-wider uppercase text-[#c29b78] font-bold px-1.5 py-0.5 rounded bg-[#c29b78]/15 border border-[#c29b78]/30">
                 {currentCalibrationStep}/6
               </span>
@@ -1656,7 +1668,7 @@ export function PlayView({
             </div>
 
             {/* Flush Solve Combo */}
-            {hasMounted && combo >= 2 && (
+            {isHydrated && combo >= 2 && (
               <div
                 data-testid="header-combo-indicator"
                 suppressHydrationWarning
@@ -1669,26 +1681,19 @@ export function PlayView({
             )}
 
             {/* Free Tier Quota / Calibration (Hidden for Pro Members) */}
-            {!isPro && (
-              !hasMounted ? (
-                <button
-                  onClick={() => {
-                    setPaywallReason("quota");
-                    setIsQuotaModalOpen(true);
-                  }}
-                  data-testid="header-quota-btn"
-                  suppressHydrationWarning
-                  className="flex items-center gap-1 text-[11px] font-bold transition-all cursor-pointer opacity-80"
-                  aria-label="View free puzzle quota"
-                >
-                  <span className="text-amber-400">⚡</span>
-                  <span className="font-mono text-zinc-200">
-                    {puzzlesRemaining}/{windowLimit}
-                  </span>
-                </button>
-              ) : isCalibrating ? (
+            {!isHydrated ? (
+              // Keep the HUD footprint stable while localStorage caches hydrate.
+              // Static markup here matches SSR exactly, so no fake numbers flash.
+              <span
+                aria-hidden="true"
+                className="flex items-center gap-1 text-[11px] font-bold invisible"
+              >
+                <span className="text-amber-400">⚡</span>
+                <span className="font-mono text-zinc-200">0/0</span>
+              </span>
+            ) : !isPro ? (
+              isCalibrating ? (
                 <div
-                  suppressHydrationWarning
                   className="flex items-center gap-1 text-[11px] font-bold text-[#c29b78]"
                   title={`Placement Calibration: Puzzle ${currentCalibrationStep} of 6 (Quota starts after placement)`}
                   data-testid="header-calibration-badge"
@@ -1702,7 +1707,6 @@ export function PlayView({
                     setIsQuotaModalOpen(true);
                   }}
                   data-testid="header-quota-btn"
-                  suppressHydrationWarning
                   className="flex items-center gap-1 text-[11px] font-bold transition-all cursor-pointer active:scale-95"
                   title={`Free Quota: ${puzzlesRemaining}/${windowLimit} puzzles remaining this ${windowHours}h window. Tap for details.`}
                   aria-label="View free puzzle quota"
@@ -1713,7 +1717,7 @@ export function PlayView({
                   </span>
                 </button>
               )
-            )}
+            ) : null}
 
             {/* Leaderboard Rank Button */}
             <button
@@ -1724,7 +1728,7 @@ export function PlayView({
               title="Global Standings & Friends"
             >
               <Trophy className="w-3.5 h-3.5" />
-              {hasMounted && incomingFriendRequestsCount > 0 && (
+              {isHydrated && incomingFriendRequestsCount > 0 && (
                 <span
                   data-testid="header-friend-requests-dot"
                   className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-[#c29b78] shadow-[0_0_6px_rgba(194,155,120,0.8)]"
@@ -1736,7 +1740,7 @@ export function PlayView({
       </header>
 
       {/* Offline Mode Banner */}
-      {hasMounted && !isOnline && (
+      {isHydrated && !isOnline && (
         <div
           data-testid="offline-badge"
           className="fixed top-16 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-semibold backdrop-blur-md shadow-lg"
@@ -1749,7 +1753,7 @@ export function PlayView({
       {/* 2. Main Gameplay Canvas */}
       <main className="flex-1 flex flex-col relative w-full pt-14 pb-16 bg-[#151413] overflow-hidden overscroll-none touch-none select-none justify-between items-center">
         {/* Placement Calibration Banner */}
-        {hasMounted && isCalibrating && (
+        {isHydrated && isCalibrating && (
           <div
             className="w-full mx-auto px-3 mt-2 mb-1 animate-in fade-in duration-200"
             style={{
@@ -1815,7 +1819,7 @@ export function PlayView({
         ) : (
           <div className="w-full flex-1 flex flex-col items-center justify-between touch-none overscroll-none overflow-hidden">
             {/* Free Tier Quota Exhausted Banner with Refill Countdown & Upgrade CTA */}
-            {hasMounted && !canPlay && !isPro && !isCalibrating && (
+            {isHydrated && !canPlay && !isPro && !isCalibrating && (
               <div
                 className="w-full mx-auto px-3 mt-1.5 mb-1 animate-in fade-in slide-in-from-top-1 duration-200"
                 style={{

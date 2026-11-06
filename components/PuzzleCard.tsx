@@ -500,7 +500,6 @@ export function PuzzleCard({
     return (Math.abs(hash) % 750) + 120;
   });
   const [isMuted, setIsMuted] = useState<boolean>(false);
-  const [hintActive, setHintActive] = useState<boolean>(false);
   const [hintArrow, setHintArrow] = useState<{ from: string; to: string } | null>(null);
   const [hintUsed, setHintUsed] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -870,7 +869,6 @@ export function PuzzleCard({
     setRetryCount(0);
     setSelectedSquare(null);
     setHighlightStyles({});
-    setHintActive(false);
     setHintArrow(null);
     setHintUsed(false);
     hasPenalizedRef.current = false;
@@ -984,7 +982,6 @@ export function PuzzleCard({
       setIsFlashingRed(false);
       setSelectedSquare(null);
       setHighlightStyles({});
-      setHintActive(false);
 
       const movesArray = puzzle.moves.trim().split(/\s+/);
       setAllMoves(movesArray);
@@ -1373,7 +1370,6 @@ export function PuzzleCard({
       setIsFlashingRed(false);
       setIsShaking(false);
       clearSquareSelection();
-      setHintActive(false);
 
       // Check if the puzzle sequence is complete
       if (isSolved) {
@@ -2106,75 +2102,55 @@ export function PuzzleCard({
     setBoardOrientation((prev) => (prev === "white" ? "black" : "white"));
   };
 
-  // Bottom Action: Trigger Tactical Hint
+  // Bottom Action: Show the tactical arrow for the current step.
+  // Every puzzle resolves to a concrete `{ from, to }` pair on the first click:
+  // authored solution -> chess.js verbose/UCI match -> Stockfish bestmove.
   const handleTriggerHint = async () => {
     if (status !== "playing" && status !== "failed") return;
     haptics.tap();
+
     const positionFen = gameRef.current?.fen() || puzzle?.fen || "";
-    const expectedMove = engineLineRef.current
-      ? undefined
-      : allMoves[currentMoveIndex];
+    if (!positionFen) return;
 
-    let resolvedMove = expectedMove
-      ? resolveExpectedMove(positionFen, expectedMove)
-      : null;
-    let engineSuggested = false;
+    // Inside a diverged engine line the authored tail no longer applies.
+    let resolvedMove = engineLineRef.current
+      ? null
+      : resolveExpectedMove(positionFen, allMoves[currentMoveIndex] || "");
 
-    // Malformed/missing solution strings fall back to a real engine best move.
-    if (!resolvedMove && positionFen) {
+    // Malformed/missing solution strings and engine lines fall back to the
+    // engine's best move for the exact position on the board.
+    if (!resolvedMove) {
       const engineBestMove = await getBestMoveFromStockfish(positionFen);
       if (engineBestMove) {
         resolvedMove = {
           from: engineBestMove.slice(0, 2),
           to: engineBestMove.slice(2, 4),
         };
-        engineSuggested = true;
       }
     }
 
-    if (!resolvedMove) {
-      showToast("No hint available for this position");
-      return;
+    // Last resort: never leave the Hint action without an arrow. If the engine
+    // is unavailable, surface the first legal move instead of a highlight-only
+    // dead end.
+    if (!resolvedMove && gameRef.current) {
+      const legalMoves = gameRef.current.moves({ verbose: true });
+      if (legalMoves.length > 0) {
+        resolvedMove = {
+          from: legalMoves[0].from,
+          to: legalMoves[0].to,
+        };
+      }
     }
 
-    const fromSquare = resolvedMove.from;
-    const toSquare = resolvedMove.to;
+    if (!resolvedMove) return;
 
-    setHintActive(true);
+    const { from: fromSquare, to: toSquare } = resolvedMove;
+
     setHintArrow({ from: fromSquare, to: toSquare });
     setHintUsed(true);
     if (puzzle) {
       puzzle.hintUsed = true;
     }
-
-    // Highlight the hint squares with glowing gold aura
-    setHighlightStyles({
-      [fromSquare]: {
-        backgroundColor: "rgba(194, 155, 120, 0.45)",
-        boxShadow: "inset 0 0 0 3px #c29b78, 0 0 16px rgba(194, 155, 120, 0.7)",
-      },
-      [toSquare]: {
-        background:
-          "radial-gradient(circle, rgba(194, 155, 120, 0.75) 28%, transparent 30%)",
-        boxShadow: "inset 0 0 0 2px rgba(194, 155, 120, 0.6)",
-      },
-    });
-
-    const piece = gameRef.current ? gameRef.current.get(fromSquare as Square) : null;
-    const pieceNames: Record<string, string> = {
-      p: "Pawn",
-      n: "Knight",
-      b: "Bishop",
-      r: "Rook",
-      q: "Queen",
-      k: "King",
-    };
-    const pieceLabel = piece ? ` (${pieceNames[piece.type] || piece.type.toUpperCase()})` : "";
-    showToast(
-      `Hint: Focus on ${fromSquare.toUpperCase()}${pieceLabel}!${
-        engineSuggested ? " (Engine move)" : " (Reduced Elo gain)"
-      }`
-    );
   };
 
   // Calculate puzzle completion steps
@@ -2802,46 +2778,69 @@ export function PuzzleCard({
               const file = square.charCodeAt(0) - 97;
               const rank = Number(square[1]);
               return boardOrientation === "white"
-                ? { x: (file + 0.5) * 12.5, y: (8.5 - rank) * 12.5 }
-                : { x: (7.5 - file) * 12.5, y: (rank - 0.5) * 12.5 };
+                ? { x: file * 12.5 + 6.25, y: (8 - rank) * 12.5 + 6.25 }
+                : { x: (7 - file) * 12.5 + 6.25, y: (rank - 1) * 12.5 + 6.25 };
             };
+
             const from = squareCenter(hintArrow.from);
             const to = squareCenter(hintArrow.to);
+            const dx = to.x - from.x;
+            const dy = to.y - from.y;
+            const distance = Math.hypot(dx, dy);
+            if (distance < 0.01) return null;
+
+            const ux = dx / distance;
+            const uy = dy / distance;
+            // Trim both ends so the shaft starts inside the origin square and
+            // meets the arrowhead base without poking through the tip.
+            const start = {
+              x: from.x + ux * 2.5,
+              y: from.y + uy * 2.5,
+            };
+            const shaftEnd = {
+              x: to.x - ux * 4.2,
+              y: to.y - uy * 4.2,
+            };
+
+            // Equilateral arrowhead: tip at the destination square center.
+            const angle = Math.atan2(dy, dx);
+            const headLength = 5.5;
+            const headHalfWidth = 6.5 / 2;
+            const baseX = to.x - Math.cos(angle) * headLength;
+            const baseY = to.y - Math.sin(angle) * headLength;
+            const perpX = -Math.sin(angle);
+            const perpY = Math.cos(angle);
+            const arrowheadPoints = [
+              `${to.x},${to.y}`,
+              `${baseX + perpX * headHalfWidth},${baseY + perpY * headHalfWidth}`,
+              `${baseX - perpX * headHalfWidth},${baseY - perpY * headHalfWidth}`,
+            ].join(" ");
+
             return (
               <svg
                 aria-hidden="true"
-                className="absolute inset-0 z-30 h-full w-full pointer-events-none"
+                data-testid="hint-arrow"
+                data-from={hintArrow.from}
+                data-to={hintArrow.to}
+                className="pointer-events-none absolute inset-0 z-30 w-full h-full"
                 viewBox="0 0 100 100"
                 preserveAspectRatio="none"
               >
-                <defs>
-                  <marker
-                    id="hint-arrowhead"
-                    markerWidth="2.5"
-                    markerHeight="2.5"
-                    refX="2.2"
-                    refY="1.25"
-                    orient="auto"
-                    markerUnits="userSpaceOnUse"
-                  >
-                    <path d="M 0 0 L 2.5 1.25 L 0 2.5 z" fill="#c29b78" />
-                  </marker>
-                  <filter id="hint-arrow-shadow" x="-20%" y="-20%" width="140%" height="140%">
-                    <feDropShadow dx="0" dy="0.25" stdDeviation="0.35" floodColor="#000000" floodOpacity="0.55" />
-                  </filter>
-                </defs>
-                <line
-                  x1={from.x}
-                  y1={from.y}
-                  x2={to.x}
-                  y2={to.y}
-                  stroke="#c29b78"
-                  strokeWidth="1"
-                  strokeLinecap="round"
-                  opacity="0.88"
-                  markerEnd="url(#hint-arrowhead)"
-                  filter="url(#hint-arrow-shadow)"
-                />
+                <g opacity="0.85">
+                  <line
+                    x1={start.x}
+                    y1={start.y}
+                    x2={shaftEnd.x}
+                    y2={shaftEnd.y}
+                    stroke="#eab308"
+                    strokeWidth="2.8"
+                    strokeLinecap="butt"
+                  />
+                  <polygon
+                    points={arrowheadPoints}
+                    fill="#eab308"
+                  />
+                </g>
               </svg>
             );
           })()}
@@ -3110,7 +3109,7 @@ export function PuzzleCard({
               disabled={status !== "playing" && status !== "failed"}
               aria-label="Hint"
               data-testid="hint-btn"
-              title={isHintGlowing ? "Need help? Click for a hint!" : "Highlight tactical move"}
+              title={isHintGlowing ? "Need help? Click for a hint!" : "Show tactical move arrow"}
               className={`p-2 -m-2 cursor-pointer active:scale-90 transition-all relative ${
                 isHintGlowing
                   ? "text-[#c29b78] drop-shadow-[0_0_10px_rgba(194,155,120,0.95)] animate-pulse"
@@ -3237,4 +3236,3 @@ export function PuzzleCard({
     </motion.div>
   );
 }
-
