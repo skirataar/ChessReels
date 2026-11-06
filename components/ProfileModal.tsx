@@ -36,6 +36,7 @@ import { UserAvatar } from "@/components/UserAvatar";
 import { CURATED_AVATARS, compressImageFile, persistAvatar } from "@/lib/avatarUpload";
 import { PuzzleCard, PuzzleData, PuzzleStatus } from "@/components/PuzzleCard";
 import { isGuestUserId } from "@/lib/guestAccount";
+import { formatTitle } from "@/lib/formatTitle";
 
 export interface ProfileModalProps {
   isOpen: boolean;
@@ -631,7 +632,7 @@ export function ProfileModal({
                           </div>
                           <p className="text-[10px] text-[#a3a3a3] truncate">
                             {pData?.themes
-                              ? pData.themes.split(" ").slice(0, 3).join(", ")
+                              ? pData.themes.split(/\s+/).filter(Boolean).slice(0, 3).map(formatTitle).join(", ")
                               : "Tactical checkmate & combination pattern"}
                           </p>
                         </div>

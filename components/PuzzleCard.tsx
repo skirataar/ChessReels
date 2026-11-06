@@ -38,6 +38,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Chessboard, defaultArrowOptions } from "react-chessboard";
 import { useBoardTheme } from "@/lib/boardThemes";
 import { isGuestUserId } from "@/lib/guestAccount";
+import { formatTitle } from "@/lib/formatTitle";
+import {
+  evaluateMoveWithStockfish,
+  getBestMoveFromStockfish,
+} from "@/lib/stockfish";
 
 export interface PuzzleData {
   id: string;
@@ -218,18 +223,18 @@ export function getPuzzleTagline(puzzle: PuzzleData | null | undefined, turn?: "
   }
 
   const themes = (puzzle.themes || "").toLowerCase();
-  if (themes.includes("matein1")) return "Mate in 1 • Knockout blow";
-  if (themes.includes("matein2")) return "Mate in 2 • Forced checkmate";
-  if (themes.includes("matein3") || themes.includes("matein4")) return "Checkmate Net • Trap the king";
-  if (themes.includes("fork")) return "Double Attack • Royal fork";
-  if (themes.includes("pin")) return "Lethal Pin • Paralyze defender";
-  if (themes.includes("skewer")) return "Brutal Skewer • Pierce defense";
-  if (themes.includes("hangingpiece")) return "Tactical Alert • Loose piece";
-  if (themes.includes("discoveredattack")) return "Discovered Check • Hidden strike";
-  if (themes.includes("backrankmate")) return "Back Rank • Trap on 8th rank";
-  if (themes.includes("endgame")) return "Endgame • Convert technical win";
-  if (themes.includes("crushing")) return "Crushing Blow • Decisive advantage";
-  if (puzzle.openingTags) return `${puzzle.openingTags} • Spot tactic`;
+  if (themes.includes("matein1")) return formatTitle("Mate in 1 • Knockout blow");
+  if (themes.includes("matein2")) return formatTitle("Mate in 2 • Forced checkmate");
+  if (themes.includes("matein3") || themes.includes("matein4")) return formatTitle("Checkmate Net • Trap the king");
+  if (themes.includes("fork")) return formatTitle("Double Attack • Royal fork");
+  if (themes.includes("pin")) return formatTitle("Lethal Pin • Paralyze defender");
+  if (themes.includes("skewer")) return formatTitle("Brutal Skewer • Pierce defense");
+  if (themes.includes("hangingpiece")) return formatTitle("Tactical Alert • Loose piece");
+  if (themes.includes("discoveredattack")) return formatTitle("Discovered Check • Hidden strike");
+  if (themes.includes("backrankmate")) return formatTitle("Back Rank • Trap on 8th rank");
+  if (themes.includes("endgame")) return formatTitle("Endgame • Convert technical win");
+  if (themes.includes("crushing")) return formatTitle("Crushing Blow • Decisive advantage");
+  if (puzzle.openingTags) return `${formatTitle(puzzle.openingTags)} • Spot tactic`;
 
   return "Find the winning move";
 }
@@ -827,6 +832,11 @@ export function PuzzleCard({
   const initializePuzzle = useCallback(() => {
     if (!puzzle || !puzzle.fen || !puzzle.moves) return;
 
+    // Cancel any in-flight alternate-move validation from the previous card.
+    moveValidationTokenRef.current += 1;
+    isValidatingMoveRef.current = false;
+    engineLineRef.current = false;
+
     if (autoNextTimerRef.current) {
       clearTimeout(autoNextTimerRef.current);
       autoNextTimerRef.current = null;
@@ -942,6 +952,11 @@ export function PuzzleCard({
       const resetToStart =
         typeof resetToStartArg === "boolean" ? resetToStartArg : false;
       haptics.tap();
+
+      // Invalidate any pending engine validation before resetting the board.
+      moveValidationTokenRef.current += 1;
+      isValidatingMoveRef.current = false;
+      engineLineRef.current = false;
 
       if (autoNextTimerRef.current) {
         clearTimeout(autoNextTimerRef.current);
@@ -1186,132 +1201,60 @@ export function PuzzleCard({
   // Stable ref for triggerSwipeNext to use in executeUserMove
   const triggerSwipeNextRef = useRef<() => void>(() => {});
 
-  // Unified move executor for both Drag-and-Drop and Click-to-Move
-  const executeUserMove = useCallback(
-    (sourceSquare: string, targetSquare: string | null): boolean => {
-      if (
-        (status !== "playing" && status !== "failed") ||
-        !targetSquare ||
-        !gameRef.current ||
-        (isCalibration && placementFeedback !== null) ||
-        (canPlay === false && !isPro) ||
-        isPaywallOpen
-      ) {
-        return false;
-      }
+  // Alternate-move validation is asynchronous; block further board input while
+  // Stockfish is thinking so two moves cannot race the same board instance.
+  const isValidatingMoveRef = useRef<boolean>(false);
+  // Incremented on reset/puzzle change so an in-flight engine validation can
+  // never commit a move to the wrong board.
+  const moveValidationTokenRef = useRef<number>(0);
+  // Once a user finds a different winning line we keep using the engine for the
+  // remaining plies instead of the hard-coded solution tail.
+  const engineLineRef = useRef<boolean>(false);
 
-      if (viewMoveIndex < moveHistory.length - 1) {
-        setViewMoveIndex(moveHistory.length - 1);
-        return false;
-      }
-
-      if (!sourceSquare || !targetSquare || sourceSquare === targetSquare) {
-        return false;
-      }
-
-      setHintArrow(null);
-
-      const game = gameRef.current;
-      const movingPiece = game.get(sourceSquare as Square);
-      if (!movingPiece || movingPiece.color !== playerColor || game.turn() !== playerColor) {
-        return false;
-      }
-
-      const expectedMove = allMoves[currentMoveIndex];
-
-      if (!expectedMove) {
-        return false;
-      }
-
-      const expectedFrom = expectedMove.slice(0, 2).toLowerCase();
-      const expectedTo = expectedMove.slice(2, 4).toLowerCase();
-      const expectedPromo =
-        expectedMove.length === 5 ? expectedMove[4].toLowerCase() : undefined;
-
-      let alternateCheckmate = false;
+  // Persist an incorrect attempt: undo the tentative move, flash red, and
+  // apply the existing Elo/retry bookkeeping.
+  const registerIncorrectMove = useCallback(
+    (
+      game: Chess,
+      sourceSquare: string,
+      targetSquare: string,
+      optimisticFen?: string
+    ) => {
       try {
-        const tempChess = new Chess(game.fen());
-        const moveResult = tempChess.move({
-          from: sourceSquare,
-          to: targetSquare,
-          promotion: "q",
-        });
-        alternateCheckmate = moveResult !== null && tempChess.isCheckmate();
-      } catch {}
-
-      // 1. Check chess legality with chess.js
-      let moveMade = null;
-      try {
-        moveMade = game.move({
-          from: sourceSquare,
-          to: targetSquare,
-          promotion: expectedPromo ?? "q",
-        });
-      } catch {
-        return false;
-      }
-
-      if (!moveMade) {
-        return false;
-      }
-
-      const moveUci = (
-        sourceSquare +
-        targetSquare +
-        (moveMade.promotion ? moveMade.promotion.toLowerCase() : "")
-      ).toLowerCase();
-      const expectedUciNormalized = (
-        expectedFrom +
-        expectedTo +
-        (expectedPromo ?? "")
-      ).toLowerCase();
-
-      // 2. Alternate checkmate validation overrides the hardcoded solution.
-      if (!alternateCheckmate && moveUci !== expectedUciNormalized) {
-        // Legal chess move, but INCORRECT puzzle solution
         game.undo();
-        sounds.playIllegal();
-        haptics.error();
+      } catch {
+        // The move may already have been undone by a competing reset.
+      }
+      setFen(game.fen());
 
-        if (isCalibration) {
-          // Placement / Calibration game: finish on wrong move with clear crimson feedback & board highlight
-          setFen(game.fen());
-          setHighlightStyles({
-            [sourceSquare]: {
-              backgroundColor: "rgba(239, 68, 68, 0.45)",
-              boxShadow: "inset 0 0 10px rgba(239, 68, 68, 0.8)",
-            },
-            [targetSquare]: {
-              backgroundColor: "rgba(239, 68, 68, 0.55)",
-              boxShadow: "inset 0 0 14px rgba(239, 68, 68, 0.95)",
-            },
-          });
-          setPlacementFeedback("incorrect");
-          onStatusChange("failed");
-          if (puzzle) {
-            puzzle.hasFailed = true;
-          }
-          if (!hasScoredCurrentPuzzleRef.current) {
-            hasScoredCurrentPuzzleRef.current = true;
-            sendEloResult("loss");
-          }
-          if (puzzle) {
-            onSavePuzzleState?.(activeInstanceKey || puzzle.id, {
-              status: "failed",
-              moveHistory,
-              viewMoveIndex,
-            });
-          }
-          if (placementTransitionTimerRef.current) {
-            clearTimeout(placementTransitionTimerRef.current);
-          }
-          placementTransitionTimerRef.current = setTimeout(() => {
-            triggerSwipeNextRef.current();
-          }, 1200);
-          return false;
-        }
+      if (optimisticFen) {
+        setMoveHistory((prev) => {
+          const next =
+            prev.length > 1 && prev[prev.length - 1] === optimisticFen
+              ? prev.slice(0, -1)
+              : prev;
+          setViewMoveIndex(next.length - 1);
+          return next;
+        });
+      }
 
-        // Penalize Elo once per puzzle
+      sounds.playIllegal();
+      haptics.error();
+
+      if (isCalibration) {
+        // Placement / Calibration game: finish on wrong move with clear crimson feedback & board highlight
+        setHighlightStyles({
+          [sourceSquare]: {
+            backgroundColor: "rgba(239, 68, 68, 0.45)",
+            boxShadow: "inset 0 0 10px rgba(239, 68, 68, 0.8)",
+          },
+          [targetSquare]: {
+            backgroundColor: "rgba(239, 68, 68, 0.55)",
+            boxShadow: "inset 0 0 14px rgba(239, 68, 68, 0.95)",
+          },
+        });
+        setPlacementFeedback("incorrect");
+        onStatusChange("failed");
         if (puzzle) {
           puzzle.hasFailed = true;
         }
@@ -1326,43 +1269,101 @@ export function PuzzleCard({
             viewMoveIndex,
           });
         }
-
-        // QOL: Increment retries count for this puzzle
-        setRetryCount((prev) => prev + 1);
-
-        // Flash red saying incorrect & shake board
-        setIsFlashingRed(true);
-        setIsShaking(true);
-        setMistakeFeedback("Incorrect");
-
-        if (mistakeTimerRef.current) clearTimeout(mistakeTimerRef.current);
-        mistakeTimerRef.current = setTimeout(() => {
-          setIsShaking(false);
-          setIsFlashingRed(false);
-          setMistakeFeedback(null);
-        }, 850);
-
-        // Clear square selection & highlights
-        clearSquareSelection();
-
-        // Auto-retry: piece snaps back to previous state and board remains interactive!
-        setFen(game.fen());
-        onStatusChange("failed");
-
+        if (placementTransitionTimerRef.current) {
+          clearTimeout(placementTransitionTimerRef.current);
+        }
+        placementTransitionTimerRef.current = setTimeout(() => {
+          triggerSwipeNextRef.current();
+        }, 1200);
         return false;
       }
 
-      // 3. CORRECT MOVE!
-      const playerFen = game.fen();
-      setFen(playerFen);
-      setMoveHistory((prev) => {
-        const next = [...prev, playerFen];
-        setViewMoveIndex(next.length - 1);
-        return next;
-      });
+      // Penalize Elo once per puzzle
+      if (puzzle) {
+        puzzle.hasFailed = true;
+      }
+      if (!hasScoredCurrentPuzzleRef.current) {
+        hasScoredCurrentPuzzleRef.current = true;
+        sendEloResult("loss");
+      }
+      if (puzzle) {
+        onSavePuzzleState?.(activeInstanceKey || puzzle.id, {
+          status: "failed",
+          moveHistory,
+          viewMoveIndex,
+        });
+      }
 
-      const nextIndex = currentMoveIndex + 1;
-      const isSolved = alternateCheckmate || nextIndex >= allMoves.length;
+      // QOL: Increment retries count for this puzzle
+      setRetryCount((prev) => prev + 1);
+
+      // Flash red saying incorrect & shake board
+      setIsFlashingRed(true);
+      setIsShaking(true);
+      setMistakeFeedback("Incorrect");
+
+      if (mistakeTimerRef.current) clearTimeout(mistakeTimerRef.current);
+      mistakeTimerRef.current = setTimeout(() => {
+        setIsShaking(false);
+        setIsFlashingRed(false);
+        setMistakeFeedback(null);
+      }, 850);
+
+      // Clear square selection & highlights
+      clearSquareSelection();
+
+      // Auto-retry: piece snaps back to previous state and board remains interactive!
+      onStatusChange("failed");
+
+      return false;
+    },
+    [
+      activeInstanceKey,
+      clearSquareSelection,
+      isCalibration,
+      moveHistory,
+      onSavePuzzleState,
+      onStatusChange,
+      puzzle,
+      sendEloResult,
+      viewMoveIndex,
+    ]
+  );
+
+  // Commit a move that is either the exact solution or an engine-approved
+  // alternative. Handles sounds, history, Elo and the opponent's reply.
+  const commitCorrectMove = useCallback(
+    (params: {
+      game: Chess;
+      moveMade: Move;
+      sourceSquare: string;
+      targetSquare: string;
+      playerFen: string;
+      nextIndex: number;
+      isSolved: boolean;
+      historyAlreadyUpdated: boolean;
+      opponentReplyOverride?: string | null;
+    }) => {
+      const {
+        game,
+        moveMade,
+        sourceSquare,
+        targetSquare,
+        playerFen,
+        nextIndex,
+        isSolved,
+        historyAlreadyUpdated,
+        opponentReplyOverride,
+      } = params;
+
+      if (!historyAlreadyUpdated) {
+        setFen(playerFen);
+        setMoveHistory((prev) => {
+          const next = [...prev, playerFen];
+          setViewMoveIndex(next.length - 1);
+          return next;
+        });
+      }
 
       // Strict Priority SFX (check/checkmate, promote, castle, capture, standard)
       // Automatically triggers game-end 150ms later if isSolved
@@ -1416,82 +1417,313 @@ export function PuzzleCard({
         return true;
       }
 
-      // 4. Opponent counter-reply after 300ms
+      // Opponent counter-reply after 300ms. In a diverged line we ask
+      // Stockfish for its best reply; otherwise we use the hard-coded tail.
       setCurrentMoveIndex(nextIndex);
       setTimeout(() => {
-        const oppReply = allMoves[nextIndex];
-        if (!oppReply || !gameRef.current) return;
+        const currentGame = gameRef.current;
+        if (!currentGame) return;
 
-        try {
-          const oppMoveResult = gameRef.current.move({
-            from: oppReply.slice(0, 2),
-            to: oppReply.slice(2, 4),
-            promotion: oppReply.length === 5 ? oppReply[4].toLowerCase() : undefined,
-          });
-          const oppFen = gameRef.current.fen();
-          setFen(oppFen);
-          setMoveHistory((prev) => {
-            const next = [...prev, oppFen];
-            setViewMoveIndex(next.length - 1);
-            return next;
-          });
+        const candidates = [opponentReplyOverride, allMoves[nextIndex]].filter(
+          (candidate): candidate is string => Boolean(candidate)
+        );
 
-          const afterOppIndex = nextIndex + 1;
-          const isSolvedAfterOpp = afterOppIndex >= allMoves.length;
-          playSoundForMove(oppMoveResult, gameRef.current, true, isSolvedAfterOpp);
-
-          setCurrentMoveIndex(afterOppIndex);
-
-          if (isSolvedAfterOpp) {
-            haptics.success();
-            onStatusChange("solved");
-
-            if (puzzle) {
-              setMoveHistory((currentHist) => {
-                onSavePuzzleState?.(activeInstanceKey || puzzle.id, {
-                  status: "solved",
-                  moveHistory: currentHist,
-                  viewMoveIndex: currentHist.length - 1,
-                });
-                return currentHist;
-              });
+        let oppMoveResult: Move | null = null;
+        let usedReply: string | null = null;
+        for (const candidate of candidates) {
+          if (!/^[a-h][1-8][a-h][1-8][qrbn]?$/i.test(candidate)) continue;
+          try {
+            const result = currentGame.move({
+              from: candidate.slice(0, 2),
+              to: candidate.slice(2, 4),
+              promotion:
+                candidate.length === 5 ? candidate[4].toLowerCase() : undefined,
+            });
+            if (result) {
+              oppMoveResult = result;
+              usedReply = candidate;
+              break;
             }
-
-            if (!hasScoredCurrentPuzzleRef.current) {
-              hasScoredCurrentPuzzleRef.current = true;
-              sendEloResult("win");
-            }
-
-            if (isCalibration) {
-              const oppFrom = oppReply.slice(0, 2);
-              const oppTo = oppReply.slice(2, 4);
-              setHighlightStyles({
-                [oppFrom]: {
-                  backgroundColor: "rgba(16, 185, 129, 0.45)",
-                  boxShadow: "inset 0 0 10px rgba(16, 185, 129, 0.8)",
-                },
-                [oppTo]: {
-                  backgroundColor: "rgba(16, 185, 129, 0.55)",
-                  boxShadow: "inset 0 0 14px rgba(16, 185, 129, 0.95)",
-                },
-              });
-              setPlacementFeedback("correct");
-              if (placementTransitionTimerRef.current) {
-                clearTimeout(placementTransitionTimerRef.current);
-              }
-              placementTransitionTimerRef.current = setTimeout(() => {
-                triggerSwipeNextRef.current();
-              }, 1200);
-            }
+          } catch {
+            // Try the next candidate reply.
           }
-        } catch (err) {
-          console.error("Opponent reply error:", err);
+        }
+
+        if (!oppMoveResult || !usedReply) {
+          // No legal reply available: keep the board interactive for the
+          // player instead of freezing the reel.
+          setCurrentMoveIndex(nextIndex + 1);
+          return;
+        }
+
+        const oppFen = currentGame.fen();
+        setFen(oppFen);
+        setMoveHistory((prev) => {
+          const next = [...prev, oppFen];
+          setViewMoveIndex(next.length - 1);
+          return next;
+        });
+
+        const afterOppIndex = nextIndex + 1;
+        // In an engine-approved alternative line the remaining authored plies
+        // are replaced one-for-one by engine plies, so the same index check
+        // still tells us when the tactical sequence is complete.
+        const isSolvedAfterOpp = afterOppIndex >= allMoves.length;
+        playSoundForMove(oppMoveResult, currentGame, true, isSolvedAfterOpp);
+
+        setCurrentMoveIndex(afterOppIndex);
+
+        if (isSolvedAfterOpp) {
+          haptics.success();
+          onStatusChange("solved");
+
+          if (puzzle) {
+            setMoveHistory((currentHist) => {
+              onSavePuzzleState?.(activeInstanceKey || puzzle.id, {
+                status: "solved",
+                moveHistory: currentHist,
+                viewMoveIndex: currentHist.length - 1,
+              });
+              return currentHist;
+            });
+          }
+
+          if (!hasScoredCurrentPuzzleRef.current) {
+            hasScoredCurrentPuzzleRef.current = true;
+            sendEloResult("win");
+          }
+
+          if (isCalibration) {
+            const oppFrom = usedReply.slice(0, 2);
+            const oppTo = usedReply.slice(2, 4);
+            setHighlightStyles({
+              [oppFrom]: {
+                backgroundColor: "rgba(16, 185, 129, 0.45)",
+                boxShadow: "inset 0 0 10px rgba(16, 185, 129, 0.8)",
+              },
+              [oppTo]: {
+                backgroundColor: "rgba(16, 185, 129, 0.55)",
+                boxShadow: "inset 0 0 14px rgba(16, 185, 129, 0.95)",
+              },
+            });
+            setPlacementFeedback("correct");
+            if (placementTransitionTimerRef.current) {
+              clearTimeout(placementTransitionTimerRef.current);
+            }
+            placementTransitionTimerRef.current = setTimeout(() => {
+              triggerSwipeNextRef.current();
+            }, 1200);
+          }
         }
       }, 300);
 
       return true;
     },
-    [status, allMoves, currentMoveIndex, onStatusChange, sendEloResult, isCalibration, placementFeedback, canPlay, isPro, isPaywallOpen, viewMoveIndex, moveHistory.length, playerColor, clearSquareSelection]
+    [
+      activeInstanceKey,
+      allMoves,
+      clearSquareSelection,
+      isCalibration,
+      moveHistory,
+      onSavePuzzleState,
+      onStatusChange,
+      puzzle,
+      sendEloResult,
+      viewMoveIndex,
+    ]
+  );
+
+  // Unified move executor for both Drag-and-Drop and Click-to-Move
+  const executeUserMove = useCallback(
+    (sourceSquare: string, targetSquare: string | null): boolean => {
+      if (
+        (status !== "playing" && status !== "failed") ||
+        !targetSquare ||
+        !gameRef.current ||
+        isValidatingMoveRef.current ||
+        (isCalibration && placementFeedback !== null) ||
+        (canPlay === false && !isPro) ||
+        isPaywallOpen
+      ) {
+        return false;
+      }
+
+      if (viewMoveIndex < moveHistory.length - 1) {
+        setViewMoveIndex(moveHistory.length - 1);
+        return false;
+      }
+
+      if (!sourceSquare || !targetSquare || sourceSquare === targetSquare) {
+        return false;
+      }
+
+      setHintArrow(null);
+
+      const game = gameRef.current;
+      const movingPiece = game.get(sourceSquare as Square);
+      if (!movingPiece || movingPiece.color !== playerColor || game.turn() !== playerColor) {
+        return false;
+      }
+
+      const expectedMove = allMoves[currentMoveIndex];
+      const engineLineActive = engineLineRef.current;
+
+      if (!expectedMove && !engineLineActive) {
+        return false;
+      }
+
+      const expectedFrom = expectedMove ? expectedMove.slice(0, 2).toLowerCase() : "";
+      const expectedTo = expectedMove ? expectedMove.slice(2, 4).toLowerCase() : "";
+      const expectedPromo =
+        expectedMove && expectedMove.length === 5
+          ? expectedMove[4].toLowerCase()
+          : undefined;
+
+      const fenBeforeMove = game.fen();
+
+      let alternateCheckmate = false;
+      try {
+        const tempChess = new Chess(fenBeforeMove);
+        const moveResult = tempChess.move({
+          from: sourceSquare,
+          to: targetSquare,
+          promotion: expectedPromo ?? "q",
+        });
+        alternateCheckmate = moveResult !== null && tempChess.isCheckmate();
+      } catch {}
+
+      // 1. Check chess legality with chess.js
+      let moveMade: Move | null = null;
+      try {
+        moveMade = game.move({
+          from: sourceSquare,
+          to: targetSquare,
+          promotion: expectedPromo ?? "q",
+        });
+      } catch {
+        return false;
+      }
+
+      if (!moveMade) {
+        return false;
+      }
+
+      const playerFen = game.fen();
+      const moveUci = (
+        sourceSquare +
+        targetSquare +
+        (moveMade.promotion ? moveMade.promotion.toLowerCase() : "")
+      ).toLowerCase();
+      const expectedUciNormalized = (
+        expectedFrom +
+        expectedTo +
+        (expectedPromo ?? "")
+      ).toLowerCase();
+
+      const nextIndex = currentMoveIndex + 1;
+      // Plies left in the authored line after the player's current move.
+      const remainingPlies = allMoves.length - 1 - currentMoveIndex;
+
+      // 2. Exact solution or immediate checkmate: no engine round-trip needed.
+      //    (Inside a diverged engine line we still ask Stockfish for the reply.)
+      if (alternateCheckmate || (!engineLineActive && moveUci === expectedUciNormalized)) {
+        const isSolved = alternateCheckmate || nextIndex >= allMoves.length;
+        commitCorrectMove({
+          game,
+          moveMade,
+          sourceSquare,
+          targetSquare,
+          playerFen,
+          nextIndex,
+          isSolved,
+          historyAlreadyUpdated: false,
+        });
+        return true;
+      }
+
+      // 3. Legal but non-solution move: show it optimistically and let
+      //    Stockfish decide whether it is still a winning alternative.
+      setFen(playerFen);
+      setMoveHistory((prev) => {
+        const next = [...prev, playerFen];
+        setViewMoveIndex(next.length - 1);
+        return next;
+      });
+
+      isValidatingMoveRef.current = true;
+      const validationToken = ++moveValidationTokenRef.current;
+
+      void (async () => {
+        try {
+          const evaluation = await evaluateMoveWithStockfish(
+            fenBeforeMove,
+            moveUci,
+            playerFen
+          );
+
+          if (validationToken !== moveValidationTokenRef.current) return;
+
+          if (
+            !evaluation ||
+            evaluation.verdict === "unavailable" ||
+            evaluation.verdict === "invalid"
+          ) {
+            registerIncorrectMove(game, sourceSquare, targetSquare, playerFen);
+            return;
+          }
+
+          const solvedImmediately =
+            evaluation.verdict === "solved" || evaluation.isImmediateCheckmate;
+          const isSolved = solvedImmediately || remainingPlies <= 0;
+
+          if (!solvedImmediately) {
+            // Stay in engine mode for the rest of this line.
+            engineLineRef.current = true;
+          }
+
+          commitCorrectMove({
+            game,
+            moveMade,
+            sourceSquare,
+            targetSquare,
+            playerFen,
+            nextIndex,
+            isSolved,
+            historyAlreadyUpdated: true,
+            opponentReplyOverride: evaluation.opponentReply,
+          });
+
+          if (!isSolved) {
+            showToast("Alternative winning line accepted");
+          }
+        } finally {
+          if (validationToken === moveValidationTokenRef.current) {
+            isValidatingMoveRef.current = false;
+          }
+        }
+      })();
+
+      return true;
+    },
+    [
+      status,
+      allMoves,
+      currentMoveIndex,
+      onStatusChange,
+      sendEloResult,
+      isCalibration,
+      placementFeedback,
+      canPlay,
+      isPro,
+      isPaywallOpen,
+      viewMoveIndex,
+      moveHistory.length,
+      playerColor,
+      clearSquareSelection,
+      commitCorrectMove,
+      registerIncorrectMove,
+      showToast,
+    ]
   );
 
   // Helper to compute legal moves & selection highlights for a given square
@@ -1875,14 +2107,35 @@ export function PuzzleCard({
   };
 
   // Bottom Action: Trigger Tactical Hint
-  const handleTriggerHint = () => {
+  const handleTriggerHint = async () => {
     if (status !== "playing" && status !== "failed") return;
     haptics.tap();
-    const expectedMove = allMoves[currentMoveIndex];
-    if (!expectedMove) return;
+    const positionFen = gameRef.current?.fen() || puzzle?.fen || "";
+    const expectedMove = engineLineRef.current
+      ? undefined
+      : allMoves[currentMoveIndex];
 
-    const resolvedMove = resolveExpectedMove(gameRef.current?.fen() || puzzle?.fen || "", expectedMove);
-    if (!resolvedMove) return;
+    let resolvedMove = expectedMove
+      ? resolveExpectedMove(positionFen, expectedMove)
+      : null;
+    let engineSuggested = false;
+
+    // Malformed/missing solution strings fall back to a real engine best move.
+    if (!resolvedMove && positionFen) {
+      const engineBestMove = await getBestMoveFromStockfish(positionFen);
+      if (engineBestMove) {
+        resolvedMove = {
+          from: engineBestMove.slice(0, 2),
+          to: engineBestMove.slice(2, 4),
+        };
+        engineSuggested = true;
+      }
+    }
+
+    if (!resolvedMove) {
+      showToast("No hint available for this position");
+      return;
+    }
 
     const fromSquare = resolvedMove.from;
     const toSquare = resolvedMove.to;
@@ -1907,7 +2160,7 @@ export function PuzzleCard({
       },
     });
 
-    const piece = gameRef.current ? gameRef.current.get(fromSquare as any) : null;
+    const piece = gameRef.current ? gameRef.current.get(fromSquare as Square) : null;
     const pieceNames: Record<string, string> = {
       p: "Pawn",
       n: "Knight",
@@ -1917,7 +2170,11 @@ export function PuzzleCard({
       k: "King",
     };
     const pieceLabel = piece ? ` (${pieceNames[piece.type] || piece.type.toUpperCase()})` : "";
-    showToast(`Hint: Focus on ${fromSquare.toUpperCase()}${pieceLabel}! (Reduced Elo gain)`);
+    showToast(
+      `Hint: Focus on ${fromSquare.toUpperCase()}${pieceLabel}!${
+        engineSuggested ? " (Engine move)" : " (Reduced Elo gain)"
+      }`
+    );
   };
 
   // Calculate puzzle completion steps
@@ -1932,10 +2189,11 @@ export function PuzzleCard({
 
   const themeList = puzzle?.themes
     ? puzzle.themes
-        .split(" ")
+        .split(/\s+/)
+        .filter(Boolean)
         .slice(0, 2)
-        .map((t) => t.replace(/([A-Z])/g, " $1").trim())
-    : ["Tactics", "Middlegame"];
+        .map(formatTitle)
+    : [formatTitle("Tactics"), formatTitle("Middlegame")];
 
   // --- REELS VERTICAL SWIPE ENGINE ---
   const [dragY, setDragY] = useState<number>(0);
@@ -2365,6 +2623,7 @@ export function PuzzleCard({
         {/* Puzzle Tag / Tagline (Flush inside the row, dynamically scaled to available space with NO symbol) */}
         <div
           data-testid="puzzle-tagline-container"
+          data-themes={themeList.join(" ")}
           className="flex-1 min-w-0 mx-2 flex items-center justify-center overflow-hidden"
         >
           <span

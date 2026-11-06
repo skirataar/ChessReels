@@ -31,6 +31,7 @@ import {
   Sliders,
   Film,
 } from "lucide-react";
+import { formatTitle } from "@/lib/formatTitle";
 
 interface AdminMetrics {
   totalUsers: number;
@@ -1602,12 +1603,12 @@ export default function AdminPage() {
                         {p.fen}
                       </p>
                       <div className="flex flex-wrap gap-1 mb-3">
-                        {p.themes.split(" ").slice(0, 3).map((t, idx) => (
+                        {p.themes.split(/\s+/).filter(Boolean).slice(0, 3).map((t, idx) => (
                           <span
                             key={idx}
                             className="px-1.5 py-0.5 rounded bg-zinc-800/80 text-[10px] text-zinc-400"
                           >
-                            {t}
+                            {formatTitle(t)}
                           </span>
                         ))}
                       </div>
