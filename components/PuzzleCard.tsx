@@ -627,6 +627,16 @@ export function PuzzleCard({
 
   const lastInitializedPuzzleIdRef = useRef<string | null>(null);
 
+  // Alternate-move validation is asynchronous; block further board input while
+  // Stockfish is thinking so two moves cannot race the same board instance.
+  const isValidatingMoveRef = useRef<boolean>(false);
+  // Incremented on reset/puzzle change so an in-flight engine validation can
+  // never commit a move to the wrong board.
+  const moveValidationTokenRef = useRef<number>(0);
+  // Once a user finds a different winning line we keep using the engine for the
+  // remaining plies instead of the hard-coded solution tail.
+  const engineLineRef = useRef<boolean>(false);
+
   // 7-second idle swipe indicator state
   const [showIdleSwipeIndicator, setShowIdleSwipeIndicator] = useState<boolean>(false);
   const idleTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -1200,16 +1210,6 @@ export function PuzzleCard({
 
   // Stable ref for triggerSwipeNext to use in executeUserMove
   const triggerSwipeNextRef = useRef<() => void>(() => {});
-
-  // Alternate-move validation is asynchronous; block further board input while
-  // Stockfish is thinking so two moves cannot race the same board instance.
-  const isValidatingMoveRef = useRef<boolean>(false);
-  // Incremented on reset/puzzle change so an in-flight engine validation can
-  // never commit a move to the wrong board.
-  const moveValidationTokenRef = useRef<number>(0);
-  // Once a user finds a different winning line we keep using the engine for the
-  // remaining plies instead of the hard-coded solution tail.
-  const engineLineRef = useRef<boolean>(false);
 
   // Persist an incorrect attempt: undo the tentative move, flash red, and
   // apply the existing Elo/retry bookkeeping.
