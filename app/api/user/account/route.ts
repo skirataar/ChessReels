@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { hashPassword } from "@/lib/auth";
 import { isGuestUserId } from "@/lib/guestAccount";
-import { isTestAccountPattern } from "@/lib/cleanupTestUsers";
 
 export async function POST(request: NextRequest) {
   try {
@@ -94,12 +93,7 @@ export async function POST(request: NextRequest) {
         ? Math.max(400, Math.min(2600, userElo))
         : fallbackBaseElo;
 
-    const isTest = isTestAccountPattern({
-      isTestAccount: body?.isTestAccount,
-      email: cleanEmail,
-      username: cleanUsername,
-      displayName: displayName?.trim() || cleanUsername,
-    });
+    const isTest = Boolean(body?.isTestAccount);
 
     let user;
 
