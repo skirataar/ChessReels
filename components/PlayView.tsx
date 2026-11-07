@@ -174,9 +174,9 @@ function ChargeBattery({ remaining, unlimited = false }: { remaining: number; un
         <rect x="1" y="1" width="28" height="14" rx="4" fill="rgba(194,155,120,0.08)" stroke="#c29b78" strokeWidth="1.5" />
         <rect x="30.5" y="4.5" width="2.5" height="7" rx="1.25" fill="#c29b78" />
         <path
-          d="M8.25 8c1.05-2.05 2.55-3.05 4.05-3.05 2.25 0 3.35 3.05 2.7 3.05-.65 0 .45-3.05 2.7-3.05 1.5 0 3 1 4.05 3.05-1.05 2.05-2.55 3.05-4.05 3.05-2.25 0-3.35-3.05-2.7-3.05.65 0-.45 3.05-2.7 3.05-1.5 0-3-1-4.05-3.05Z"
+          d="M7 8 C9.3 4.2, 12.2 4.2, 15 8 C17.8 11.8, 20.7 11.8, 23 8 C20.7 4.2, 17.8 4.2, 15 8 C12.2 11.8, 9.3 11.8, 7 8"
           fill="none"
-          stroke="#c29b78"
+          stroke="#d5ae73"
           strokeWidth="1.35"
           strokeLinecap="round"
           strokeLinejoin="round"
