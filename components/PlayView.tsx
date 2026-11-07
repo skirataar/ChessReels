@@ -167,6 +167,49 @@ function AnimatedEloCounter({ value, duration = 600 }: { value: number; duration
   return <span suppressHydrationWarning className="tracking-tight">{displayValue}</span>;
 }
 
+function ChargeBattery({ remaining }: { remaining: number }) {
+  const charge = Math.max(0, Math.min(4, remaining));
+  const color = charge >= 3 ? "#c29b78" : charge === 2 ? "#f59e0b" : "#f43f5e";
+  const barX = [4, 10, 16, 22];
+
+  return (
+    <svg width="34" height="16" viewBox="0 0 34 16" aria-hidden="true" className="shrink-0">
+      <rect
+        x="1"
+        y="1"
+        width="28"
+        height="14"
+        rx="2.5"
+        fill="rgba(255,255,255,0.02)"
+        stroke={color}
+        strokeWidth="1.5"
+        className={charge === 0 ? "opacity-80 animate-pulse" : undefined}
+      />
+      <rect x="30.5" y="4.5" width="2.5" height="7" rx="1" fill={color} />
+      {barX.map((x, index) => (
+        <rect
+          key={x}
+          x={x}
+          y="4"
+          width="4.5"
+          height="8"
+          rx="0.8"
+          fill={index < charge ? color : "rgba(255,255,255,0.06)"}
+        />
+      ))}
+    </svg>
+  );
+}
+
+function getRechargeParts(resetAt: number, now: number) {
+  const totalSeconds = Math.max(0, Math.ceil((resetAt - now) / 1000));
+  return {
+    hours: Math.floor(totalSeconds / 3600),
+    minutes: Math.floor((totalSeconds % 3600) / 60),
+    seconds: totalSeconds % 60,
+  };
+}
+
 export function PlayView({
   initialShowLanding = false,
 }: {
@@ -489,6 +532,7 @@ export function PlayView({
     windowLimit,
     windowHours,
     resetsInMs,
+    resetsAt,
     isAdOpen,
     isQuotaModalOpen,
     setIsAdOpen,
@@ -498,6 +542,38 @@ export function PlayView({
   } = useTierQuota(userAccount?.id || guestId, userAccount?.plan);
 
   const [paywallReason, setPaywallReason] = useState<"quota" | "practice">("quota");
+  const [isBatteryMenuOpen, setIsBatteryMenuOpen] = useState(false);
+  const [batteryNow, setBatteryNow] = useState(0);
+  const batteryMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isBatteryMenuOpen) return;
+
+    const updateTime = () => setBatteryNow(Date.now());
+    updateTime();
+    const interval = window.setInterval(updateTime, 1000);
+    return () => window.clearInterval(interval);
+  }, [isBatteryMenuOpen]);
+
+  useEffect(() => {
+    if (!isBatteryMenuOpen) return;
+
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (!batteryMenuRef.current?.contains(event.target as Node)) {
+        setIsBatteryMenuOpen(false);
+      }
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsBatteryMenuOpen(false);
+    };
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [isBatteryMenuOpen]);
 
   useEffect(() => {
     const handleOpenPaywall = (e: Event) => {
@@ -1716,21 +1792,72 @@ export function PlayView({
                   <span>🎯 {currentCalibrationStep}/6</span>
                 </div>
               ) : (
-                <button
-                  onClick={() => {
-                    setPaywallReason("quota");
-                    setIsQuotaModalOpen(true);
-                  }}
-                  data-testid="header-quota-btn"
-                  className="flex items-center gap-1 text-[11px] font-bold transition-all cursor-pointer active:scale-95"
-                  title={`Free Quota: ${puzzlesRemaining}/${windowLimit} puzzles remaining this ${windowHours}h window. Tap for details.`}
-                  aria-label="View free puzzle quota"
-                >
-                  <span className={puzzlesRemaining > 0 ? "text-amber-400" : "text-rose-400"}>⚡</span>
-                  <span suppressHydrationWarning className={`font-mono ${puzzlesRemaining > 0 ? "text-zinc-200" : "text-rose-400 font-bold"}`}>
-                    {puzzlesRemaining}/{windowLimit}
-                  </span>
-                </button>
+                <div ref={batteryMenuRef} className="relative">
+                  <button
+                    onClick={() => setIsBatteryMenuOpen((open) => !open)}
+                    data-testid="header-quota-btn"
+                    className="flex items-center gap-1 text-[11px] font-bold transition-all cursor-pointer active:scale-95"
+                    title={`Free Quota: ${puzzlesRemaining}/${windowLimit} puzzles remaining this ${windowHours}h window. Tap for details.`}
+                    aria-label="View free puzzle quota"
+                    aria-expanded={isBatteryMenuOpen}
+                    suppressHydrationWarning
+                  >
+                    <ChargeBattery remaining={isHydrated ? puzzlesRemaining : windowLimit} />
+                  </button>
+                  {isBatteryMenuOpen && (
+                    <div className="absolute right-0 top-full mt-2 w-60 z-50 bg-[#0a0908] border border-[#c29b78]/30 shadow-2xl p-3.5 rounded-sm">
+                      {(() => {
+                        const resetAt = resetsAt || batteryNow + resetsInMs;
+                        const recharge = getRechargeParts(resetAt, batteryNow);
+                        return puzzlesRemaining === 0 ? (
+                          <>
+                            <div className="text-xs font-semibold tracking-wider text-rose-400 uppercase">
+                              BATTERY DEPLETED
+                            </div>
+                            <div className="font-mono text-sm text-zinc-100 mt-1">
+                              {recharge.hours}h {recharge.minutes}m {recharge.seconds}s to full charge
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsBatteryMenuOpen(false);
+                                setPaywallReason("quota");
+                                setIsQuotaModalOpen(true);
+                              }}
+                              className="bg-[#c29b78] text-[#0a0908] font-semibold text-xs py-1.5 px-3 w-full mt-3 cursor-pointer"
+                            >
+                              Get Unlimited Charge • Pro
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <div className="text-xs font-medium text-zinc-200">
+                              {puzzlesRemaining}/{windowLimit} Charges Remaining
+                            </div>
+                            {puzzlesRemaining < windowLimit && (
+                              <>
+                                <div className="text-[11px] font-mono text-zinc-400 mt-0.5">
+                                  ~{recharge.hours}h {recharge.minutes}m to full charge
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setIsBatteryMenuOpen(false);
+                                    setPaywallReason("quota");
+                                    setIsQuotaModalOpen(true);
+                                  }}
+                                  className="text-[11px] text-[#c29b78] mt-2 cursor-pointer hover:text-[#e0bd9d]"
+                                >
+                                  Upgrade to Pro for ∞ charge
+                                </button>
+                              </>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  )}
+                </div>
               )
             ) : null}
 

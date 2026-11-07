@@ -273,6 +273,11 @@ export async function checkUserQuota(
       const resetTime = oldestSolveTime + windowDurationMs;
       resetsInMs = Math.max(0, resetTime - Date.now());
       resetsAt = new Date(resetTime).toISOString();
+    } else if (usedInWindow > 0 && recentSolves.length > 0) {
+      const oldestSolveTime = new Date(recentSolves[0].solvedAt).getTime();
+      const resetTime = oldestSolveTime + windowDurationMs;
+      resetsInMs = Math.max(0, resetTime - Date.now());
+      resetsAt = new Date(resetTime).toISOString();
     }
 
     return {
