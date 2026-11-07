@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { LogIn, Sparkles, Zap, Target, Trophy, Crown, ArrowRight } from "lucide-react";
+import { LogIn, Sparkles, Zap, Target, Trophy, ArrowRight } from "lucide-react";
 import { AnimatedChessHero } from "./AnimatedChessHero";
 
 interface LandingPageProps {
@@ -36,9 +36,11 @@ export function LandingPage({
       {/* Top Header Bar */}
       <header className="w-full max-w-md mx-auto flex items-center justify-between z-20 mb-4 sm:mb-6">
         <div className="flex items-center gap-2">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 to-[#c29b78] flex items-center justify-center text-zinc-950 font-black shadow-lg shadow-amber-500/20">
-            <Crown className="w-5 h-5 fill-zinc-950" />
-          </div>
+          <img
+            src="/icons/icon.svg"
+            alt="DoomChess"
+            className="h-9 w-9 rounded-xl object-contain shadow-lg shadow-amber-500/20"
+          />
           <div>
             <span className="text-lg font-black tracking-tight text-white">
               Doom<span className="text-[#c29b78]">Chess</span>
