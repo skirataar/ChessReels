@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { isActiveProAccount } from "@/lib/tierTypes";
 
 export async function POST(request: NextRequest) {
   try {
@@ -47,6 +48,11 @@ export async function POST(request: NextRequest) {
         isCalibrated: true,
         calibrationStep: true,
         plan: true,
+        isPro: true,
+        subscriptionStatus: true,
+        subscriptionPlan: true,
+        paymentProvider: true,
+        currentPeriodEnd: true,
       },
     });
 
@@ -82,10 +88,16 @@ export async function POST(request: NextRequest) {
             isCalibrated: true,
             calibrationStep: true,
             plan: true,
+            isPro: true,
+            subscriptionStatus: true,
+            subscriptionPlan: true,
+            paymentProvider: true,
+            currentPeriodEnd: true,
           },
         });
       }
 
+      const isPro = isActiveProAccount(user);
       const response = NextResponse.json({
         success: true,
         isNewUser: false,
@@ -111,7 +123,12 @@ export async function POST(request: NextRequest) {
           showCoordinates: user.showCoordinates ?? true,
           isCalibrated: user.isCalibrated,
           calibrationStep: user.calibrationStep,
-          plan: user.plan || "free",
+          plan: isPro ? "premium" : "free",
+          isPro,
+          subscriptionStatus: user.subscriptionStatus ?? "none",
+          subscriptionPlan: user.subscriptionPlan ?? null,
+          paymentProvider: user.paymentProvider ?? null,
+          currentPeriodEnd: user.currentPeriodEnd ?? null,
         },
       });
 
@@ -214,13 +231,18 @@ export async function POST(request: NextRequest) {
         isCalibrated: true,
         calibrationStep: true,
         plan: true,
+        isPro: true,
+        subscriptionStatus: true,
+        subscriptionPlan: true,
+        paymentProvider: true,
+        currentPeriodEnd: true,
       },
     });
 
     const response = NextResponse.json({
       success: true,
       isNewUser: true,
-      user: newUser,
+      user: { ...newUser, isPro: isActiveProAccount(newUser) },
     });
 
     response.cookies.set("chess_reel_session", newUser.id, {

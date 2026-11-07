@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { verifyPassword } from "@/lib/auth";
+import { isActiveProAccount } from "@/lib/tierTypes";
 
 export async function POST(request: NextRequest) {
   try {
@@ -50,6 +51,11 @@ export async function POST(request: NextRequest) {
         passwordHash: true,
         googleId: true,
         plan: true,
+        isPro: true,
+        subscriptionStatus: true,
+        subscriptionPlan: true,
+        paymentProvider: true,
+        currentPeriodEnd: true,
       },
     });
 
@@ -104,6 +110,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Clean user response object without secret fields
+    const isPro = isActiveProAccount(user);
     const safeUser = {
       id: user.id,
       username: user.username || cleanUsername,
@@ -126,7 +133,12 @@ export async function POST(request: NextRequest) {
       showCoordinates: user.showCoordinates ?? true,
       isCalibrated: user.isCalibrated,
       calibrationStep: user.calibrationStep,
-      plan: user.plan || "free",
+      plan: isPro ? "premium" : "free",
+      isPro,
+      subscriptionStatus: user.subscriptionStatus ?? "none",
+      subscriptionPlan: user.subscriptionPlan ?? null,
+      paymentProvider: user.paymentProvider ?? null,
+      currentPeriodEnd: user.currentPeriodEnd ?? null,
     };
 
     const response = NextResponse.json({

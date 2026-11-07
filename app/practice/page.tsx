@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { useTierQuota } from "@/lib/useTierQuota";
 import { QuotaPaywallModal } from "@/components/QuotaPaywallModal";
+import { GeoPricing, getPricingForCountry } from "@/lib/pricing";
 import { clearGuestLocalSession, isGuestAccount } from "@/lib/guestAccount";
 import { hydrateUserSession } from "@/lib/sessionHydration";
 
@@ -73,7 +74,13 @@ export default function PracticePage() {
   const router = useRouter();
 
   // User account & Tier state
-  const [account, setAccount] = useState<{ id?: string; plan?: string } | null>(() => {
+  const [account, setAccount] = useState<{
+    id?: string;
+    plan?: string;
+    isPro?: boolean;
+    subscriptionStatus?: string;
+    currentPeriodEnd?: string | null;
+  } | null>(() => {
     if (typeof window !== "undefined") {
       try {
         const raw = window.localStorage.getItem("chess_reel_account");
@@ -119,10 +126,31 @@ export default function PracticePage() {
 
   const {
     isPro,
-    proPrice,
-    annualDiscountPercent,
-    upgradeToPro,
+    refreshSubscription,
   } = useTierQuota(account?.id || "practice_user", account?.plan);
+
+  const [geoPricing, setGeoPricing] = useState<GeoPricing>(() =>
+    getPricingForCountry("US")
+  );
+
+  useEffect(() => {
+    const timezone =
+      typeof Intl !== "undefined"
+        ? Intl.DateTimeFormat().resolvedOptions().timeZone
+        : "";
+    let cancelled = false;
+    fetch(`/api/pricing/geo?tz=${encodeURIComponent(timezone)}`, {
+      cache: "no-store",
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: GeoPricing | null) => {
+        if (!cancelled && data?.monthly) setGeoPricing(data);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Paywall Modal State
   const [isPaywallOpen, setIsPaywallOpen] = useState(false);
@@ -402,7 +430,7 @@ export default function PracticePage() {
                 className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-amber-400 to-[#c29b78] hover:from-amber-300 hover:to-[#d4b08f] text-zinc-950 font-black text-sm flex items-center justify-center gap-2 shadow-xl shadow-amber-500/25 active:scale-95 transition-all cursor-pointer"
               >
                 <Crown className="w-4 h-4 fill-zinc-950" />
-                <span>Unlock Practice Mode — ₹{proPrice}/mo</span>
+                <span>Unlock Practice Mode — {geoPricing.monthly.display}/mo</span>
               </button>
 
               <button
@@ -564,10 +592,12 @@ export default function PracticePage() {
       <QuotaPaywallModal
         isOpen={isPaywallOpen}
         onClose={() => setIsPaywallOpen(false)}
-        onUpgradeToPro={upgradeToPro}
+        onUpgradeComplete={async () => {
+          await refreshSubscription();
+          setIsPaywallOpen(false);
+        }}
+        userId={account?.id}
         resetsInMs={0}
-        proPrice={proPrice}
-        annualDiscountPercent={annualDiscountPercent}
         reason="practice"
       />
     </div>

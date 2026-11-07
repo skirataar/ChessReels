@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { isGuestUserId } from "@/lib/guestAccount";
+import { isActiveProAccount } from "@/lib/tierTypes";
 
 export async function GET(request: NextRequest) {
   try {
@@ -12,6 +13,9 @@ export async function GET(request: NextRequest) {
     if (!targetUserId || isGuestUserId(targetUserId)) {
       return NextResponse.json({
         user: null,
+        isPro: false,
+        subscriptionStatus: "none",
+        currentPeriodEnd: null,
         stats: {
           elo: 1200,
           currentStreak: 0,
@@ -20,6 +24,9 @@ export async function GET(request: NextRequest) {
           isFrozenState: false,
           perfectWeekCounter: 0,
           comboCount: 0,
+          isPro: false,
+          subscriptionStatus: "none",
+          currentPeriodEnd: null,
         },
       });
     }
@@ -38,6 +45,12 @@ export async function GET(request: NextRequest) {
         perfectWeekCounter: true,
         isCalibrated: true,
         calibrationStep: true,
+        plan: true,
+        isPro: true,
+        subscriptionStatus: true,
+        subscriptionPlan: true,
+        paymentProvider: true,
+        currentPeriodEnd: true,
       },
     });
 
@@ -45,9 +58,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
+    const isPro = isActiveProAccount(user);
+    const currentPeriodEnd = user.currentPeriodEnd
+      ? user.currentPeriodEnd.toISOString()
+      : null;
+
     return NextResponse.json({
       success: true,
-      user,
+      user: { ...user, isPro, plan: isPro ? "premium" : "free" },
+      isPro,
+      subscriptionStatus: user.subscriptionStatus ?? "none",
+      currentPeriodEnd,
       stats: {
         elo: user.elo,
         currentStreak: user.streak,
@@ -55,6 +76,10 @@ export async function GET(request: NextRequest) {
         streakFreezes: user.streakFreezes,
         isFrozenState: Boolean(user.isFrozenState),
         perfectWeekCounter: user.perfectWeekCounter,
+        isPro,
+        subscriptionStatus: user.subscriptionStatus ?? "none",
+        subscriptionPlan: user.subscriptionPlan ?? null,
+        currentPeriodEnd,
       },
     });
   } catch (error) {

@@ -1,6 +1,7 @@
 import { hydrateStreakFromDb } from "./useStreak";
 import { sounds } from "./audio";
 import { saveUserStatsSync } from "./userStats";
+import { isActiveProAccount } from "./tierTypes";
 
 export interface UserAccountProgress {
   id: string;
@@ -27,6 +28,12 @@ export interface UserAccountProgress {
   isCalibrated: boolean;
   calibrationStep: number;
   plan?: string;
+  isPro?: boolean;
+  subscriptionStatus?: string;
+  subscriptionPlan?: string | null;
+  paymentProvider?: string | null;
+  providerSubscriptionId?: string | null;
+  currentPeriodEnd?: string | Date | null;
 }
 
 /**
@@ -58,11 +65,11 @@ export function hydrateUserSession(user: Partial<UserAccountProgress> & { id: st
       window.localStorage.setItem("chess_reel_target_elo", String(user.targetElo));
     }
 
-    // 3. Plan
-    if (user.plan) {
-      window.localStorage.setItem("chess_reel_plan", user.plan);
-      window.dispatchEvent(new Event("plan-updated"));
-    }
+    // 3. Plan (legacy field derived from the unified subscription state)
+    const entitled = isActiveProAccount(user);
+    const effectivePlan = entitled ? "premium" : user.plan || "free";
+    window.localStorage.setItem("chess_reel_plan", effectivePlan);
+    window.dispatchEvent(new Event("plan-updated"));
 
     // 4. Daily Streak, Streak Freezes & Regeneration Progress
     hydrateStreakFromDb({
