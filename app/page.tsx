@@ -904,8 +904,10 @@ export default function RootPage() {
   }
 
   return (
-    <div className="h-dvh w-screen overflow-hidden select-none bg-[#0a0908] text-[#f5f2eb] flex flex-col items-center justify-center p-3 sm:p-6 font-sans">
-      <div className="max-w-[390px] w-full h-full max-h-[720px] flex flex-col justify-between relative overflow-hidden">
+    <div className="relative h-dvh w-screen overflow-hidden select-none bg-[#090807] text-[#f5f2eb] flex flex-col items-center justify-center p-3 sm:p-6 font-sans">
+      <div className="pointer-events-none absolute inset-x-0 top-[-18%] h-[58%] bg-[radial-gradient(ellipse_at_top,rgba(194,155,120,0.13),transparent_68%)]" />
+      <div className="pointer-events-none absolute left-[-18%] top-[28%] h-[34%] w-[34%] rounded-full bg-[#c29b78]/[0.025] blur-3xl" />
+      <div className="max-w-[390px] w-full h-full max-h-[720px] flex flex-col justify-between relative overflow-hidden rounded-[28px] border border-white/[0.035] bg-[#0b0a09]/60 shadow-[0_24px_80px_rgba(0,0,0,0.38)]">
         {/* --- Top Progress Bar & Back Navigation (Steps 1, 2, 3, and Auth) --- */}
         {step !== "gate" && (
           <div className="flex items-center gap-3 w-full pt-2 pb-4 shrink-0">
@@ -948,24 +950,30 @@ export default function RootPage() {
                 initial="initial"
                 animate="animate"
                 exit="exit"
-                className="w-full h-full flex flex-col justify-between pt-4"
+                className="w-full h-full flex flex-col justify-between px-1 pt-5"
               >
                 {/* Header Wordmark */}
-                <div className="text-center shrink-0">
+                <div className="relative text-center shrink-0">
                   <img
                     src="/icons/icon.svg"
                     alt="DoomChess"
-                    className="mx-auto mb-2 h-8 w-8 rounded-lg object-contain"
+                    className="mx-auto mb-3 h-9 w-9 rounded-xl object-contain drop-shadow-[0_8px_18px_rgba(194,155,120,0.14)]"
                   />
-                  <span className="text-[11px] font-semibold tracking-[0.3em] text-[#c29b78] uppercase font-mono">
+                  <div className="mx-auto mb-3 h-px w-10 bg-gradient-to-r from-transparent via-[#c29b78]/70 to-transparent" />
+                  <span className="text-[9px] font-semibold tracking-[0.42em] text-[#c29b78]/90 uppercase font-mono">
                     DOOMCHESS
                   </span>
-                  <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-[#f5f2eb] leading-tight mt-2">
-                    Turn doomscrolling into instinct.
+                  <h1 className="mx-auto mt-3 max-w-[330px] text-[28px] sm:text-[32px] font-semibold tracking-[-0.035em] text-[#f8f5ef] leading-[1.02]">
+                    Turn doomscrolling<br />
+                    <span className="bg-gradient-to-r from-[#d5b79c] via-[#f0ddca] to-[#c29b78] bg-clip-text text-transparent">
+                      into instinct.
+                    </span>
                   </h1>
-                  <p className="text-xs text-[#78716c] font-normal tracking-wide mt-1.5">
-                    Infinite tactical chess reels.
-                  </p>
+                  <div className="mt-4 flex items-center justify-center gap-2 text-[9px] font-medium tracking-[0.16em] text-[#77716b] uppercase">
+                    <span className="h-px w-5 bg-white/[0.08]" />
+                    <span>Infinite tactical chess reels</span>
+                    <span className="h-px w-5 bg-white/[0.08]" />
+                  </div>
                 </div>
 
                 {/* Animated Smothered Mate Vignette */}
