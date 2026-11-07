@@ -173,7 +173,14 @@ function ChargeBattery({ remaining, unlimited = false }: { remaining: number; un
       <svg width="34" height="16" viewBox="0 0 34 16" aria-hidden="true" className="shrink-0">
         <rect x="1" y="1" width="28" height="14" rx="4" fill="rgba(194,155,120,0.08)" stroke="#c29b78" strokeWidth="1.5" />
         <rect x="30.5" y="4.5" width="2.5" height="7" rx="1.25" fill="#c29b78" />
-        <text x="15" y="11" textAnchor="middle" fill="#c29b78" className="select-none" fontSize="14" fontWeight="700">∞</text>
+        <path
+          d="M8.25 8c1.05-2.05 2.55-3.05 4.05-3.05 2.25 0 3.35 3.05 2.7 3.05-.65 0 .45-3.05 2.7-3.05 1.5 0 3 1 4.05 3.05-1.05 2.05-2.55 3.05-4.05 3.05-2.25 0-3.35-3.05-2.7-3.05.65 0-.45 3.05-2.7 3.05-1.5 0-3-1-4.05-3.05Z"
+          fill="none"
+          stroke="#c29b78"
+          strokeWidth="1.35"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
       </svg>
     );
   }
