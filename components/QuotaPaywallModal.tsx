@@ -264,7 +264,7 @@ export function QuotaPaywallModal({
             order_id: orderId,
             amount: data.amount,
             currency: data.currency,
-            name: "ChessReels",
+            name: "DoomChess",
             description: `${
               selectedPlan === "yearly" ? "Yearly" : "Monthly"
             } Pro`,
@@ -358,7 +358,7 @@ export function QuotaPaywallModal({
         const checkout = new RazorpayCtor({
           key: data.keyId,
           subscription_id: data.subscriptionId,
-          name: "ChessReels",
+          name: "DoomChess",
           description: `${
             selectedPlan === "yearly" ? "Yearly" : "Monthly"
           } Pro Subscription`,
@@ -434,7 +434,7 @@ export function QuotaPaywallModal({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Upgrade to ChessReels Pro"
+      aria-label="Upgrade to DoomChess Pro"
       className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200"
     >
       <div className="w-full max-w-[420px] max-h-[92dvh] overflow-y-auto flex flex-col rounded-[26px] bg-[#12100e] border border-[#c29b78]/30 shadow-[0_24px_80px_rgba(0,0,0,0.75)] text-[#f5f2eb] relative">
@@ -467,7 +467,7 @@ export function QuotaPaywallModal({
             <div className="min-w-0">
               <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-[#c29b78]">
                 <Sparkles className="w-3 h-3" />
-                <span>ChessReels Pro</span>
+                <span>DoomChess Pro</span>
               </div>
               <h2 className="text-xl font-black tracking-tight text-white leading-tight">
                 {reason === "practice" ? "Unlock Practice Mode" : "Free Quota Reached"}
