@@ -1682,7 +1682,12 @@ export function PlayView({
         <div className="h-14 px-3.5 max-w-md mx-auto flex items-center justify-between gap-2">
           {/* Brand Logo & Title */}
           <div className="flex items-center gap-2 shrink-0">
-            <span className="text-base text-[#c29b78]">♟</span>
+            <img
+              src="/icons/icon.svg"
+              alt=""
+              aria-hidden="true"
+              className="h-7 w-7 rounded-md object-contain"
+            />
             <span className="font-black text-sm tracking-tight text-[#f5f5f5]">
               Doom<span className="text-[#c29b78]">Chess</span>
             </span>
