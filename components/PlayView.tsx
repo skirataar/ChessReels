@@ -167,7 +167,28 @@ function AnimatedEloCounter({ value, duration = 600 }: { value: number; duration
   return <span suppressHydrationWarning className="tracking-tight">{displayValue}</span>;
 }
 
-function ChargeBattery({ remaining }: { remaining: number }) {
+function ChargeBattery({ remaining, unlimited = false }: { remaining: number; unlimited?: boolean }) {
+  if (unlimited) {
+    return (
+      <svg width="34" height="16" viewBox="0 0 34 16" aria-hidden="true" className="shrink-0">
+        <rect x="1" y="1" width="28" height="14" rx="4" fill="rgba(34,197,94,0.08)" stroke="#22c55e" strokeWidth="1.5" />
+        <rect x="30.5" y="4.5" width="2.5" height="7" rx="1.25" fill="#22c55e" />
+        <rect x="4" y="4" width="4.5" height="8" rx="1.5" fill="#22c55e" />
+        <rect x="10" y="4" width="4.5" height="8" rx="1.5" fill="#22c55e" />
+        <rect x="16" y="4" width="4.5" height="8" rx="1.5" fill="#22c55e" />
+        <rect x="22" y="4" width="4.5" height="8" rx="1.5" fill="#22c55e" />
+        <path
+          d="M10 8c1.15-1.7 2.25-1.7 3.4 0 1.15 1.7 2.25 1.7 3.4 0M10 8c1.15 1.7 2.25 1.7 3.4 0 1.15-1.7 2.25-1.7 3.4 0"
+          fill="none"
+          stroke="#07130b"
+          strokeWidth="1.35"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }
+
   const charge = Math.max(0, Math.min(4, remaining));
   const color = charge === 4 ? "#22c55e" : charge >= 3 ? "#c29b78" : charge === 2 ? "#f59e0b" : "#f43f5e";
   const barX = [4, 10, 16, 22];
@@ -179,13 +200,13 @@ function ChargeBattery({ remaining }: { remaining: number }) {
         y="1"
         width="28"
         height="14"
-        rx="2.5"
+        rx="4"
         fill="rgba(255,255,255,0.02)"
         stroke={color}
         strokeWidth="1.5"
         className={charge === 0 ? "opacity-80 animate-pulse" : undefined}
       />
-      <rect x="30.5" y="4.5" width="2.5" height="7" rx="1" fill={color} />
+      <rect x="30.5" y="4.5" width="2.5" height="7" rx="1.25" fill={color} />
       {barX.map((x, index) => (
         <rect
           key={x}
@@ -193,7 +214,7 @@ function ChargeBattery({ remaining }: { remaining: number }) {
           y="4"
           width="4.5"
           height="8"
-          rx="0.8"
+          rx="1.4"
           fill={index < charge ? color : "rgba(255,255,255,0.06)"}
           className={index === charge && charge < 4 ? "battery-recharge-bar" : undefined}
         />
@@ -1808,7 +1829,10 @@ export function PlayView({
                     aria-expanded={isBatteryMenuOpen}
                     suppressHydrationWarning
                   >
-                    <ChargeBattery remaining={isHydrated ? puzzlesRemaining : windowLimit} />
+                    <ChargeBattery
+                      remaining={isHydrated ? puzzlesRemaining : windowLimit}
+                      unlimited={isPro}
+                    />
                   </button>
                   {isBatteryMenuOpen && (
                     <div className="absolute right-0 top-full mt-2 w-[272px] z-50 overflow-hidden rounded-lg border border-white/[0.09] bg-[#12110f]/95 shadow-[0_18px_50px_rgba(0,0,0,.7)] backdrop-blur-xl">
