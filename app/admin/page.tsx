@@ -408,6 +408,9 @@ export default function AdminPage() {
         addLog(`Updated @${user.username || user.id} subscription to ${nextPlan.toUpperCase()}.`);
         showBanner(`@${user.username || "User"} plan set to ${nextPlan.toUpperCase()}`);
         fetchMetrics();
+      } else {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "Failed to update subscription tier");
       }
     } catch (e) {
       console.error(e);

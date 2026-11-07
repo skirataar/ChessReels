@@ -62,6 +62,7 @@ export interface ProfileModalProps {
   onOpenLanding?: () => void;
   onSignOut?: () => void;
   onResetElo?: () => void;
+  onOpenUpgrade?: () => void;
 }
 
 export function ProfileModal({
@@ -78,6 +79,7 @@ export function ProfileModal({
   onOpenLanding,
   onSignOut,
   onResetElo,
+  onOpenUpgrade,
 }: ProfileModalProps) {
   const [activeTab, setActiveTab] = useState<"profile" | "saved">("profile");
   const [bookmarks, setBookmarks] = useState<string[]>([]);
@@ -389,14 +391,15 @@ export function ProfileModal({
     setShowResetConfirm(false);
   };
 
-  // Toggle demo subscription upgrade
+  // Route plan changes through the real Razorpay checkout flow.
   const handleUpgradeSubscription = () => {
-    const nextState = !isUpgraded;
-    setIsUpgraded(nextState);
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem("chess_reel_plan", nextState ? "premium" : "free");
-      window.dispatchEvent(new Event("plan-updated"));
+    if (onOpenUpgrade) {
+      onOpenUpgrade();
+      return;
     }
+    window.dispatchEvent(
+      new CustomEvent("chess-reel-open-paywall", { detail: { reason: "quota" } })
+    );
   };
 
   // Change Password Submission
@@ -965,7 +968,7 @@ export function ProfileModal({
                 {isUpgraded ? (
                   <>
                     <CheckCircle2 className="w-3.5 h-3.5 text-[#10b981]" />
-                    <span>Pro Plan Active (Click to Toggle)</span>
+                    <span>Manage Pro Plan</span>
                   </>
                 ) : (
                   <>

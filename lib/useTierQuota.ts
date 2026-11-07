@@ -111,6 +111,7 @@ export function useTierQuota(
   const [puzzlesSinceLastAd, setPuzzlesSinceLastAd] = useState<number>(() => getInitialTierState(isPro, userId).puzzlesSinceLastAd);
   const [canPlay, setCanPlay] = useState<boolean>(() => getInitialTierState(isPro, userId).canPlay);
   const [resetsInMs, setResetsInMs] = useState<number>(() => getInitialTierState(isPro, userId).resetsInMs);
+  const [resetsAt, setResetsAt] = useState<number>(0);
   const [isAdOpen, setIsAdOpen] = useState<boolean>(false);
   const [isQuotaModalOpen, setIsQuotaModalOpen] = useState<boolean>(false);
 
@@ -175,8 +176,15 @@ export function useTierQuota(
         const oldestTime = Math.min(...validTimestamps);
         const resetAt = oldestTime + windowMs;
         setResetsInMs(Math.max(0, resetAt - now));
+        setResetsAt(resetAt);
+      } else if (remaining < currentConfig.freePuzzleLimit && validTimestamps.length > 0) {
+        const oldestTime = Math.min(...validTimestamps);
+        const resetAt = oldestTime + windowMs;
+        setResetsInMs(Math.max(0, resetAt - now));
+        setResetsAt(resetAt);
       } else {
         setResetsInMs(0);
+        setResetsAt(Date.now());
       }
     },
     []
@@ -253,11 +261,15 @@ export function useTierQuota(
 
           const remaining = Math.max(0, limit - used);
           const effectiveCanPlay = remaining > 0;
-          const resets = effectiveCanPlay ? 0 : (data.quota.resetsInMs || 0);
+          const resets = data.quota.resetsInMs || 0;
+          const serverResetAt = typeof data.quota.resetsAt === "string"
+            ? new Date(data.quota.resetsAt).getTime()
+            : Date.now() + resets;
 
           setPuzzlesRemaining(remaining);
           setCanPlay(effectiveCanPlay);
           setResetsInMs(resets);
+          setResetsAt(Number.isFinite(serverResetAt) ? serverResetAt : Date.now() + resets);
         }
       }
     } catch (e) {
@@ -397,6 +409,7 @@ export function useTierQuota(
     proPrice: config.proMonthlyPrice,
     annualDiscountPercent: config.annualDiscountPercent,
     resetsInMs,
+    resetsAt,
     isAdOpen,
     isQuotaModalOpen,
     setIsAdOpen,

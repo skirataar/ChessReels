@@ -118,9 +118,23 @@ async function listUsers() {
       console.log("\x1b[31mUser not found.\x1b[0m");
     } else {
       const nextPlan = user.plan === "premium" ? "free" : "premium";
+      const updateData =
+        nextPlan === "premium"
+          ? {
+              isPro: true,
+              subscriptionStatus: "active",
+            }
+          : {
+              isPro: false,
+              subscriptionStatus: "cancelled",
+              subscriptionPlan: null,
+              paymentProvider: null,
+              providerSubscriptionId: null,
+              currentPeriodEnd: null,
+            };
       await prisma.user.update({
         where: { id: user.id },
-        data: { plan: nextPlan },
+        data: { plan: nextPlan, ...updateData },
       });
       console.log(`\x1b[32mUpdated @${user.username} plan to ${nextPlan.toUpperCase()}\x1b[0m`);
     }
