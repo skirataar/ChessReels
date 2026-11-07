@@ -1955,6 +1955,11 @@ export function PlayView({
         onOpenLanding={() => router.replace("/")}
         onSignOut={handleSignOut}
         onResetElo={handleResetElo}
+        onOpenUpgrade={() => {
+          setActiveTab("reels");
+          setPaywallReason("quota");
+          setIsQuotaModalOpen(true);
+        }}
       />
 
       <AuthModal
