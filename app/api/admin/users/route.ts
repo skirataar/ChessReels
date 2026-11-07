@@ -121,7 +121,22 @@ export async function PATCH(request: NextRequest) {
     }
 
     const updateData: any = {};
-    if (plan !== undefined) updateData.plan = plan === "premium" ? "premium" : "free";
+    if (plan !== undefined) {
+      const normalizedPlan = plan === "premium" ? "premium" : "free";
+      updateData.plan = normalizedPlan;
+
+      if (normalizedPlan === "premium") {
+        updateData.isPro = true;
+        updateData.subscriptionStatus = "active";
+      } else {
+        updateData.isPro = false;
+        updateData.subscriptionStatus = "cancelled";
+        updateData.subscriptionPlan = null;
+        updateData.paymentProvider = null;
+        updateData.providerSubscriptionId = null;
+        updateData.currentPeriodEnd = null;
+      }
+    }
     if (elo !== undefined) {
       const parsedElo = parseInt(elo, 10);
       if (!isNaN(parsedElo)) {
