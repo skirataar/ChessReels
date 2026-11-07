@@ -169,7 +169,7 @@ function AnimatedEloCounter({ value, duration = 600 }: { value: number; duration
 
 function ChargeBattery({ remaining }: { remaining: number }) {
   const charge = Math.max(0, Math.min(4, remaining));
-  const color = charge >= 3 ? "#c29b78" : charge === 2 ? "#f59e0b" : "#f43f5e";
+  const color = charge === 4 ? "#22c55e" : charge >= 3 ? "#c29b78" : charge === 2 ? "#f59e0b" : "#f43f5e";
   const barX = [4, 10, 16, 22];
 
   return (
@@ -195,6 +195,7 @@ function ChargeBattery({ remaining }: { remaining: number }) {
           height="8"
           rx="0.8"
           fill={index < charge ? color : "rgba(255,255,255,0.06)"}
+          className={index === charge && charge < 4 ? "battery-recharge-bar" : undefined}
         />
       ))}
     </svg>
@@ -1805,38 +1806,52 @@ export function PlayView({
                     <ChargeBattery remaining={isHydrated ? puzzlesRemaining : windowLimit} />
                   </button>
                   {isBatteryMenuOpen && (
-                    <div className="absolute right-0 top-full mt-2 w-60 z-50 bg-[#0a0908] border border-[#c29b78]/30 shadow-2xl p-3.5 rounded-sm">
+                    <div className="absolute right-0 top-full mt-2 w-[272px] z-50 overflow-hidden rounded-lg border border-white/[0.09] bg-[#12110f]/95 shadow-[0_18px_50px_rgba(0,0,0,.7)] backdrop-blur-xl">
                       {(() => {
                         const resetAt = resetsAt || batteryNow + resetsInMs;
                         const recharge = getRechargeParts(resetAt, batteryNow);
                         return puzzlesRemaining === 0 ? (
                           <>
-                            <div className="text-xs font-semibold tracking-wider text-rose-400 uppercase">
-                              BATTERY DEPLETED
+                            <div className="flex items-center gap-2 border-b border-white/[0.06] px-4 py-3">
+                              <span className="h-2 w-2 rounded-full bg-rose-400 shadow-[0_0_12px_rgba(251,113,133,.55)]" />
+                              <div>
+                                <div className="text-[10px] font-semibold tracking-[0.18em] text-rose-400 uppercase">Battery depleted</div>
+                                <div className="mt-0.5 text-[11px] text-zinc-500">Next charge is recharging</div>
+                              </div>
                             </div>
-                            <div className="font-mono text-sm text-zinc-100 mt-1">
-                              {recharge.hours}h {recharge.minutes}m {recharge.seconds}s to full charge
+                            <div className="px-4 py-3.5">
+                              <div className="font-mono text-[15px] tracking-tight text-zinc-100 tabular-nums">
+                                {recharge.hours}h {recharge.minutes}m {recharge.seconds}s
+                              </div>
+                              <div className="mt-0.5 text-[10px] tracking-wide text-zinc-500 uppercase">until fully charged</div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsBatteryMenuOpen(false);
+                                  setPaywallReason("quota");
+                                  setIsQuotaModalOpen(true);
+                                }}
+                                className="mt-3.5 h-9 w-full cursor-pointer rounded-md bg-[#c29b78] text-xs font-bold text-[#0a0908] shadow-[0_6px_18px_rgba(194,155,120,.16)] transition-colors hover:bg-[#d2ae90]"
+                              >
+                                Get Unlimited Charge <span className="opacity-70">• Pro</span>
+                              </button>
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setIsBatteryMenuOpen(false);
-                                setPaywallReason("quota");
-                                setIsQuotaModalOpen(true);
-                              }}
-                              className="bg-[#c29b78] text-[#0a0908] font-semibold text-xs py-1.5 px-3 w-full mt-3 cursor-pointer"
-                            >
-                              Get Unlimited Charge • Pro
-                            </button>
                           </>
                         ) : (
                           <>
-                            <div className="text-xs font-medium text-zinc-200">
-                              {puzzlesRemaining}/{windowLimit} Charges Remaining
+                            <div className="border-b border-white/[0.06] px-4 py-3">
+                              <div className="flex items-center justify-between">
+                                <div className="text-xs font-medium text-zinc-200">
+                                  {puzzlesRemaining}/{windowLimit} charges remaining
+                                </div>
+                                {puzzlesRemaining === windowLimit && (
+                                  <span className="rounded-full bg-green-500/10 px-2 py-0.5 text-[9px] font-bold tracking-wider text-green-400 uppercase">Full</span>
+                                )}
+                              </div>
                             </div>
                             {puzzlesRemaining < windowLimit && (
-                              <>
-                                <div className="text-[11px] font-mono text-zinc-400 mt-0.5">
+                              <div className="px-4 py-3.5">
+                                <div className="font-mono text-[13px] text-zinc-300 tabular-nums">
                                   ~{recharge.hours}h {recharge.minutes}m to full charge
                                 </div>
                                 <button
@@ -1846,11 +1861,11 @@ export function PlayView({
                                     setPaywallReason("quota");
                                     setIsQuotaModalOpen(true);
                                   }}
-                                  className="text-[11px] text-[#c29b78] mt-2 cursor-pointer hover:text-[#e0bd9d]"
+                                  className="mt-3 text-[11px] font-medium text-[#c29b78] cursor-pointer transition-colors hover:text-[#e0bd9d]"
                                 >
                                   Upgrade to Pro for ∞ charge
                                 </button>
-                              </>
+                              </div>
                             )}
                           </>
                         );

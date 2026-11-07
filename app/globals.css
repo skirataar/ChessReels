@@ -203,3 +203,17 @@
 .animate-board-shake {
   animation: boardShake 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
 }
+@keyframes batteryRechargeBlink {
+  0%, 100% {
+    opacity: 0.18;
+    filter: none;
+  }
+  50% {
+    opacity: 1;
+    filter: drop-shadow(0 0 2px rgba(194, 155, 120, 0.8));
+  }
+}
+
+.battery-recharge-bar {
+  animation: batteryRechargeBlink 1.25s ease-in-out infinite;
+}
