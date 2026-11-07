@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import prisma from "./prisma";
-import { isActiveProAccount, isProPlan, SubscriptionFields } from "./tierTypes";
+import { isActiveProAccount, SubscriptionFields } from "./tierTypes";
 
 export type BillingProvider = "razorpay" | "global";
 export type SubscriptionPlan = "monthly" | "yearly";
@@ -37,8 +37,6 @@ export function isSubscriptionEntitled(
   record: SubscriptionRecord | null | undefined,
   now: number = Date.now()
 ): boolean {
-  // Legacy users upgraded before provider billing existed keep their access.
-  if (isProPlan(record?.plan)) return true;
   return isActiveProAccount(record, now);
 }
 
