@@ -283,7 +283,7 @@ export function useTierQuota(
 
   // Record a completed puzzle: checks quota & ad threshold (only for solved puzzles)
   const recordPuzzlePlayed = useCallback(
-    (isWin: boolean): { shouldShowAd: boolean; quotaReached: boolean } => {
+    (isWin: boolean, puzzleId?: string): { shouldShowAd: boolean; quotaReached: boolean } => {
       if (isPro) {
         return { shouldShowAd: false, quotaReached: false };
       }
@@ -292,6 +292,31 @@ export function useTierQuota(
       if (!isWin) {
         return { shouldShowAd: false, quotaReached: false };
       }
+
+      void fetch("/api/tier/quota", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, puzzleId, result: "win" }),
+      }).then(async (res) => {
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.quota?.isPro) {
+          setIsPro(true);
+          setPuzzlesRemaining(999999);
+          setCanPlay(true);
+          setResetsInMs(0);
+          setResetsAt(0);
+          return;
+        }
+        if (data.quota) {
+          const remaining = data.quota.puzzlesRemaining ?? puzzlesRemaining;
+          setPuzzlesRemaining(remaining);
+          setCanPlay(Boolean(data.quota.canPlay));
+          setResetsInMs(data.quota.resetsInMs || 0);
+          const resetAt = data.quota.resetsAt ? new Date(data.quota.resetsAt).getTime() : 0;
+          setResetsAt(Number.isFinite(resetAt) ? resetAt : 0);
+        }
+      }).catch(() => {});
 
       const now = Date.now();
       const windowMs = config.freeWindowHours * 3600 * 1000;

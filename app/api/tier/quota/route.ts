@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkUserQuota, getTierConfig } from "@/lib/tierConfig";
+import prisma from "@/lib/prisma";
+import { isGuestUserId } from "@/lib/guestAccount";
 
 export async function GET(request: NextRequest) {
   try {
@@ -19,26 +21,39 @@ export async function GET(request: NextRequest) {
       getTierConfig(),
     ]);
 
-    return NextResponse.json({
-      quota,
-      config,
-    });
-  } catch (error: unknown) {
-    // Let Next.js bail out of static prerendering instead of swallowing the
-    // internal interrupt and returning a 500 for an otherwise dynamic route.
-    if (
-      error &&
-      typeof error === "object" &&
-      "digest" in error &&
-      (error as { digest: string }).digest === "NEXT_PRERENDER_INTERRUPTED"
-    ) {
-      throw error;
+    return NextResponse.json({ quota, config });
+  } catch (error) {
+    console.error("Failed to fetch user quota:", error);
+    return NextResponse.json({ error: "Failed to fetch user quota" }, { status: 500 });
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const sessionCookie = request.cookies.get("chess_reel_session")?.value;
+    const userId = body.userId || sessionCookie;
+
+    if (!userId || isGuestUserId(userId)) {
+      return NextResponse.json({ success: true, guest: true });
     }
 
-    console.error("Failed to fetch user quota status:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch user quota" },
-      { status: 500 }
-    );
+    if (body.puzzleId && body.result === "win") {
+      await prisma.puzzleHistory.upsert({
+        where: { userId_puzzleId: { userId, puzzleId: body.puzzleId } },
+        update: { result: "win", solvedAt: new Date() },
+        create: { userId, puzzleId: body.puzzleId, result: "win", solvedAt: new Date() },
+      });
+    }
+
+    const [quota, config] = await Promise.all([
+      checkUserQuota(userId),
+      getTierConfig(),
+    ]);
+
+    return NextResponse.json({ success: true, quota, config });
+  } catch (error) {
+    console.error("[/api/tier/quota POST] Error:", error);
+    return NextResponse.json({ error: "Failed to register puzzle play" }, { status: 500 });
   }
 }

@@ -171,20 +171,9 @@ function ChargeBattery({ remaining, unlimited = false }: { remaining: number; un
   if (unlimited) {
     return (
       <svg width="34" height="16" viewBox="0 0 34 16" aria-hidden="true" className="shrink-0">
-        <rect x="1" y="1" width="28" height="14" rx="4" fill="rgba(34,197,94,0.08)" stroke="#22c55e" strokeWidth="1.5" />
-        <rect x="30.5" y="4.5" width="2.5" height="7" rx="1.25" fill="#22c55e" />
-        <rect x="4" y="4" width="4.5" height="8" rx="1.5" fill="#22c55e" />
-        <rect x="10" y="4" width="4.5" height="8" rx="1.5" fill="#22c55e" />
-        <rect x="16" y="4" width="4.5" height="8" rx="1.5" fill="#22c55e" />
-        <rect x="22" y="4" width="4.5" height="8" rx="1.5" fill="#22c55e" />
-        <path
-          d="M10 8c1.15-1.7 2.25-1.7 3.4 0 1.15 1.7 2.25 1.7 3.4 0M10 8c1.15 1.7 2.25 1.7 3.4 0 1.15-1.7 2.25-1.7 3.4 0"
-          fill="none"
-          stroke="#07130b"
-          strokeWidth="1.35"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
+        <rect x="1" y="1" width="28" height="14" rx="4" fill="rgba(194,155,120,0.08)" stroke="#c29b78" strokeWidth="1.5" />
+        <rect x="30.5" y="4.5" width="2.5" height="7" rx="1.25" fill="#c29b78" />
+        <text x="15" y="11" textAnchor="middle" fill="#c29b78" className="select-none" fontSize="14" fontWeight="700">∞</text>
       </svg>
     );
   }
@@ -689,6 +678,7 @@ export function PlayView({
   );
 
   const [isHydrated, setIsHydrated] = useState<boolean>(false);
+  const [isLoadingSession, setIsLoadingSession] = useState<boolean>(true);
 
   useEffect(() => {
     // Hydrate the HUD from the synchronous localStorage caches before revealing
@@ -704,6 +694,7 @@ export function PlayView({
       window.dispatchEvent(new Event("tier-session-updated"));
     }
     setIsHydrated(true);
+    setIsLoadingSession(false);
     const handleAccountSync = () => {
       try {
         const raw = window.localStorage.getItem(ACCOUNT_STORAGE_KEY);
@@ -739,6 +730,26 @@ export function PlayView({
       }
     } catch {}
   }, [isHydrated, userAccount, router]);
+
+  useEffect(() => {
+    if (!isHydrated || !userAccount?.id || isGuestAccount(userAccount)) return;
+
+    let cancelled = false;
+    fetch(`/api/user/stats?userId=${encodeURIComponent(userAccount.id)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled || !data?.stats) return;
+        const dbStats = data.stats;
+        setCurrentElo(dbStats.elo);
+        currentEloRef.current = dbStats.elo;
+        window.localStorage.setItem("chessreels_user_stats_v1", JSON.stringify(dbStats));
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isHydrated, userAccount?.id]);
 
   // Deep-link from other Pro CTAs (onboarding upsell, stats page) into checkout.
   useEffect(() => {
@@ -926,6 +937,7 @@ export function PlayView({
       } catch (e) {
         console.warn("Storage access restricted:", e);
       }
+      setIsLoadingSession(false);
   }, [router]);
 
   // Account switch detection: wipe previous user's queue and reload for the new user
@@ -1065,7 +1077,7 @@ export function PlayView({
         // Continuous Ranked Play: consume free tier quota on genuine solve (only once per puzzle ID, and only if not failed on this attempt)
         if (!isCalibrating && !solvedPuzzleIdsRef.current.has(puzzle.id) && !countedQuotaPuzzleIdsRef.current.has(puzzle.id) && !hasFailedOnThisAttempt) {
           countedQuotaPuzzleIdsRef.current.add(puzzle.id);
-          recordPuzzlePlayed(true);
+          recordPuzzlePlayed(true, puzzle.id);
         }
 
         // Only mark permanently as solved in solvedPuzzleIds IF they didn't fail on this attempt!
@@ -1654,7 +1666,13 @@ export function PlayView({
     const oldUserId = userAccount?.id;
     clearAllUserAndPuzzleCache(oldUserId);
     resetStreakStats();
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem("chessreels_user_stats_v1");
+      window.localStorage.removeItem("quota_last_check");
+    }
     setUserAccount(null);
+    setCurrentElo(0);
+    currentEloRef.current = 0;
     setIsStatsModalOpen(false);
     setSolvedPuzzleIds(new Set());
     setQueue([]);
@@ -1728,8 +1746,14 @@ export function PlayView({
               className="flex items-center gap-1 font-bold text-xs text-[#c29b78]"
               title={`Your Rating: ${currentElo}`}
             >
-              <Zap className="w-3.5 h-3.5 text-[#c29b78] fill-[#c29b78]" />
-              <AnimatedEloCounter value={currentElo} />
+              {!isHydrated || isLoadingSession ? (
+                <span aria-label="Loading rating" className="h-5 w-20 rounded-sm bg-[#12100e] animate-pulse shadow-[inset_0_0_12px_rgba(194,155,120,.08)]" />
+              ) : (
+                <>
+                  <Zap className="w-3.5 h-3.5 text-[#c29b78] fill-[#c29b78]" />
+                  <AnimatedEloCounter value={currentElo} />
+                </>
+              )}
               <AnimatePresence>
                 {showEloDeltaBadge && transientEloDelta !== null && (
                   <motion.span
@@ -1809,7 +1833,30 @@ export function PlayView({
                 <span className="text-amber-400">⚡</span>
                 <span className="font-mono text-zinc-200">0/0</span>
               </span>
-            ) : !isPro ? (
+            ) : isHydrated && isPro === true ? (
+              <div ref={batteryMenuRef} className="relative">
+                <button
+                  onClick={() => setIsBatteryMenuOpen((open) => !open)}
+                  data-testid="header-pro-quota-btn"
+                  className="cursor-pointer transition-transform active:scale-95"
+                  aria-label="View unlimited Pro charge"
+                  aria-expanded={isBatteryMenuOpen}
+                  suppressHydrationWarning
+                >
+                  <ChargeBattery remaining={4} unlimited={isHydrated && isPro === true} />
+                </button>
+                {isBatteryMenuOpen && (
+                  <div className="absolute right-0 top-full mt-2 w-[272px] rounded-lg border border-white/[0.09] bg-[#12110f]/95 p-4 shadow-[0_18px_50px_rgba(0,0,0,.7)] backdrop-blur-xl">
+                    <div className="text-xs font-semibold tracking-[0.16em] text-[#c29b78] uppercase">
+                      PRO Account Unlimited Charge
+                    </div>
+                    <div className="mt-2 text-[11px] leading-5 text-zinc-400">
+                      Your infinity charge never depletes.
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : !(isHydrated && isPro === true) ? (
               isCalibrating ? (
                 <div
                   className="flex items-center gap-1 text-[11px] font-bold text-[#c29b78]"
