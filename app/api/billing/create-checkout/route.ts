@@ -5,6 +5,11 @@ import {
   isRazorpayConfigured,
   normalizePlan,
 } from "@/lib/billing";
+import {
+  createRazorpayOrderForPlan,
+  isRazorpayOrdersConfigured,
+  RazorpayRequestError,
+} from "@/lib/razorpay";
 
 
 interface CheckoutBody {
@@ -164,23 +169,46 @@ export async function POST(request: NextRequest) {
     }
 
     if (gateway === "razorpay") {
-      if (!isRazorpayConfigured()) {
-        if (process.env.NODE_ENV !== "production") {
-          return NextResponse.json({
-            mockMode: true,
-            gateway,
-            plan,
-            reason: "razorpay_credentials_missing",
-          });
-        }
-        return NextResponse.json(
-          { error: "Razorpay is not configured on this deployment." },
-          { status: 503 }
-        );
+      // Recurring subscriptions are preferred when plan ids are configured.
+      if (isRazorpayConfigured()) {
+        const result = await createRazorpaySubscription({ plan, userId: user.id });
+        return NextResponse.json({
+          checkoutMode: "subscription",
+          ...result,
+          gateway,
+          plan,
+        });
       }
 
-      const result = await createRazorpaySubscription({ plan, userId: user.id });
-      return NextResponse.json({ ...result, gateway, plan });
+      // Standard Checkout fallback: only the key pair is configured, so create
+      // a one-time order and verify its signature on the client.
+      if (isRazorpayOrdersConfigured()) {
+        const order = await createRazorpayOrderForPlan({
+          plan,
+          userId: user.id,
+        });
+        return NextResponse.json({
+          checkoutMode: "order",
+          ...order,
+          order_id: order.orderId,
+          keyId: order.keyId,
+          gateway,
+          plan,
+        });
+      }
+
+      if (process.env.NODE_ENV !== "production") {
+        return NextResponse.json({
+          mockMode: true,
+          gateway,
+          plan,
+          reason: "razorpay_credentials_missing",
+        });
+      }
+      return NextResponse.json(
+        { error: "Razorpay is not configured on this deployment." },
+        { status: 503 }
+      );
     }
 
     if (!isLemonSqueezyConfigured()) {
@@ -207,6 +235,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ...result, gateway, plan });
   } catch (error: unknown) {
     console.error("[/api/billing/create-checkout] Error:", error);
+
+    if (error instanceof RazorpayRequestError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+
     return NextResponse.json(
       {
         error:

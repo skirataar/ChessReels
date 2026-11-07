@@ -39,6 +39,12 @@ interface RazorpayInstance {
   on: (event: string, handler: (response: unknown) => void) => void;
 }
 
+interface RazorpayPaymentResponse {
+  razorpay_payment_id: string;
+  razorpay_order_id: string;
+  razorpay_signature: string;
+}
+
 type RazorpayConstructor = new (options: Record<string, unknown>) => RazorpayInstance;
 
 const FALLBACK_PRICING = getPricingForCountry("US");
@@ -228,6 +234,110 @@ export function QuotaPaywallModal({
       }
 
       if (activePricing.gateway === "razorpay") {
+        // Standard Checkout (one-time order) fallback used when Razorpay
+        // subscription plan ids are not configured.
+        if (data?.checkoutMode === "order" || data?.orderId || data?.order_id) {
+          const orderId = (data.orderId || data.order_id) as string | undefined;
+          const keyId = (data.keyId ||
+            data.key_id ||
+            process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID) as string | undefined;
+
+          if (!orderId || !keyId) {
+            throw new Error("Razorpay order details were incomplete.");
+          }
+
+          const loaded = await loadRazorpayScript();
+          if (!loaded) {
+            throw new Error("Could not load Razorpay Checkout. Check your connection.");
+          }
+
+          const RazorpayCtor = (
+            window as unknown as { Razorpay?: RazorpayConstructor }
+          ).Razorpay;
+
+          if (!RazorpayCtor) {
+            throw new Error("Razorpay Checkout is unavailable.");
+          }
+
+          const checkout = new RazorpayCtor({
+            key: keyId,
+            order_id: orderId,
+            amount: data.amount,
+            currency: data.currency,
+            name: "ChessReels",
+            description: `${
+              selectedPlan === "yearly" ? "Yearly" : "Monthly"
+            } Pro`,
+            theme: { color: "#c29b78" },
+            notes: { plan: selectedPlan },
+            modal: {
+              ondismiss: () => setStatus("idle"),
+            },
+            handler: (response: unknown) => {
+              void (async () => {
+                const payment = response as Partial<RazorpayPaymentResponse>;
+                if (
+                  !payment?.razorpay_order_id ||
+                  !payment.razorpay_payment_id ||
+                  !payment.razorpay_signature
+                ) {
+                  throw new Error(
+                    "Razorpay did not return complete payment details."
+                  );
+                }
+
+                setStatus("loading");
+
+                const verification = await fetch("/api/verify-payment", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    razorpay_order_id: payment.razorpay_order_id,
+                    razorpay_payment_id: payment.razorpay_payment_id,
+                    razorpay_signature: payment.razorpay_signature,
+                  }),
+                });
+
+                const verificationData = await verification
+                  .json()
+                  .catch(() => ({}));
+
+                if (!verification.ok || !verificationData?.success) {
+                  throw new Error(
+                    typeof verificationData?.error === "string"
+                      ? verificationData.error
+                      : "Payment could not be verified."
+                  );
+                }
+
+                await finishUpgrade();
+              })().catch((error: unknown) => {
+                setStatus("error");
+                setErrorMessage(
+                  error instanceof Error
+                    ? error.message
+                    : "Payment was received but could not be verified."
+                );
+              });
+            },
+          });
+
+          checkout.on("payment.failed", (response: unknown) => {
+            const failure = response as {
+              error?: { description?: string };
+            };
+            setStatus("error");
+            setErrorMessage(
+              failure?.error?.description ||
+                "Payment was not completed. No charge was made."
+            );
+          });
+
+          setStatus("idle");
+          checkout.open();
+          return;
+        }
+
         if (!data?.subscriptionId || !data?.keyId) {
           throw new Error("Razorpay checkout details were incomplete.");
         }
