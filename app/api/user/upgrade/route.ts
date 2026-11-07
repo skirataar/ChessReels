@@ -1,7 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { activateSubscription, normalizePlan } from "@/lib/billing";
 
+/**
+ * Legacy/demo upgrade endpoint.
+ *
+ * Kept for local development and onboarding demos. In production, Pro access
+ * must go through `/api/billing/create-checkout` so entitlement is backed by a
+ * verified provider webhook.
+ */
 export async function POST(request: NextRequest) {
+  if (process.env.NODE_ENV === "production") {
+    return NextResponse.json(
+      {
+        error:
+          "Direct upgrades are disabled. Start a subscription from the Pro upgrade modal.",
+        checkoutRequired: true,
+      },
+      { status: 403 }
+    );
+  }
+
   try {
     const body = await request.json().catch(() => ({}));
     const cookieSession = request.cookies.get("chess_reel_session")?.value;
@@ -14,9 +33,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify user exists in database
     const existingUser = await prisma.user.findUnique({
       where: { id: targetUserId },
+      select: { id: true },
     });
 
     if (!existingUser) {
@@ -26,12 +45,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Escalate account privilege in PostgreSQL to premium / pro
-    const updatedUser = await prisma.user.update({
+    const plan = normalizePlan(body.plan) || "monthly";
+    const gateway = body.gateway === "razorpay" ? "razorpay" : "global";
+
+    const subscription = await activateSubscription({
+      userId: existingUser.id,
+      plan,
+      provider: gateway,
+      providerSubscriptionId: `legacy_dev_${gateway}_${Date.now()}`,
+    });
+
+    const updatedUser = await prisma.user.findUnique({
       where: { id: targetUserId },
-      data: {
-        plan: "premium",
-      },
       select: {
         id: true,
         username: true,
@@ -45,6 +70,11 @@ export async function POST(request: NextRequest) {
         isCalibrated: true,
         calibrationStep: true,
         plan: true,
+        isPro: true,
+        subscriptionStatus: true,
+        subscriptionPlan: true,
+        paymentProvider: true,
+        currentPeriodEnd: true,
       },
     });
 
@@ -52,11 +82,11 @@ export async function POST(request: NextRequest) {
       success: true,
       message: "Account upgraded to Pro successfully!",
       user: updatedUser,
+      subscription,
       plan: "premium",
     });
 
-    // Ensure session cookie is maintained
-    response.cookies.set("chess_reel_session", updatedUser.id, {
+    response.cookies.set("chess_reel_session", targetUserId, {
       path: "/",
       httpOnly: false,
       sameSite: "lax",

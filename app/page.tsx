@@ -843,33 +843,16 @@ export default function RootPage() {
     }
   };
 
-  // Upgrade to Pro handler from post-registration upsell
+  // Upgrade to Pro handler from post-registration upsell.
+  // Paid access is always granted by a verified provider webhook, so route the
+  // user into the geo-localized checkout modal instead of upgrading locally.
   const handleUpgradeToPro = async () => {
     try {
-      const accRaw = window.localStorage.getItem("chess_reel_account");
-      let userId: string | undefined;
-      if (accRaw) {
-        const acc = JSON.parse(accRaw);
-        acc.plan = "premium";
-        userId = acc.id;
-        window.localStorage.setItem("chess_reel_account", JSON.stringify(acc));
-      }
-      window.localStorage.setItem("chess_reel_plan", "premium");
-      window.dispatchEvent(new Event("plan-updated"));
-      window.dispatchEvent(new Event("account-updated"));
-
-      if (userId) {
-        await fetch("/api/user/upgrade", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId, plan: "premium" }),
-        });
-      }
-    } catch (err) {
-      console.error("Upgrade error:", err);
-    } finally {
-      router.push("/play");
+      window.localStorage.setItem("chess_reel_open_paywall", "1");
+    } catch {
+      // Ignore storage failures; the play page still loads normally.
     }
+    router.push("/play");
   };
 
   // If on post-registration upsell state

@@ -1,7 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
-import { TierConfig, DEFAULT_TIER_CONFIG, isProPlan } from "./tierTypes";
+import { useState, useEffect, useCallback } from "react";
+import {
+  TierConfig,
+  DEFAULT_TIER_CONFIG,
+  isActiveProAccount,
+  isProPlan,
+  SubscriptionFields,
+} from "./tierTypes";
 
 export const PLAN_STORAGE_KEY = "chess_reel_plan";
 
@@ -10,6 +16,34 @@ export function getTierStorageKey(userId?: string): string {
     return `chess_reel_tier_session_${userId}`;
   }
   return "chess_reel_tier_session_guest";
+}
+
+function readStoredAccount(): SubscriptionFields | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem("chess_reel_account");
+    return raw ? (JSON.parse(raw) as SubscriptionFields) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Plan flag for the current user, including provider-backed Pro state. */
+function resolveLocalPro(userPlan?: string | null): boolean {
+  if (typeof window === "undefined") return isProPlan(userPlan);
+
+  // The hydrated account object is authoritative; it carries the derived
+  // `isPro` + `currentPeriodEnd` state from the server.
+  const account = readStoredAccount();
+  if (account) {
+    return isActiveProAccount({
+      ...account,
+      plan: userPlan ?? account.plan,
+    });
+  }
+
+  if (isProPlan(userPlan)) return true;
+  return isProPlan(window.localStorage.getItem(PLAN_STORAGE_KEY));
 }
 
 export interface LocalTierSession {
@@ -71,18 +105,7 @@ export function useTierQuota(
   userPlan?: string | null
 ) {
   const [config, setConfig] = useState<TierConfig>(DEFAULT_TIER_CONFIG);
-  const [isPro, setIsPro] = useState<boolean>(() => {
-    if (isProPlan(userPlan)) return true;
-    if (typeof window !== "undefined") {
-      const localPlan = window.localStorage.getItem(PLAN_STORAGE_KEY);
-      if (isProPlan(localPlan)) return true;
-      try {
-        const acc = JSON.parse(window.localStorage.getItem("chess_reel_account") || "{}");
-        if (isProPlan(acc?.plan)) return true;
-      } catch {}
-    }
-    return false;
-  });
+  const [isPro, setIsPro] = useState<boolean>(() => resolveLocalPro(userPlan));
 
   const [puzzlesRemaining, setPuzzlesRemaining] = useState<number>(() => getInitialTierState(isPro, userId).puzzlesRemaining);
   const [puzzlesSinceLastAd, setPuzzlesSinceLastAd] = useState<number>(() => getInitialTierState(isPro, userId).puzzlesSinceLastAd);
@@ -95,13 +118,7 @@ export function useTierQuota(
   useEffect(() => {
     if (typeof window === "undefined") return;
     const syncPlan = () => {
-      const localPlan = window.localStorage.getItem(PLAN_STORAGE_KEY);
-      const accRaw = window.localStorage.getItem("chess_reel_account");
-      let accPlan: string | undefined;
-      try {
-        if (accRaw) accPlan = JSON.parse(accRaw)?.plan;
-      } catch {}
-      const effectivePro = isProPlan(userPlan) || isProPlan(localPlan) || isProPlan(accPlan);
+      const effectivePro = resolveLocalPro(userPlan);
       setIsPro(effectivePro);
       if (effectivePro) {
         setPuzzlesRemaining(999999);
@@ -199,8 +216,7 @@ export function useTierQuota(
   const syncWithServer = useCallback(async () => {
     if (!userId) return;
     try {
-      const planParam = isPro ? "&plan=premium" : "";
-      const res = await fetch(`/api/tier/quota?userId=${encodeURIComponent(userId)}${planParam}`);
+      const res = await fetch(`/api/tier/quota?userId=${encodeURIComponent(userId)}`);
       if (res.ok) {
         const data = await res.json();
         if (data.config) setConfig(data.config);
@@ -330,50 +346,46 @@ export function useTierQuota(
     [userId, isPro, config, puzzlesSinceLastAd]
   );
 
-  // Upgrade user to Pro immediately and persist to database
-  const upgradeToPro = useCallback(async () => {
-    setIsPro(true);
-    setPuzzlesRemaining(999999);
-    setCanPlay(true);
-    setResetsInMs(0);
-    setIsAdOpen(false);
-    setIsQuotaModalOpen(false);
+  /**
+   * Re-read the authenticated user's subscription state from the database after
+   * a provider checkout (or dev activation) completes.
+   */
+  const refreshSubscription = useCallback(async () => {
+    if (!userId) return;
 
-    const storageKey = getTierStorageKey(userId);
     try {
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem(PLAN_STORAGE_KEY, "premium");
-        window.localStorage.removeItem(storageKey);
-        const accRaw = window.localStorage.getItem("chess_reel_account");
-        if (accRaw) {
-          const acc = JSON.parse(accRaw);
-          acc.plan = "premium";
-          window.localStorage.setItem("chess_reel_account", JSON.stringify(acc));
-        }
-        window.dispatchEvent(new Event("plan-updated"));
-        window.dispatchEvent(new Event("account-updated"));
-      }
-    } catch {}
+      const res = await fetch(`/api/user/account?userId=${encodeURIComponent(userId)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.user) {
+          window.localStorage.setItem("chess_reel_account", JSON.stringify(data.user));
 
-    if (userId) {
-      try {
-        const res = await fetch("/api/user/upgrade", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId, plan: "premium" }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.user && typeof window !== "undefined") {
-            window.localStorage.setItem("chess_reel_account", JSON.stringify(data.user));
-            window.dispatchEvent(new Event("account-updated"));
+          const entitled = isActiveProAccount(data.user);
+          window.localStorage.setItem(PLAN_STORAGE_KEY, entitled ? "premium" : "free");
+
+          if (entitled) {
+            window.localStorage.removeItem(getTierStorageKey(userId));
+            setIsPro(true);
+            setPuzzlesRemaining(999999);
+            setCanPlay(true);
+            setResetsInMs(0);
+            setIsAdOpen(false);
+            setIsQuotaModalOpen(false);
+          } else {
+            setIsPro(false);
           }
+
+          window.dispatchEvent(new Event("plan-updated"));
+          window.dispatchEvent(new Event("account-updated"));
+          window.dispatchEvent(new Event("tier-session-updated"));
         }
-      } catch (err) {
-        console.warn("Could not persist upgrade to server:", err);
       }
+    } catch (err) {
+      console.warn("Could not refresh subscription state:", err);
     }
-  }, [userId]);
+
+    await syncWithServer();
+  }, [userId, syncWithServer]);
 
   return {
     isPro,
@@ -390,7 +402,10 @@ export function useTierQuota(
     setIsAdOpen,
     setIsQuotaModalOpen,
     recordPuzzlePlayed,
-    upgradeToPro,
+    refreshSubscription,
+    // Backward-compatible alias. Entitlement itself only comes from a verified
+    // provider webhook (or the development-only activation endpoint).
+    upgradeToPro: refreshSubscription,
     syncWithServer,
   };
 }

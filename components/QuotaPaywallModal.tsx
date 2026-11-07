@@ -1,35 +1,117 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { Crown, Clock, Check, X, Sparkles } from "lucide-react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  BadgeCheck,
+  Check,
+  Clock,
+  Crown,
+  Infinity as InfinityIcon,
+  Loader2,
+  Lock,
+  Sparkles,
+  Trophy,
+  X,
+  Zap,
+} from "lucide-react";
+import {
+  GeoPricing,
+  getPricingForCountry,
+  getYearlySavingsPercent,
+} from "@/lib/pricing";
 
 interface QuotaPaywallModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onUpgradeToPro: (planType?: "monthly" | "annual") => void;
+  onUpgradeComplete?: () => void | Promise<void>;
+  userId?: string;
   resetsInMs: number;
   limit?: number;
   windowHours?: number;
-  adFrequency?: number;
-  proPrice?: number;
-  annualDiscountPercent?: number;
   reason?: "quota" | "practice";
+}
+
+type PlanType = "monthly" | "yearly";
+type CheckoutStatus = "idle" | "loading" | "success" | "error";
+
+interface RazorpayInstance {
+  open: () => void;
+  on: (event: string, handler: (response: unknown) => void) => void;
+}
+
+type RazorpayConstructor = new (options: Record<string, unknown>) => RazorpayInstance;
+
+const FALLBACK_PRICING = getPricingForCountry("US");
+
+function loadRazorpayScript(): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (typeof window === "undefined") return resolve(false);
+
+    const existing = (window as unknown as { Razorpay?: RazorpayConstructor }).Razorpay;
+    if (existing) return resolve(true);
+
+    const scriptId = "razorpay-checkout-script";
+    const existingScript = document.getElementById(scriptId) as HTMLScriptElement | null;
+    if (existingScript) {
+      existingScript.addEventListener("load", () => resolve(true), { once: true });
+      existingScript.addEventListener("error", () => resolve(false), { once: true });
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.id = scriptId;
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+}
+
+async function waitForActivation(userId?: string): Promise<void> {
+  if (!userId) return;
+
+  for (let attempt = 0; attempt < 12; attempt++) {
+    try {
+      const response = await fetch(
+        `/api/user/account?userId=${encodeURIComponent(userId)}`,
+        { cache: "no-store" }
+      );
+      if (response.ok) {
+        const data = await response.json();
+        if (data?.user?.isPro) return;
+      }
+    } catch {
+      // Webhook may still be in flight; keep polling.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
 }
 
 export function QuotaPaywallModal({
   isOpen,
   onClose,
-  onUpgradeToPro,
+  onUpgradeComplete,
+  userId,
   resetsInMs,
   limit = 4,
   windowHours = 4,
-  adFrequency = 2,
-  proPrice = 200,
-  annualDiscountPercent = 5,
   reason = "quota",
 }: QuotaPaywallModalProps) {
   const [msLeft, setMsLeft] = useState<number>(resetsInMs);
-  const [selectedPlan, setSelectedPlan] = useState<"monthly" | "annual">("annual");
+  const [selectedPlan, setSelectedPlan] = useState<PlanType>("yearly");
+  const [pricing, setPricing] = useState<GeoPricing | null>(null);
+  const [isLoadingPricing, setIsLoadingPricing] = useState(false);
+  const [status, setStatus] = useState<CheckoutStatus>("idle");
+  const [errorMessage, setErrorMessage] = useState<string>("");
+
+  const activePricing = pricing ?? FALLBACK_PRICING;
+  const savingsPercent = useMemo(
+    () => getYearlySavingsPercent(activePricing),
+    [activePricing]
+  );
+  const selectedPrice =
+    selectedPlan === "yearly" ? activePricing.yearly : activePricing.monthly;
 
   useEffect(() => {
     setMsLeft(resetsInMs);
@@ -45,218 +127,441 @@ export function QuotaPaywallModal({
     return () => clearInterval(interval);
   }, [isOpen, msLeft]);
 
+  // Reset transient state whenever the modal re-opens.
+  useEffect(() => {
+    if (!isOpen) return;
+    setStatus("idle");
+    setErrorMessage("");
+  }, [isOpen]);
+
+  // Resolve local pricing (edge geo header → timezone → USD default).
+  useEffect(() => {
+    if (!isOpen) return;
+
+    let cancelled = false;
+    setIsLoadingPricing(true);
+
+    const timezone =
+      typeof Intl !== "undefined"
+        ? Intl.DateTimeFormat().resolvedOptions().timeZone
+        : "";
+
+    fetch(`/api/pricing/geo?tz=${encodeURIComponent(timezone)}`, {
+      cache: "no-store",
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: GeoPricing | null) => {
+        if (!cancelled && data?.monthly && data?.yearly) {
+          setPricing(data);
+        }
+      })
+      .catch(() => {
+        // Keep the safe USD fallback.
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingPricing(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen]);
+
+  const finishUpgrade = useCallback(async () => {
+    try {
+      await onUpgradeComplete?.();
+    } catch {
+      // The subscription is already persisted; UI refresh can be retried.
+    }
+    setStatus("success");
+    setTimeout(() => onClose(), 900);
+  }, [onClose, onUpgradeComplete]);
+
+  const handleUpgrade = useCallback(async () => {
+    if (status === "loading" || status === "success") return;
+
+    setStatus("loading");
+    setErrorMessage("");
+
+    try {
+      const response = await fetch("/api/billing/create-checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          plan: selectedPlan,
+          gateway: activePricing.gateway,
+        }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(
+          typeof data?.error === "string"
+            ? data.error
+            : "Could not start checkout. Please try again."
+        );
+      }
+
+      // Local development without provider keys: simulate a successful payment.
+      if (data?.mockMode) {
+        const activation = await fetch("/api/billing/dev-activate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            plan: selectedPlan,
+            gateway: activePricing.gateway,
+          }),
+        });
+
+        const activationData = await activation.json().catch(() => ({}));
+        if (!activation.ok) {
+          throw new Error(
+            typeof activationData?.error === "string"
+              ? activationData.error
+              : "Could not activate the development subscription."
+          );
+        }
+
+        await finishUpgrade();
+        return;
+      }
+
+      if (activePricing.gateway === "razorpay") {
+        if (!data?.subscriptionId || !data?.keyId) {
+          throw new Error("Razorpay checkout details were incomplete.");
+        }
+
+        const loaded = await loadRazorpayScript();
+        if (!loaded) {
+          throw new Error("Could not load Razorpay Checkout. Check your connection.");
+        }
+
+        const RazorpayCtor = (
+          window as unknown as { Razorpay?: RazorpayConstructor }
+        ).Razorpay;
+
+        if (!RazorpayCtor) {
+          throw new Error("Razorpay Checkout is unavailable.");
+        }
+
+        const checkout = new RazorpayCtor({
+          key: data.keyId,
+          subscription_id: data.subscriptionId,
+          name: "ChessReels",
+          description: `${
+            selectedPlan === "yearly" ? "Yearly" : "Monthly"
+          } Pro Subscription`,
+          theme: { color: "#c29b78" },
+          notes: { plan: selectedPlan },
+          modal: {
+            ondismiss: () => setStatus("idle"),
+          },
+          handler: () => {
+            void (async () => {
+              setStatus("success");
+              await waitForActivation(userId);
+              await onUpgradeComplete?.();
+              setTimeout(() => onClose(), 900);
+            })();
+          },
+        });
+
+        checkout.on("payment.failed", () => {
+          setStatus("error");
+          setErrorMessage("Payment was not completed. No charge was made.");
+        });
+
+        setStatus("idle");
+        checkout.open();
+        return;
+      }
+
+      if (data?.checkoutUrl) {
+        window.location.assign(data.checkoutUrl as string);
+        return;
+      }
+
+      throw new Error("Checkout could not be started. Please try again.");
+    } catch (error: unknown) {
+      setStatus("error");
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Something went wrong. Please try again."
+      );
+    }
+  }, [
+    activePricing.gateway,
+    finishUpgrade,
+    onClose,
+    onUpgradeComplete,
+    selectedPlan,
+    status,
+    userId,
+  ]);
+
   if (!isOpen) return null;
 
-  // Format countdown hh:mm:ss
   const hours = Math.floor(msLeft / (3600 * 1000));
   const minutes = Math.floor((msLeft % (3600 * 1000)) / (60 * 1000));
   const seconds = Math.floor((msLeft % (60 * 1000)) / 1000);
-
   const formattedTime = `${hours.toString().padStart(2, "0")}:${minutes
     .toString()
     .padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
 
-  // Pricing math: proPrice is in INR (default 200)
-  const monthlyPrice = Math.round(proPrice);
-  const rawAnnualPrice = monthlyPrice * 12;
-  const annualDiscountFactor = 1 - Math.max(0, annualDiscountPercent) / 100;
-  const annualPrice = Math.round(rawAnnualPrice * annualDiscountFactor);
-  const annualEquivalentMonthly = Math.round(annualPrice / 12);
+  const isIndia = activePricing.gateway === "razorpay";
+  const ctaLabel =
+    status === "success"
+      ? "Pro Activated"
+      : status === "loading"
+      ? "Opening Secure Checkout…"
+      : `Upgrade to Pro — ${selectedPrice.display}${
+          selectedPlan === "yearly" ? "/yr" : "/mo"
+        }`;
 
   return (
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Free Quota Reached"
+      aria-label="Upgrade to ChessReels Pro"
       className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200"
     >
-      <div className="w-full max-w-sm flex flex-col rounded-3xl bg-[#161413] border border-amber-500/40 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 text-white relative">
-        {/* Close Button */}
+      <div className="w-full max-w-[420px] max-h-[92dvh] overflow-y-auto flex flex-col rounded-[26px] bg-[#12100e] border border-[#c29b78]/30 shadow-[0_24px_80px_rgba(0,0,0,0.75)] text-[#f5f2eb] relative">
+        <div className="h-px w-full bg-gradient-to-r from-transparent via-[#c29b78]/70 to-transparent" />
+
         <button
           onClick={onClose}
           aria-label="Close paywall modal"
-          className="absolute top-3.5 right-3.5 p-1 rounded-full bg-white/10 hover:bg-white/20 text-zinc-400 hover:text-white transition-all cursor-pointer z-10"
+          className="absolute top-4 right-4 p-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] text-zinc-400 hover:text-white transition-all cursor-pointer z-10"
         >
           <X className="w-4 h-4" />
         </button>
 
-        {/* Hero Banner Header */}
-        <div className="p-6 pb-3 flex flex-col items-center text-center space-y-3 bg-gradient-to-b from-amber-500/15 to-transparent">
-          {reason === "practice" ? (
-            <>
-              <div className="relative">
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-400 to-[#c29b78] flex items-center justify-center text-zinc-950 shadow-xl shadow-amber-500/25">
-                  <Crown className="w-7 h-7" />
-                </div>
-                <span className="absolute -bottom-1 -right-1 px-1.5 py-0.5 rounded-full bg-amber-500 text-[10px] font-black text-zinc-950">
-                  PRO
-                </span>
+        {/* Header */}
+        <div className="px-6 pt-6 pb-4 bg-[radial-gradient(circle_at_top,rgba(194,155,120,0.16),transparent_62%)]">
+          <div className="flex items-center gap-3">
+            <div className="relative shrink-0">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#e2c3a4] via-[#c29b78] to-[#8a6849] flex items-center justify-center text-[#0a0908] shadow-lg shadow-[#c29b78]/20">
+                {reason === "practice" ? (
+                  <Crown className="w-6 h-6" strokeWidth={2} />
+                ) : (
+                  <Clock className="w-6 h-6" strokeWidth={2} />
+                )}
               </div>
+              <span className="absolute -bottom-1 -right-1 px-1.5 py-0.5 rounded-full bg-[#0a0908] border border-[#c29b78]/50 text-[9px] font-black tracking-widest text-[#c29b78]">
+                PRO
+              </span>
+            </div>
 
-              <div className="space-y-1">
-                <h2 className="text-xl font-black tracking-tight text-white">
-                  Unlock Practice Mode
-                </h2>
-                <p className="text-xs text-zinc-400 max-w-xs leading-relaxed">
-                  Practice mode with <strong className="text-zinc-200">custom tactical theme filters</strong> and unranked drills is reserved for Pro members.
-                </p>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-[#c29b78]">
+                <Sparkles className="w-3 h-3" />
+                <span>ChessReels Pro</span>
               </div>
+              <h2 className="text-xl font-black tracking-tight text-white leading-tight">
+                {reason === "practice" ? "Unlock Practice Mode" : "Free Quota Reached"}
+              </h2>
+              <p className="text-[11px] text-zinc-400 leading-relaxed mt-0.5">
+                {reason === "practice"
+                  ? "Custom tactical themes, unranked drills, and unlimited training."
+                  : `Free members get ${limit} reels every ${windowHours}h. Go unlimited.`}
+              </p>
+            </div>
+          </div>
 
-              <div className="w-full p-2.5 rounded-2xl bg-zinc-950/80 border border-amber-500/30 flex items-center justify-between text-xs text-amber-300 font-bold px-3">
-                <span>🎯 Target Specific Themes</span>
-                <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-[10px]">Mates • Pins • Forks</span>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="relative">
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-400 to-[#c29b78] flex items-center justify-center text-zinc-950 shadow-xl shadow-amber-500/25">
-                  <Clock className="w-7 h-7" />
-                </div>
-                <span className="absolute -bottom-1 -right-1 px-1.5 py-0.5 rounded-full bg-rose-500 text-[10px] font-black text-white">
-                  0 / {limit}
-                </span>
-              </div>
-
-              <div className="space-y-1">
-                <h2 className="text-xl font-black tracking-tight text-white">
-                  Free Quota Reached
-                </h2>
-                <p className="text-xs text-zinc-400 max-w-xs leading-relaxed">
-                  Free members can solve up to <strong className="text-zinc-200">{limit} puzzles every {windowHours} hours</strong>.
-                </p>
-              </div>
-
-              {/* Countdown Card */}
-              <div className="w-full p-3 rounded-2xl bg-zinc-950/80 border border-zinc-800 flex items-center justify-between">
-                <div className="flex items-center gap-2 text-left">
-                  <Clock className="w-4 h-4 text-amber-400 shrink-0" />
-                  <div>
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
-                      Next Free Refill In
-                    </div>
-                    <div className="text-sm font-black font-mono text-amber-300">
-                      {msLeft > 0 ? formattedTime : "Ready to play!"}
-                    </div>
+          {reason === "quota" ? (
+            <div className="mt-4 w-full p-3 rounded-2xl bg-[#0a0908]/80 border border-white/[0.07] flex items-center justify-between">
+              <div className="flex items-center gap-2 text-left">
+                <Clock className="w-4 h-4 text-[#c29b78] shrink-0" />
+                <div>
+                  <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-zinc-500">
+                    Next free refill
+                  </div>
+                  <div className="text-sm font-black font-mono text-[#e2c3a4]">
+                    {msLeft > 0 ? formattedTime : "Ready to play"}
                   </div>
                 </div>
-
-                <div className="text-right">
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300">
-                    {windowHours}h Window
-                  </span>
-                </div>
               </div>
-            </>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#c29b78]/10 border border-[#c29b78]/25 text-[#c29b78]">
+                {windowHours}h window
+              </span>
+            </div>
+          ) : (
+            <div className="mt-4 w-full p-2.5 rounded-2xl bg-[#0a0908]/80 border border-[#c29b78]/25 flex items-center justify-between text-[11px] text-[#e2c3a4] font-bold px-3">
+              <span>🎯 Target specific themes</span>
+              <span className="px-2 py-0.5 rounded-full bg-[#c29b78]/15 text-[9px] uppercase tracking-wider">
+                Mates • Pins • Forks
+              </span>
+            </div>
           )}
         </div>
 
-        {/* Feature Comparison */}
-        <div className="px-6 py-2 space-y-2">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">
-            Why Chess Enthusiasts Go Pro
-          </div>
-
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2 text-xs text-zinc-300">
-              <div className="w-4 h-4 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
-                <Check className="w-2.5 h-2.5" />
+        {/* Perks */}
+        <div className="px-6 pb-4 space-y-2.5">
+          {[
+            {
+              icon: InfinityIcon,
+              title: "Unlimited Daily Tactical Reels",
+              text: "No 4-puzzle window cooldown",
+            },
+            {
+              icon: Zap,
+              title: "Unlimited Engine Tactical Hints",
+              text: "Master every position without limits",
+            },
+            {
+              icon: Trophy,
+              title: "Pro Opening Mastery & Repertoire Drills",
+              text: "Upcoming exclusive training library",
+            },
+            {
+              icon: BadgeCheck,
+              title: "Streak Protection & Gold Badge",
+              text: "Keep your streak safe and stand out",
+            },
+          ].map((perk) => (
+            <div key={perk.title} className="flex items-start gap-2.5">
+              <div className="w-5 h-5 rounded-md bg-[#c29b78]/10 border border-[#c29b78]/25 flex items-center justify-center text-[#c29b78] shrink-0 mt-0.5">
+                <perk.icon className="w-3 h-3" strokeWidth={2.25} />
               </div>
-              <span><strong>Full Practice Mode</strong> — unranked drills & custom theme filters</span>
-            </div>
-
-            <div className="flex items-center gap-2 text-xs text-zinc-300">
-              <div className="w-4 h-4 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
-                <Check className="w-2.5 h-2.5" />
+              <div className="min-w-0">
+                <div className="text-[12px] font-bold text-zinc-100 leading-tight">
+                  {perk.title}
+                </div>
+                <div className="text-[10px] text-zinc-500 leading-tight">
+                  {perk.text}
+                </div>
               </div>
-              <span><strong>Unlimited puzzles</strong> — zero hourly limits</span>
             </div>
-
-            <div className="flex items-center gap-2 text-xs text-zinc-300">
-              <div className="w-4 h-4 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
-                <Check className="w-2.5 h-2.5" />
-              </div>
-              <span><strong>100% Ad-Free experience</strong> — zero interruptions</span>
-            </div>
-
-            <div className="flex items-center gap-2 text-xs text-zinc-300">
-              <div className="w-4 h-4 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
-                <Check className="w-2.5 h-2.5" />
-              </div>
-              <span><strong>6.15M+ puzzles</strong> across all Elo ratings</span>
-            </div>
-          </div>
+          ))}
         </div>
 
-        {/* Plan Selector: Monthly vs Annual */}
-        <div className="px-6 pt-2 pb-1">
-          <div className="grid grid-cols-2 gap-2">
-            {/* Annual Card */}
-            <button
-              type="button"
-              onClick={() => setSelectedPlan("annual")}
-              className={`p-2.5 rounded-2xl border text-left transition-all cursor-pointer relative ${
-                selectedPlan === "annual"
-                  ? "bg-amber-500/15 border-amber-500/60 ring-1 ring-amber-500/40"
-                  : "bg-zinc-950/60 border-zinc-800 hover:border-zinc-700"
-              }`}
-            >
-              <span className="absolute -top-2 right-2 px-1.5 py-0.2 rounded-full bg-emerald-500 text-[9px] font-black text-zinc-950 uppercase tracking-wider">
-                Save {annualDiscountPercent}%
-              </span>
-              <div className="text-[11px] font-bold text-white">Annual</div>
-              <div className="text-sm font-black text-amber-300 font-mono mt-0.5">
-                ₹{annualEquivalentMonthly}
-                <span className="text-[10px] font-normal text-zinc-400">/mo</span>
-              </div>
-              <div className="text-[10px] text-zinc-400">₹{annualPrice}/yr billed</div>
-            </button>
-
-            {/* Monthly Card */}
+        {/* Plan toggle */}
+        <div className="px-6 pb-3">
+          <div className="grid grid-cols-2 gap-1 p-1 rounded-2xl bg-[#0a0908] border border-white/[0.06]">
             <button
               type="button"
               onClick={() => setSelectedPlan("monthly")}
-              className={`p-2.5 rounded-2xl border text-left transition-all cursor-pointer relative ${
+              aria-pressed={selectedPlan === "monthly"}
+              className={`py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 selectedPlan === "monthly"
-                  ? "bg-amber-500/15 border-amber-500/60 ring-1 ring-amber-500/40"
-                  : "bg-zinc-950/60 border-zinc-800 hover:border-zinc-700"
+                  ? "bg-[#c29b78] text-[#0a0908] shadow-md shadow-[#c29b78]/20"
+                  : "text-zinc-400 hover:text-zinc-200"
               }`}
             >
-              <div className="text-[11px] font-bold text-white">Monthly</div>
-              <div className="text-sm font-black text-zinc-200 font-mono mt-0.5">
-                ₹{monthlyPrice}
-                <span className="text-[10px] font-normal text-zinc-400">/mo</span>
-              </div>
-              <div className="text-[10px] text-zinc-400">Billed monthly</div>
+              Monthly
             </button>
+            <button
+              type="button"
+              onClick={() => setSelectedPlan("yearly")}
+              aria-pressed={selectedPlan === "yearly"}
+              className={`py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                selectedPlan === "yearly"
+                  ? "bg-[#c29b78] text-[#0a0908] shadow-md shadow-[#c29b78]/20"
+                  : "text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              Yearly
+              {savingsPercent > 0 && (
+                <span
+                  className={`px-1.5 py-0.5 rounded-full text-[9px] font-black ${
+                    selectedPlan === "yearly"
+                      ? "bg-[#0a0908]/20 text-[#0a0908]"
+                      : "bg-emerald-500/15 text-emerald-400"
+                  }`}
+                >
+                  −{savingsPercent}%
+                </span>
+              )}
+            </button>
+          </div>
+
+          {/* Price */}
+          <div className="mt-3 rounded-2xl bg-[#0a0908]/80 border border-[#c29b78]/20 p-3.5">
+            <div className="flex items-end justify-between gap-2">
+              <div>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-2xl font-black font-mono text-[#e2c3a4] tracking-tight">
+                    {selectedPrice.display}
+                  </span>
+                  <span className="text-[11px] text-zinc-500">
+                    {selectedPlan === "yearly" ? "/year" : "/month"}
+                  </span>
+                </div>
+                <div className="text-[10px] text-zinc-400 mt-0.5">
+                  {selectedPrice.subtext}
+                </div>
+              </div>
+
+              {selectedPlan === "yearly" && selectedPrice.monthlyEquivalent && (
+                <div className="text-right">
+                  <div className="text-[10px] uppercase tracking-wider text-zinc-500">
+                    Equals
+                  </div>
+                  <div className="text-sm font-black font-mono text-emerald-400">
+                    {selectedPrice.monthlyEquivalent}/mo
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-2.5 pt-2.5 border-t border-white/[0.06] flex items-center gap-1.5 text-[10px] text-zinc-500">
+              <Lock className="w-3 h-3 text-[#c29b78] shrink-0" />
+              <span className="truncate">{activePricing.methods}</span>
+            </div>
           </div>
         </div>
 
-        {/* Actions & Upgrade CTA */}
-        <div className="p-6 pt-3 space-y-2">
+        {/* Actions */}
+        <div className="px-6 pb-5 pt-1 space-y-2">
+          {status === "error" && errorMessage && (
+            <div
+              role="alert"
+              className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[11px] text-rose-300"
+            >
+              {errorMessage}
+            </div>
+          )}
+
           <button
             data-testid="paywall-upgrade-pro-btn"
-            onClick={async () => {
-              await onUpgradeToPro(selectedPlan);
-            }}
-            className="w-full py-3.5 rounded-xl bg-gradient-to-r from-amber-400 to-[#c29b78] hover:from-amber-300 hover:to-[#dfba94] text-zinc-950 font-black text-sm transition-all shadow-lg shadow-amber-500/25 flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+            onClick={handleUpgrade}
+            disabled={status === "loading" || status === "success"}
+            className="w-full py-3.5 rounded-xl bg-gradient-to-r from-[#e2c3a4] via-[#c29b78] to-[#a9825f] hover:from-[#edd2b8] hover:to-[#bd9672] disabled:opacity-70 disabled:cursor-not-allowed text-[#0a0908] font-black text-sm transition-all shadow-lg shadow-[#c29b78]/20 flex items-center justify-center gap-2 cursor-pointer active:scale-[0.985]"
           >
-            <Crown className="w-4 h-4 text-zinc-950" />
-            <span>
-              {selectedPlan === "annual"
-                ? `Unlock Unlimited Pro (₹${annualPrice}/yr • Save ${annualDiscountPercent}%)`
-                : `Unlock Unlimited Pro (₹${monthlyPrice}/mo)`}
-            </span>
+            {status === "loading" || status === "success" ? (
+              status === "success" ? (
+                <Check className="w-4 h-4" />
+              ) : (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              )
+            ) : (
+              <Crown className="w-4 h-4" />
+            )}
+            <span>{ctaLabel}</span>
           </button>
 
           <button
             onClick={onClose}
-            className="w-full py-2 rounded-xl bg-zinc-900/60 hover:bg-zinc-800 text-zinc-400 hover:text-white font-semibold text-xs transition-colors cursor-pointer"
+            className="w-full py-2 rounded-xl bg-transparent hover:bg-white/[0.04] text-zinc-500 hover:text-zinc-300 font-semibold text-[11px] transition-colors cursor-pointer"
           >
-            {reason === "practice" ? "Maybe Later" : "Wait for Refill"}
+            {reason === "practice" ? "Maybe later" : "Wait for free refill"}
           </button>
+
+          <div className="flex items-center justify-center gap-1.5 text-[9px] text-zinc-600 pt-0.5">
+            <Lock className="w-2.5 h-2.5" />
+            <span>
+              {isIndia
+                ? "Secured by Razorpay • Cancel anytime"
+                : "Secured by Lemon Squeezy • Cancel anytime"}
+            </span>
+            {isLoadingPricing && <span className="text-zinc-700">• detecting region…</span>}
+          </div>
         </div>
       </div>
     </div>
   );
 }
+
+export default QuotaPaywallModal;

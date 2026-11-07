@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { hashPassword } from "@/lib/auth";
 import { isGuestUserId } from "@/lib/guestAccount";
+import { isActiveProAccount } from "@/lib/tierTypes";
 
 export async function POST(request: NextRequest) {
   try {
@@ -159,6 +160,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    const isPro = isActiveProAccount(user);
     const safeUser = {
       id: user.id,
       username: user.username,
@@ -182,7 +184,12 @@ export async function POST(request: NextRequest) {
       isCalibrated: user.isCalibrated,
       calibrationStep: user.calibrationStep,
       isTestAccount: Boolean(user.isTestAccount),
-      plan: user.plan || "free",
+      plan: isPro ? "premium" : "free",
+      isPro,
+      subscriptionStatus: user.subscriptionStatus ?? "none",
+      subscriptionPlan: user.subscriptionPlan ?? null,
+      paymentProvider: user.paymentProvider ?? null,
+      currentPeriodEnd: user.currentPeriodEnd ?? null,
     };
 
     const response = NextResponse.json({
@@ -248,6 +255,12 @@ export async function GET(request: NextRequest) {
         isCalibrated: true,
         calibrationStep: true,
         plan: true,
+        isPro: true,
+        subscriptionStatus: true,
+        subscriptionPlan: true,
+        paymentProvider: true,
+        providerSubscriptionId: true,
+        currentPeriodEnd: true,
         createdAt: true,
         email: true,
         googleId: true,
@@ -267,11 +280,21 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "User not found." }, { status: 404 });
     }
 
-    const { email: _email, googleId: _googleId, passwordHash: _passwordHash, ...safeUser } = user;
+    const {
+      email: _email,
+      googleId: _googleId,
+      passwordHash: _passwordHash,
+      providerSubscriptionId: _providerSubscriptionId,
+      ...safeUser
+    } = user;
+
+    const isPro = isActiveProAccount(user);
 
     return NextResponse.json({
       user: {
         ...safeUser,
+        isPro,
+        plan: isPro ? "premium" : "free",
         targetElo: safeUser.targetElo ?? 1500,
         lastSolvedDate: safeUser.lastSolvedDate ?? null,
         streakFreezes: safeUser.streakFreezes ?? 0,
@@ -404,10 +427,20 @@ export async function PATCH(request: NextRequest) {
         isCalibrated: true,
         calibrationStep: true,
         plan: true,
+        isPro: true,
+        subscriptionStatus: true,
+        subscriptionPlan: true,
+        paymentProvider: true,
+        currentPeriodEnd: true,
       },
     });
 
-    return NextResponse.json({ success: true, user: updatedUser });
+    const isPro = isActiveProAccount(updatedUser);
+
+    return NextResponse.json({
+      success: true,
+      user: { ...updatedUser, isPro, plan: isPro ? "premium" : "free" },
+    });
   } catch (error) {
     console.error("Failed to update user profile:", error);
     return NextResponse.json(

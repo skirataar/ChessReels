@@ -1,5 +1,10 @@
 import prisma from "./prisma";
-import { TierConfig, DEFAULT_TIER_CONFIG, isProPlan } from "./tierTypes";
+import {
+  TierConfig,
+  DEFAULT_TIER_CONFIG,
+  isActiveProAccount,
+  isProPlan,
+} from "./tierTypes";
 
 export type { TierConfig };
 export { DEFAULT_TIER_CONFIG, isProPlan };
@@ -172,6 +177,10 @@ export interface UserQuotaStatus {
   adFrequency: number;
   resetsInMs: number;
   resetsAt: string | null;
+  subscriptionStatus: string;
+  subscriptionPlan: string | null;
+  paymentProvider: string | null;
+  currentPeriodEnd: string | null;
 }
 
 /**
@@ -183,17 +192,38 @@ export async function checkUserQuota(
 ): Promise<UserQuotaStatus> {
   const config = await getTierConfig();
 
-  let effectivePro = isProPlan(userPlan);
-  if (!effectivePro && userId && !userId.startsWith("guest-")) {
+  // For registered users the database is authoritative (never trust a
+  // client-supplied plan string). Guests have no DB row, so their local plan
+  // flag remains a best-effort hint.
+  let effectivePro = false;
+  let subscriptionStatus = "none";
+  let subscriptionPlan: string | null = null;
+  let paymentProvider: string | null = null;
+  let currentPeriodEnd: string | null = null;
+
+  if (userId && !userId.startsWith("guest-")) {
     try {
       const dbUser = await prisma.user.findUnique({
         where: { id: userId },
-        select: { plan: true },
+        select: {
+          plan: true,
+          isPro: true,
+          subscriptionStatus: true,
+          subscriptionPlan: true,
+          paymentProvider: true,
+          currentPeriodEnd: true,
+        },
       });
-      if (isProPlan(dbUser?.plan)) {
-        effectivePro = true;
-      }
-    } catch {}
+      effectivePro = isActiveProAccount(dbUser);
+      subscriptionStatus = dbUser?.subscriptionStatus ?? "none";
+      subscriptionPlan = dbUser?.subscriptionPlan ?? null;
+      paymentProvider = dbUser?.paymentProvider ?? null;
+      currentPeriodEnd = dbUser?.currentPeriodEnd?.toISOString() ?? null;
+    } catch {
+      effectivePro = isProPlan(userPlan);
+    }
+  } else {
+    effectivePro = isProPlan(userPlan);
   }
 
   // Pro users have completely unlimited puzzles and zero ads
@@ -208,6 +238,10 @@ export async function checkUserQuota(
       adFrequency: config.adFrequencyPuzzles,
       resetsInMs: 0,
       resetsAt: null,
+      subscriptionStatus,
+      subscriptionPlan,
+      paymentProvider,
+      currentPeriodEnd,
     };
   }
 
@@ -251,6 +285,10 @@ export async function checkUserQuota(
       adFrequency: config.adFrequencyPuzzles,
       resetsInMs,
       resetsAt,
+      subscriptionStatus,
+      subscriptionPlan,
+      paymentProvider,
+      currentPeriodEnd,
     };
   } catch (err) {
     console.error("Error computing user quota:", err);
@@ -264,6 +302,10 @@ export async function checkUserQuota(
       adFrequency: config.adFrequencyPuzzles,
       resetsInMs: 0,
       resetsAt: null,
+      subscriptionStatus,
+      subscriptionPlan,
+      paymentProvider,
+      currentPeriodEnd,
     };
   }
 }

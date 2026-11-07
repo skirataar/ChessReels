@@ -221,20 +221,10 @@ export default function ProfileStatsPage() {
 
   const handleUpgradePro = async () => {
     try {
-      localStorage.setItem("chess_reel_plan", "premium");
-      setIsPro(true);
-      window.dispatchEvent(new Event("plan-updated"));
-      if (userAccount?.id) {
-        await fetch("/api/user/upgrade", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId: userAccount.id, plan: "premium" }),
-        });
-      }
-      setToastMessage("Upgraded to Pro successfully!");
-      setTimeout(() => setToastMessage(null), 3000);
+      localStorage.setItem("chess_reel_open_paywall", "1");
+      router.push("/play");
     } catch {
-      setToastMessage("Upgrade failed. Please try again.");
+      setToastMessage("Could not open the Pro upgrade page.");
       setTimeout(() => setToastMessage(null), 3000);
     }
   };

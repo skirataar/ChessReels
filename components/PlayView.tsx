@@ -66,6 +66,11 @@ export interface UserAccount {
   isCalibrated: boolean;
   calibrationStep: number;
   plan?: string;
+  isPro?: boolean;
+  subscriptionStatus?: string;
+  subscriptionPlan?: string | null;
+  paymentProvider?: string | null;
+  currentPeriodEnd?: string | null;
   peakElo?: number;
   targetElo?: number | null;
   streak?: number;
@@ -483,16 +488,13 @@ export function PlayView({
     puzzlesRemaining,
     windowLimit,
     windowHours,
-    adFrequency,
-    proPrice,
-    annualDiscountPercent,
     resetsInMs,
     isAdOpen,
     isQuotaModalOpen,
     setIsAdOpen,
     setIsQuotaModalOpen,
     recordPuzzlePlayed,
-    upgradeToPro,
+    refreshSubscription,
   } = useTierQuota(userAccount?.id || guestId, userAccount?.plan);
 
   const [paywallReason, setPaywallReason] = useState<"quota" | "practice">("quota");
@@ -639,6 +641,19 @@ export function PlayView({
       }
     } catch {}
   }, [isHydrated, userAccount, router]);
+
+  // Deep-link from other Pro CTAs (onboarding upsell, stats page) into checkout.
+  useEffect(() => {
+    if (!isHydrated || !userAccount?.id || isPro) return;
+    try {
+      const shouldOpen = window.localStorage.getItem("chess_reel_open_paywall");
+      if (shouldOpen) {
+        window.localStorage.removeItem("chess_reel_open_paywall");
+        setPaywallReason("quota");
+        setIsQuotaModalOpen(true);
+      }
+    } catch {}
+  }, [isHydrated, isPro, setIsQuotaModalOpen, userAccount?.id]);
 
   // Initialize persistent guest ID, saved account, and saved Elo from localStorage
   // Sync landing visibility to hide/show dock
@@ -1986,8 +2001,11 @@ export function PlayView({
             goToNextPuzzle();
           }
         }}
-        onUpgradeToPro={upgradeToPro}
-        proPrice={proPrice}
+        onUpgradeToPro={() => {
+          setIsAdOpen(false);
+          setPaywallReason("quota");
+          setIsQuotaModalOpen(true);
+        }}
       />
 
       {/* 5. Free Tier Quota Paywall Modal (5 puzzles per 4h window) */}
@@ -2015,18 +2033,16 @@ export function PlayView({
             goToNextPuzzle();
           }
         }}
-        onUpgradeToPro={async () => {
-          await upgradeToPro();
+        onUpgradeComplete={async () => {
+          await refreshSubscription();
           setIsQuotaModalOpen(false);
           setPuzzleStatus("playing");
-          goToNextPuzzle();
+          if (paywallReason === "quota") goToNextPuzzle();
         }}
+        userId={userAccount?.id}
         resetsInMs={resetsInMs}
         limit={windowLimit}
         windowHours={windowHours}
-        adFrequency={adFrequency}
-        proPrice={proPrice}
-        annualDiscountPercent={annualDiscountPercent}
         reason={paywallReason}
       />
     </div>

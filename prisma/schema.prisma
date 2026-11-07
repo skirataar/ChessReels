@@ -34,6 +34,12 @@ model User {
   calibrationStep Int          @default(0)
   passwordHash    String?
   plan            String?      @default("free")
+  isPro               Boolean   @default(false)
+  subscriptionStatus  String    @default("none")
+  subscriptionPlan    String?
+  paymentProvider     String?
+  providerSubscriptionId String?
+  currentPeriodEnd    DateTime?
   isTestAccount   Boolean?     @default(false)
   createdAt       DateTime     @default(now())
 
@@ -42,6 +48,8 @@ model User {
   friendOf               Friendship[]    @relation("FriendUsers")
   sentFriendRequests     FriendRequest[] @relation("SentFriendRequests")
   receivedFriendRequests FriendRequest[] @relation("ReceivedFriendRequests")
+
+  @@index([providerSubscriptionId])
 }
 
 model Friendship {

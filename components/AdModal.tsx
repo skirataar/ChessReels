@@ -1,23 +1,52 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Crown, Sparkles, Volume2, ArrowRight, ShieldCheck, Zap } from "lucide-react";
+import { Crown, Sparkles, ArrowRight } from "lucide-react";
+import {
+  GeoPricing,
+  getPricingForCountry,
+  getYearlySavingsPercent,
+} from "@/lib/pricing";
 
 interface AdModalProps {
   isOpen: boolean;
   onClose: () => void;
   onUpgradeToPro: () => void;
-  proPrice?: number;
 }
 
 export function AdModal({
   isOpen,
   onClose,
   onUpgradeToPro,
-  proPrice = 200,
 }: AdModalProps) {
   const [secondsRemaining, setSecondsRemaining] = useState<number>(3);
   const [canSkip, setCanSkip] = useState<boolean>(false);
+  const [pricing, setPricing] = useState<GeoPricing>(() =>
+    getPricingForCountry("US")
+  );
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const timezone =
+      typeof Intl !== "undefined"
+        ? Intl.DateTimeFormat().resolvedOptions().timeZone
+        : "";
+    let cancelled = false;
+    fetch(`/api/pricing/geo?tz=${encodeURIComponent(timezone)}`, {
+      cache: "no-store",
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: GeoPricing | null) => {
+        if (!cancelled && data?.monthly) setPricing(data);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen]);
+
+  const savingsPercent = getYearlySavingsPercent(pricing);
+  const yearlyMonthly = pricing.yearly.monthlyEquivalent || pricing.yearly.display;
 
   useEffect(() => {
     if (!isOpen) {
@@ -138,7 +167,10 @@ export function AdModal({
             <Crown className="w-4 h-4 text-amber-400 shrink-0" />
             <div className="text-[11px]">
               <span className="font-bold text-white">Tired of ads? </span>
-              <span className="text-zinc-400">Unlimited reels from ₹190/mo (Save 5%).</span>
+              <span className="text-zinc-400">
+                Unlimited reels from {yearlyMonthly}/mo
+                {savingsPercent > 0 ? ` (Save ${savingsPercent}%)` : ""}.
+              </span>
             </div>
           </div>
 
@@ -149,7 +181,7 @@ export function AdModal({
             }}
             className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-400 to-[#c29b78] hover:from-amber-300 hover:to-[#dfba94] text-zinc-950 font-black text-xs transition-all shadow-md shadow-amber-500/20 shrink-0 cursor-pointer active:scale-95"
           >
-            Upgrade (₹{Math.round(proPrice)}/mo)
+            Upgrade ({pricing.monthly.display}/mo)
           </button>
         </div>
       </div>
