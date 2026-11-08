@@ -4,10 +4,51 @@ import { isAdminAuthenticated } from "@/lib/adminAuth";
 import { REGISTERED_USER_WHERE_CLAUSE } from "@/lib/communitySeed";
 import { getTierConfig } from "@/lib/tierConfig";
 
-// In-memory cache for the 6.15M puzzle count so stats load in <20ms
+// In-memory cache for the approximate 6.15M puzzle count so stats load fast.
+// Exact COUNT(*) on the Puzzle table takes 10-12s because it scans every row.
 let cachedPuzzleCount: number | null = null;
 let lastPuzzleCountFetchTime = 0;
 const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
+/**
+ * Approximate row count from the planner statistics in pg_class.
+ * This is O(1) instead of a full table scan, and is accurate enough for the
+ * admin dashboard. Returns null if the table has never been analyzed.
+ */
+async function getApproximatePuzzleCount(): Promise<number | null> {
+  try {
+    const rows = await prisma.$queryRaw<Array<{ count: bigint }>>`
+      SELECT c.reltuples::bigint AS count
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE c.relname = 'Puzzle'
+        AND c.relkind = 'r'
+        AND n.nspname = current_schema()
+      LIMIT 1
+    `;
+    const value = Number(rows[0]?.count ?? -1);
+    return value > 0 ? value : null;
+  } catch (error) {
+    console.error("Approximate puzzle count failed:", error);
+    return null;
+  }
+}
+
+/**
+ * Number of distinct puzzles that have at least one like.
+ * Scans the small PuzzleLike table instead of the 6.15M-row Puzzle table.
+ */
+async function getTopLikedPuzzleCount(): Promise<number> {
+  try {
+    const rows = await prisma.$queryRaw<Array<{ count: bigint }>>`
+      SELECT COUNT(DISTINCT "puzzleId")::bigint AS count FROM "PuzzleLike"
+    `;
+    return Number(rows[0]?.count ?? 0);
+  } catch (error) {
+    console.error("Top-liked puzzle count failed:", error);
+    return 0;
+  }
+}
 
 export async function GET(request: NextRequest) {
   if (!isAdminAuthenticated(request)) {
@@ -22,29 +63,36 @@ export async function GET(request: NextRequest) {
 
     // Check puzzle count cache
     const now = Date.now();
+    const needsPuzzleCount =
+      !cachedPuzzleCount || now - lastPuzzleCountFetchTime > CACHE_TTL_MS;
+
+    // Fetch the puzzle count and registered users concurrently to overlap
+    // the two database round trips.
+    const [registeredUsers, approximatePuzzleCount] = await Promise.all([
+      prisma.user.findMany({
+        where: REGISTERED_USER_WHERE_CLAUSE,
+        select: {
+          id: true,
+          username: true,
+          displayName: true,
+          avatar: true,
+          elo: true,
+          peakElo: true,
+          streak: true,
+          plan: true,
+          subscriptionPlan: true,
+          createdAt: true,
+        },
+      }),
+      needsPuzzleCount ? getApproximatePuzzleCount() : Promise.resolve(null),
+    ]);
+
     let totalPuzzles = cachedPuzzleCount;
-    if (!totalPuzzles || now - lastPuzzleCountFetchTime > CACHE_TTL_MS) {
-      totalPuzzles = await prisma.puzzle.count();
-      cachedPuzzleCount = totalPuzzles;
+    if (approximatePuzzleCount !== null) {
+      totalPuzzles = approximatePuzzleCount;
+      cachedPuzzleCount = approximatePuzzleCount;
       lastPuzzleCountFetchTime = now;
     }
-
-    // First fetch registered users
-    const registeredUsers = await prisma.user.findMany({
-      where: REGISTERED_USER_WHERE_CLAUSE,
-      select: {
-        id: true,
-        username: true,
-        displayName: true,
-        avatar: true,
-        elo: true,
-        peakElo: true,
-        streak: true,
-        plan: true,
-        subscriptionPlan: true,
-        createdAt: true,
-      },
-    });
 
     const registeredUserIds = registeredUsers.map((u) => u.id);
     const userMap = new Map(registeredUsers.map((u) => [u.id, u]));
@@ -69,7 +117,7 @@ export async function GET(request: NextRequest) {
           isCalibrated: true,
         },
       }),
-      prisma.puzzle.count({ where: { likes: { gt: 0 } } }),
+      getTopLikedPuzzleCount(),
       prisma.puzzleHistory.findMany({
         where: {
           result: "win",
