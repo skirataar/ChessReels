@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import Razorpay from "razorpay";
-import { getPricingForCountry } from "./pricing";
+import { getTierConfig } from "./tierConfig";
 import { normalizePlan, SubscriptionPlan } from "./billing";
 
 /**
@@ -67,14 +67,18 @@ export function normalizeCurrency(raw?: string | null): string | null {
  * Server-authoritative price for a Pro plan. The browser never decides how much
  * to charge; it only picks a plan, and the amount is derived here.
  */
-export function getPlanAmountPaise(
+export async function getPlanAmountPaise(
   plan: SubscriptionPlan,
   currency: string
-): number | null {
+): Promise<number | null> {
   if (currency !== "INR") return null;
 
-  const pricing = getPricingForCountry("IN");
-  const amount = plan === "yearly" ? pricing.yearly.amount : pricing.monthly.amount;
+  const tierConfig = await getTierConfig();
+  const monthlyAmount = tierConfig.proMonthlyPrice;
+  const yearlyAmount = Math.round(
+    monthlyAmount * 12 * (1 - tierConfig.annualDiscountPercent / 100)
+  );
+  const amount = plan === "yearly" ? yearlyAmount : monthlyAmount;
   return Math.round(amount * 100);
 }
 
@@ -122,7 +126,7 @@ export async function createRazorpayOrderForPlan(input: {
     throw new RazorpayRequestError("A valid ISO currency code is required.", 400);
   }
 
-  const amount = getPlanAmountPaise(input.plan, currency);
+  const amount = await getPlanAmountPaise(input.plan, currency);
   if (amount === null) {
     throw new RazorpayRequestError(
       `Razorpay Standard Checkout does not support ${currency} for this plan.`,

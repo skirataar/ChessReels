@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
     let subscription = null;
 
     if (userId && plan) {
-      const expectedAmount = getPlanAmountPaise(plan, order.currency);
+      const expectedAmount = await getPlanAmountPaise(plan, order.currency);
       if (expectedAmount === null || Number(order.amount) !== expectedAmount) {
         return NextResponse.json(
           { success: false, error: "Order amount does not match the selected plan." },

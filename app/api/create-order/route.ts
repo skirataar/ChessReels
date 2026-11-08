@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
     // pick a plan but must never decide how much it costs.
     let amount: number;
     if (plan) {
-      const derived = getPlanAmountPaise(plan, currency);
+      const derived = await getPlanAmountPaise(plan, currency);
       if (derived === null) {
         return NextResponse.json(
           { error: `Razorpay does not support ${currency} for this plan.` },

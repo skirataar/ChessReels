@@ -41,6 +41,8 @@ interface AdminMetrics {
   totalPuzzles: number;
   topLikedPuzzles: number;
   estimatedMRR?: number;
+  revenueCurrency?: string;
+  proMonthlyPrice?: number;
   proConversionRate?: number;
   dbLatencyMs: number;
   status: string;
@@ -828,10 +830,11 @@ export default function AdminPage() {
                 </div>
                 <div>
                   <div className="text-3xl font-black text-amber-300 tracking-tight">
-                    ${metrics?.estimatedMRR ? metrics.estimatedMRR.toFixed(2) : "0.00"}
+                    {metrics?.revenueCurrency === "INR" ? "₹" : "$"}
+                    {metrics?.estimatedMRR ? metrics.estimatedMRR.toFixed(2) : "0.00"}
                   </div>
                   <p className="text-xs text-zinc-400 mt-2 font-medium">
-                    {metrics?.proUsers ?? 0} Pro Members @ $9.99 / mo
+                    {metrics?.proUsers ?? 0} Pro Members, current tier pricing
                   </p>
                 </div>
                 <div className="flex items-center gap-1.5 text-[11px] text-emerald-400 font-semibold mt-3">

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { isAdminAuthenticated } from "@/lib/adminAuth";
 import { REGISTERED_USER_WHERE_CLAUSE } from "@/lib/communitySeed";
+import { getTierConfig } from "@/lib/tierConfig";
 
 // In-memory cache for the 6.15M puzzle count so stats load in <20ms
 let cachedPuzzleCount: number | null = null;
@@ -40,6 +41,7 @@ export async function GET(request: NextRequest) {
         peakElo: true,
         streak: true,
         plan: true,
+        subscriptionPlan: true,
         createdAt: true,
       },
     });
@@ -96,8 +98,17 @@ export async function GET(request: NextRequest) {
 
     const dbLatencyMs = Date.now() - startTime;
 
-    // Calculate MRR ($9.99/mo per Pro subscriber)
-    const estimatedMRR = (proUsers * 9.99).toFixed(2);
+    const tierConfig = await getTierConfig();
+    const monthlyAmount = tierConfig.proMonthlyPrice;
+    const yearlyMonthlyAmount =
+      monthlyAmount * 12 * (1 - tierConfig.annualDiscountPercent / 100) / 12;
+    const estimatedMRR = registeredUsers.reduce((total, user) => {
+      const isPro = user.plan === "premium";
+      if (!isPro) return total;
+      return total + (user.subscriptionPlan?.toLowerCase() === "yearly"
+        ? yearlyMonthlyAmount
+        : monthlyAmount);
+    }, 0);
     const proConversionRate = totalUsers > 0 ? ((proUsers / totalUsers) * 100).toFixed(1) : "0";
 
     return NextResponse.json({
@@ -108,7 +119,9 @@ export async function GET(request: NextRequest) {
         calibratedUsers,
         totalPuzzles: totalPuzzles ?? 6157341,
         topLikedPuzzles,
-        estimatedMRR: Number(estimatedMRR),
+        estimatedMRR: Number(estimatedMRR.toFixed(2)),
+        revenueCurrency: "INR",
+        proMonthlyPrice: monthlyAmount,
         proConversionRate: Number(proConversionRate),
         dbLatencyMs,
         status: "healthy",

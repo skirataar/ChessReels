@@ -3,6 +3,7 @@ import {
   getPricingForCountry,
   resolvePricingCountry,
 } from "@/lib/pricing";
+import { getTierConfig } from "@/lib/tierConfig";
 
 
 /**
@@ -34,7 +35,31 @@ export async function GET(request: NextRequest) {
     timezone,
   });
 
-  const pricing = getPricingForCountry(country);
+  const basePricing = getPricingForCountry(country);
+  let pricing = basePricing;
+
+  if (country === "IN") {
+    const tierConfig = await getTierConfig();
+    const monthlyAmount = tierConfig.proMonthlyPrice;
+    const yearlyAmount = Math.round(
+      monthlyAmount * 12 * (1 - tierConfig.annualDiscountPercent / 100)
+    );
+    pricing = {
+      ...basePricing,
+      monthly: {
+        ...basePricing.monthly,
+        amount: monthlyAmount,
+        display: formatIndiaPrice(monthlyAmount),
+      },
+      yearly: {
+        ...basePricing.yearly,
+        amount: yearlyAmount,
+        display: formatIndiaPrice(yearlyAmount),
+        monthlyEquivalent: formatIndiaPrice(Math.round(yearlyAmount / 12)),
+        subtext: `${formatIndiaPrice(Math.round(yearlyAmount / 12))}/mo billed annually`,
+      },
+    };
+  }
 
   return NextResponse.json(
     {
@@ -48,4 +73,12 @@ export async function GET(request: NextRequest) {
       },
     }
   );
+}
+
+function formatIndiaPrice(amount: number): string {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(amount);
 }
