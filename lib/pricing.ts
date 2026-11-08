@@ -47,7 +47,7 @@ export const INDIA_PRICING: GeoPricing = {
     monthlyEquivalent: "₹190",
     subtext: "₹190/mo billed annually",
   },
-  methods: "UPI Autopay • GPay • PhonePe • Cards",
+  methods: "UPI Autopay / GPay / PhonePe / Cards",
 };
 
 export const UK_PRICING: GeoPricing = {
@@ -66,7 +66,7 @@ export const UK_PRICING: GeoPricing = {
     monthlyEquivalent: "£3.19",
     subtext: "£3.19/mo billed annually",
   },
-  methods: "Card • PayPal • Apple Pay",
+  methods: "Card / PayPal / Apple Pay",
 };
 
 export const EURO_PRICING: GeoPricing = {
@@ -85,7 +85,7 @@ export const EURO_PRICING: GeoPricing = {
     monthlyEquivalent: "€3.99",
     subtext: "€3.99/mo billed annually",
   },
-  methods: "Card • PayPal • Apple Pay",
+  methods: "Card / PayPal / Apple Pay",
 };
 
 export const GLOBAL_PRICING: GeoPricing = {
@@ -104,7 +104,7 @@ export const GLOBAL_PRICING: GeoPricing = {
     monthlyEquivalent: "$3.99",
     subtext: "$3.99/mo billed annually",
   },
-  methods: "Card • PayPal • Apple Pay",
+  methods: "Card / PayPal / Apple Pay",
 };
 
 export const EUROZONE_COUNTRIES = [

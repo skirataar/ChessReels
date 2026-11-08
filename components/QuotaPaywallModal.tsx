@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   BadgeCheck,
   Check,
@@ -10,6 +16,7 @@ import {
   Loader2,
   Lock,
   Sparkles,
+  Target,
   Trophy,
   X,
   Zap,
@@ -19,6 +26,7 @@ import {
   getPricingForCountry,
   getYearlySavingsPercent,
 } from "@/lib/pricing";
+import { hydrateUserSession } from "@/lib/sessionHydration";
 
 interface QuotaPaywallModalProps {
   isOpen: boolean;
@@ -40,14 +48,26 @@ interface RazorpayInstance {
 }
 
 interface RazorpayPaymentResponse {
-  razorpay_payment_id: string;
-  razorpay_order_id: string;
-  razorpay_signature: string;
+  razorpay_payment_id?: string;
+  razorpay_order_id?: string;
+  razorpay_subscription_id?: string;
+  razorpay_signature?: string;
 }
 
 type RazorpayConstructor = new (options: Record<string, unknown>) => RazorpayInstance;
 
+interface PendingPayment {
+  provider: "razorpay";
+  pendingSubscriptionId?: string | null;
+  pendingOrderId?: string | null;
+  pendingPaymentId?: string | null;
+  razorpaySignature?: string | null;
+  plan: PlanType;
+  createdAt: number;
+}
+
 const FALLBACK_PRICING = getPricingForCountry("US");
+const PENDING_PAYMENT_KEY = "doomchess_pending_payment";
 
 function loadRazorpayScript(): Promise<boolean> {
   return new Promise((resolve) => {
@@ -74,31 +94,125 @@ function loadRazorpayScript(): Promise<boolean> {
   });
 }
 
-async function waitForActivation(userId?: string): Promise<void> {
-  if (!userId) return;
+/**
+ * Mobile browsers (especially after GPay/PhonePe UPI hand-offs) can take a
+ * second or two to re-establish network sockets. A fetch fired immediately on
+ * `visibilitychange` then rejects with `TypeError: Failed to fetch` even though
+ * the payment succeeded. Retry transient network errors with backoff instead of
+ * showing that error to a paying user.
+ */
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  retries = 4,
+  delayMs = 1200
+): Promise<Response> {
+  let lastError: unknown = null;
+  let waitMs = delayMs;
 
-  for (let attempt = 0; attempt < 12; attempt++) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const response = await fetch(
-        `/api/user/account?userId=${encodeURIComponent(userId)}`,
-        { cache: "no-store" }
-      );
-      if (response.ok) {
-        const data = await response.json();
-        if (data?.user?.isPro) return;
-      }
-    } catch {
-      // Webhook may still be in flight; keep polling.
+      return await fetch(url, options);
+    } catch (error) {
+      lastError = error;
+      if (attempt === retries) break;
+      await new Promise((resolve) => window.setTimeout(resolve, waitMs));
+      waitMs = Math.min(Math.round(waitMs * 1.75), 8000);
     }
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new TypeError("Failed to fetch");
+}
+
+function readPendingPayment(): PendingPayment | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.localStorage.getItem(PENDING_PAYMENT_KEY);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as Partial<PendingPayment>;
+    if (
+      parsed?.provider !== "razorpay" ||
+      (parsed.plan !== "monthly" && parsed.plan !== "yearly") ||
+      (!parsed.pendingPaymentId &&
+        !parsed.pendingSubscriptionId &&
+        !parsed.pendingOrderId)
+    ) {
+      return null;
+    }
+
+    return {
+      provider: "razorpay",
+      pendingSubscriptionId: parsed.pendingSubscriptionId || null,
+      pendingOrderId: parsed.pendingOrderId || null,
+      pendingPaymentId: parsed.pendingPaymentId || null,
+      razorpaySignature: parsed.razorpaySignature || null,
+      plan: parsed.plan,
+      createdAt:
+        typeof parsed.createdAt === "number" ? parsed.createdAt : Date.now(),
+    };
+  } catch {
+    return null;
   }
 }
+
+function persistPendingPayment(pending: PendingPayment): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(PENDING_PAYMENT_KEY, JSON.stringify(pending));
+  } catch {
+    // Storage can be unavailable in private mode; verification still proceeds.
+  }
+}
+
+function clearPendingPayment(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(PENDING_PAYMENT_KEY);
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
+async function submitPendingVerification(
+  pending: PendingPayment
+): Promise<Record<string, unknown>> {
+  const response = await fetchWithRetry("/api/billing/verify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      razorpay_payment_id: pending.pendingPaymentId || undefined,
+      razorpay_subscription_id: pending.pendingSubscriptionId || undefined,
+      razorpay_order_id: pending.pendingOrderId || undefined,
+      razorpay_signature: pending.razorpaySignature || undefined,
+      plan: pending.plan,
+    }),
+  });
+
+  const data = (await response.json().catch(() => ({}))) as Record<
+    string,
+    unknown
+  >;
+
+  if (!response.ok || data?.success !== true) {
+    throw new Error(
+      typeof data?.error === "string"
+        ? data.error
+        : "Payment could not be verified."
+    );
+  }
+
+  return data;
+}
+
 
 export function QuotaPaywallModal({
   isOpen,
   onClose,
   onUpgradeComplete,
-  userId,
   resetsInMs,
   limit = 4,
   windowHours = 4,
@@ -110,6 +224,8 @@ export function QuotaPaywallModal({
   const [isLoadingPricing, setIsLoadingPricing] = useState(false);
   const [status, setStatus] = useState<CheckoutStatus>("idle");
   const [errorMessage, setErrorMessage] = useState<string>("");
+  const [isRestoring, setIsRestoring] = useState(false);
+  const recoveryInFlight = useRef(false);
 
   const activePricing = pricing ?? FALLBACK_PRICING;
   const savingsPercent = useMemo(
@@ -174,6 +290,7 @@ export function QuotaPaywallModal({
   }, [isOpen]);
 
   const finishUpgrade = useCallback(async () => {
+    clearPendingPayment();
     try {
       await onUpgradeComplete?.();
     } catch {
@@ -182,6 +299,121 @@ export function QuotaPaywallModal({
     setStatus("success");
     setTimeout(() => onClose(), 900);
   }, [onClose, onUpgradeComplete]);
+
+  const finishUpgradeRef = useRef(finishUpgrade);
+
+  useEffect(() => {
+    finishUpgradeRef.current = finishUpgrade;
+  }, [finishUpgrade]);
+
+  // If a UPI hand-off killed the tab/socket before verification completed,
+  // retry automatically on mount and whenever the user returns to the browser.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    let cancelled = false;
+
+    const recover = async () => {
+      if (recoveryInFlight.current) return;
+
+      const pending = readPendingPayment();
+      if (!pending) return;
+
+      recoveryInFlight.current = true;
+      try {
+        await submitPendingVerification(pending);
+        if (cancelled) return;
+        clearPendingPayment();
+        await finishUpgradeRef.current();
+      } catch {
+        // Keep the pending payload so the next focus/visibility change retries.
+      } finally {
+        recoveryInFlight.current = false;
+      }
+    };
+
+    void recover();
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") void recover();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("focus", handleVisibility);
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("focus", handleVisibility);
+    };
+  }, []);
+
+  const handleRestorePurchase = useCallback(async () => {
+    if (isRestoring || status === "loading" || status === "success") return;
+
+    setIsRestoring(true);
+    setStatus("idle");
+    setErrorMessage("");
+
+    try {
+      const response = await fetchWithRetry("/api/billing/restore", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan: selectedPlan }),
+      });
+
+      const data = (await response.json().catch(() => ({}))) as Record<
+        string,
+        unknown
+      >;
+
+      if (!response.ok || data?.success !== true) {
+        throw new Error(
+          typeof data?.error === "string"
+            ? data.error
+            : "No active purchase was found for this account."
+        );
+      }
+
+      // Refresh the canonical stats and mirror entitlement into localStorage so
+      // every open view unlocks immediately, without waiting for a reload.
+      try {
+        const statsResponse = await fetchWithRetry(
+          "/api/user/stats",
+          { cache: "no-store" },
+          2,
+          800
+        );
+        if (statsResponse.ok) {
+          const statsData = (await statsResponse.json().catch(() => null)) as {
+            user?: { id?: string } & Record<string, unknown>;
+          } | null;
+          if (statsData?.user?.id) {
+            hydrateUserSession({
+              ...statsData.user,
+              id: statsData.user.id,
+              isPro: true,
+              plan: "premium",
+            });
+          }
+        }
+      } catch {
+        // Activation succeeded server-side; the UI refresh is best-effort.
+      }
+
+      clearPendingPayment();
+      await finishUpgrade();
+    } catch (error: unknown) {
+      setStatus("error");
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Could not restore the purchase. Please try again."
+      );
+    } finally {
+      setIsRestoring(false);
+    }
+  }, [finishUpgrade, isRestoring, selectedPlan, status]);
 
   const handleUpgrade = useCallback(async () => {
     if (status === "loading" || status === "success") return;
@@ -274,51 +506,44 @@ export function QuotaPaywallModal({
               ondismiss: () => setStatus("idle"),
             },
             handler: (response: unknown) => {
-              void (async () => {
-                const payment = response as Partial<RazorpayPaymentResponse>;
-                if (
-                  !payment?.razorpay_order_id ||
-                  !payment.razorpay_payment_id ||
-                  !payment.razorpay_signature
-                ) {
-                  throw new Error(
-                    "Razorpay did not return complete payment details."
-                  );
-                }
+              const payment = response as Partial<RazorpayPaymentResponse>;
+              const resolvedOrderId = payment.razorpay_order_id || orderId;
+              const paymentId = payment.razorpay_payment_id;
+              const signature = payment.razorpay_signature;
 
-                setStatus("loading");
-
-                const verification = await fetch("/api/verify-payment", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    razorpay_order_id: payment.razorpay_order_id,
-                    razorpay_payment_id: payment.razorpay_payment_id,
-                    razorpay_signature: payment.razorpay_signature,
-                  }),
-                });
-
-                const verificationData = await verification
-                  .json()
-                  .catch(() => ({}));
-
-                if (!verification.ok || !verificationData?.success) {
-                  throw new Error(
-                    typeof verificationData?.error === "string"
-                      ? verificationData.error
-                      : "Payment could not be verified."
-                  );
-                }
-
-                await finishUpgrade();
-              })().catch((error: unknown) => {
+              if (!resolvedOrderId || !paymentId || !signature) {
                 setStatus("error");
                 setErrorMessage(
-                  error instanceof Error
-                    ? error.message
-                    : "Payment was received but could not be verified."
+                  "Razorpay did not return complete payment details."
                 );
-              });
+                return;
+              }
+
+              // Persist before any network call so a mobile socket wake-up
+              // failure can always be recovered later (mount/visibility).
+              const pending: PendingPayment = {
+                provider: "razorpay",
+                pendingSubscriptionId: null,
+                pendingOrderId: resolvedOrderId,
+                pendingPaymentId: paymentId,
+                razorpaySignature: signature,
+                plan: selectedPlan,
+                createdAt: Date.now(),
+              };
+              persistPendingPayment(pending);
+              setStatus("loading");
+              setErrorMessage("");
+
+              void submitPendingVerification(pending)
+                .then(() => finishUpgrade())
+                .catch((error: unknown) => {
+                  setStatus("error");
+                  setErrorMessage(
+                    error instanceof Error
+                      ? error.message
+                      : "Payment was received but could not be verified."
+                  );
+                });
             },
           });
 
@@ -367,13 +592,44 @@ export function QuotaPaywallModal({
           modal: {
             ondismiss: () => setStatus("idle"),
           },
-          handler: () => {
-            void (async () => {
-              setStatus("success");
-              await waitForActivation(userId);
-              await onUpgradeComplete?.();
-              setTimeout(() => onClose(), 900);
-            })();
+          handler: (response: unknown) => {
+            const payment = response as Partial<RazorpayPaymentResponse>;
+            const subscriptionId =
+              payment.razorpay_subscription_id || data.subscriptionId;
+            const paymentId = payment.razorpay_payment_id;
+            const signature = payment.razorpay_signature;
+
+            if (!subscriptionId || !paymentId || !signature) {
+              setStatus("error");
+              setErrorMessage(
+                "Razorpay did not return complete subscription payment details."
+              );
+              return;
+            }
+
+            const pending: PendingPayment = {
+              provider: "razorpay",
+              pendingSubscriptionId: subscriptionId,
+              pendingOrderId: null,
+              pendingPaymentId: paymentId,
+              razorpaySignature: signature,
+              plan: selectedPlan,
+              createdAt: Date.now(),
+            };
+            persistPendingPayment(pending);
+            setStatus("loading");
+            setErrorMessage("");
+
+            void submitPendingVerification(pending)
+              .then(() => finishUpgrade())
+              .catch((error: unknown) => {
+                setStatus("error");
+                setErrorMessage(
+                  error instanceof Error
+                    ? error.message
+                    : "Payment was received but could not be verified."
+                );
+              });
           },
         });
 
@@ -408,7 +664,6 @@ export function QuotaPaywallModal({
     onUpgradeComplete,
     selectedPlan,
     status,
-    userId,
   ]);
 
   if (!isOpen) return null;
@@ -425,8 +680,8 @@ export function QuotaPaywallModal({
     status === "success"
       ? "Pro Activated"
       : status === "loading"
-      ? "Opening Secure Checkout…"
-      : `Upgrade to Pro — ${selectedPrice.display}${
+      ? "Opening Secure Checkout..."
+      : `Upgrade to Pro - ${selectedPrice.display}${
           selectedPlan === "yearly" ? "/yr" : "/mo"
         }`;
 
@@ -499,9 +754,9 @@ export function QuotaPaywallModal({
             </div>
           ) : (
             <div className="mt-4 w-full p-2.5 rounded-2xl bg-[#0a0908]/80 border border-[#c29b78]/25 flex items-center justify-between text-[11px] text-[#e2c3a4] font-bold px-3">
-              <span>🎯 Target specific themes</span>
+              <span className="flex items-center gap-1.5"><Target className="w-3.5 h-3.5" strokeWidth={2} /> Target specific themes</span>
               <span className="px-2 py-0.5 rounded-full bg-[#c29b78]/15 text-[9px] uppercase tracking-wider">
-                Mates • Pins • Forks
+                Mates / Pins / Forks
               </span>
             </div>
           )}
@@ -581,7 +836,7 @@ export function QuotaPaywallModal({
                       : "bg-emerald-500/15 text-emerald-400"
                   }`}
                 >
-                  −{savingsPercent}%
+                  -{savingsPercent}%
                 </span>
               )}
             </button>
@@ -653,6 +908,37 @@ export function QuotaPaywallModal({
           </button>
 
           <button
+            data-testid="paywall-restore-purchase-btn"
+            type="button"
+            onClick={handleRestorePurchase}
+            disabled={isRestoring || status === "loading" || status === "success"}
+            className="w-full py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-[#c29b78]/25 text-[#e2c3a4] font-bold text-[11px] transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.985] disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {isRestoring ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <svg
+                viewBox="0 0 24 24"
+                className="w-3.5 h-3.5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                <path d="M21 3v6h-6" />
+              </svg>
+            )}
+            <span>
+              {isRestoring
+                ? "Checking payment..."
+                : "Paid already? Restore Purchase"}
+            </span>
+          </button>
+
+          <button
             onClick={onClose}
             className="w-full py-2 rounded-xl bg-transparent hover:bg-white/[0.04] text-zinc-500 hover:text-zinc-300 font-semibold text-[11px] transition-colors cursor-pointer"
           >
@@ -663,10 +949,10 @@ export function QuotaPaywallModal({
             <Lock className="w-2.5 h-2.5" />
             <span>
               {isIndia
-                ? "Secured by Razorpay • Cancel anytime"
-                : "Secured by Lemon Squeezy • Cancel anytime"}
+                ? "Secured by Razorpay / Cancel anytime"
+                : "Secured by Lemon Squeezy / Cancel anytime"}
             </span>
-            {isLoadingPricing && <span className="text-zinc-700">• detecting region…</span>}
+            {isLoadingPricing && <span className="text-zinc-700">/ detecting region...</span>}
           </div>
         </div>
       </div>

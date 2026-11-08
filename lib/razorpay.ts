@@ -247,6 +247,108 @@ export async function fetchRazorpayOrder(orderId: string) {
   }
 }
 
+/** Fetch a subscription directly from Razorpay (webhook-independent recovery). */
+export async function fetchRazorpaySubscription(subscriptionId: string) {
+  const client = getRazorpayClient();
+  if (!client) {
+    throw new RazorpayRequestError(
+      "Razorpay is not configured on this deployment.",
+      503
+    );
+  }
+
+  try {
+    return await client.subscriptions.fetch(subscriptionId);
+  } catch (error: unknown) {
+    if (isRazorpayError(error) && Number(error.statusCode) === 404) {
+      throw new RazorpayRequestError("Razorpay subscription was not found.", 404);
+    }
+    throw new RazorpayRequestError(
+      "Could not confirm the Razorpay subscription. Please try again.",
+      500
+    );
+  }
+}
+
+/** Fetch a payment directly from Razorpay (webhook-independent recovery). */
+export async function fetchRazorpayPayment(paymentId: string) {
+  const client = getRazorpayClient();
+  if (!client) {
+    throw new RazorpayRequestError(
+      "Razorpay is not configured on this deployment.",
+      503
+    );
+  }
+
+  try {
+    return await client.payments.fetch(paymentId);
+  } catch (error: unknown) {
+    if (isRazorpayError(error) && Number(error.statusCode) === 404) {
+      throw new RazorpayRequestError("Razorpay payment was not found.", 404);
+    }
+    throw new RazorpayRequestError(
+      "Could not confirm the Razorpay payment. Please try again.",
+      500
+    );
+  }
+}
+
+/** List Razorpay subscriptions, newest first. */
+export async function listRazorpaySubscriptions(params?: {
+  count?: number;
+  skip?: number;
+}) {
+  const client = getRazorpayClient();
+  if (!client) {
+    throw new RazorpayRequestError(
+      "Razorpay is not configured on this deployment.",
+      503
+    );
+  }
+
+  try {
+    return await client.subscriptions.all({
+      count: params?.count ?? 100,
+      skip: params?.skip ?? 0,
+    });
+  } catch {
+    throw new RazorpayRequestError(
+      "Could not list Razorpay subscriptions. Please try again.",
+      500
+    );
+  }
+}
+
+/** List Razorpay payments, newest first. */
+export async function listRazorpayPayments(params?: {
+  count?: number;
+  skip?: number;
+  from?: number;
+  to?: number;
+}) {
+  const client = getRazorpayClient();
+  if (!client) {
+    throw new RazorpayRequestError(
+      "Razorpay is not configured on this deployment.",
+      503
+    );
+  }
+
+  try {
+    return await client.payments.all({
+      count: params?.count ?? 100,
+      skip: params?.skip ?? 0,
+      from: params?.from,
+      to: params?.to,
+    });
+  } catch {
+    throw new RazorpayRequestError(
+      "Could not list Razorpay payments. Please try again.",
+      500
+    );
+  }
+}
+
 export interface RazorpayPaymentVerification {
   valid: boolean;
   orderId: string;
@@ -286,6 +388,54 @@ export function verifyRazorpayPaymentSignature(input: {
   }
 
   return { valid, orderId: input.orderId, paymentId: input.paymentId };
+}
+
+/**
+ * Verify a Razorpay Subscription checkout:
+ * HMAC-SHA256(`${payment_id}|${subscription_id}`, KEY_SECRET).
+ */
+export function verifyRazorpaySubscriptionSignature(input: {
+  subscriptionId: string;
+  paymentId: string;
+  signature: string;
+}): RazorpayPaymentVerification {
+  const credentials = getRazorpayCredentials();
+  if (!credentials) {
+    return {
+      valid: false,
+      orderId: input.subscriptionId,
+      paymentId: input.paymentId,
+    };
+  }
+
+  const expected = createHmac("sha256", credentials.keySecret)
+    .update(`${input.paymentId}|${input.subscriptionId}`, "utf8")
+    .digest("hex");
+  const received = input.signature.trim().toLowerCase();
+
+  if (expected.length !== received.length) {
+    return {
+      valid: false,
+      orderId: input.subscriptionId,
+      paymentId: input.paymentId,
+    };
+  }
+
+  let valid = false;
+  try {
+    valid = timingSafeEqual(
+      Buffer.from(expected, "utf8"),
+      Buffer.from(received, "utf8")
+    );
+  } catch {
+    valid = false;
+  }
+
+  return {
+    valid,
+    orderId: input.subscriptionId,
+    paymentId: input.paymentId,
+  };
 }
 
 export function planFromOrderNotes(
