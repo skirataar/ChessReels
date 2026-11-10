@@ -21,8 +21,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "DoomChess — Tactical Chess Puzzle Reels & Elo Mastery",
-  description: "Turn doomscrolling into tactical chess mastery. Mobile-first, Elo-adaptive chess puzzle reels with instant feedback.",
+  title: "Doomchess | Tactical Chess Puzzles & Endless Reels",
+  description: "Turn doomscrolling into tactical chess mastery. Solve bite-sized chess puzzles, track your ELO, and master opening repertoires.",
+  metadataBase: new URL("https://doomchess.online"),
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
@@ -30,8 +31,38 @@ export const metadata: Metadata = {
     title: "DoomChess",
   },
   icons: {
-    icon: "/icons/icon.svg",
-    apple: "/icons/icon.svg",
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+    ],
+    shortcut: ["/icon.svg"],
+    apple: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+    ],
+  },
+  openGraph: {
+    title: "Doomchess | Tactical Chess Puzzles & Endless Reels",
+    description: "Turn doomscrolling into tactical chess mastery with infinite puzzle reels.",
+    url: "https://doomchess.online",
+    siteName: "Doomchess",
+    images: [
+      {
+        url: "/icon.svg",
+        width: 800,
+        height: 800,
+        alt: "Doomchess Logo",
+      },
+    ],
+    locale: "en_US",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Doomchess | Tactical Chess Puzzles",
+    description: "Turn doomscrolling into tactical chess mastery.",
+    images: ["/icon.svg"],
+  },
+  other: {
+    "google-adsense-account": "ca-pub-8026676969982075",
   },
 };
 
