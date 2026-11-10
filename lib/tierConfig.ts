@@ -55,7 +55,7 @@ export async function getTierConfig(): Promise<TierConfig> {
     }
 
     const freePuzzleLimit = map.has("free_puzzle_limit")
-      ? Math.max(1, parseInt(map.get("free_puzzle_limit")!, 10) || DEFAULT_TIER_CONFIG.freePuzzleLimit)
+      ? Math.max(15, parseInt(map.get("free_puzzle_limit")!, 10) || DEFAULT_TIER_CONFIG.freePuzzleLimit)
       : DEFAULT_TIER_CONFIG.freePuzzleLimit;
 
     const freeWindowHours = map.has("free_window_hours")

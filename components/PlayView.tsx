@@ -202,18 +202,18 @@ function ChargeBattery({ remaining, unlimited = false }: { remaining: number; un
         {/* Centered inner readout */}
         {unlimited ? (
           <svg
-            width="17"
-            height="8.5"
-            viewBox="1 5 22 14"
+            width="18"
+            height="9"
+            viewBox="0 0 32 16"
             fill="none"
             stroke="currentColor"
-            strokeWidth="2.6"
+            strokeWidth="2.4"
             strokeLinecap="round"
             strokeLinejoin="round"
             className="text-[#0a0908] relative z-10 shrink-0"
             aria-hidden="true"
           >
-            <path d="M6 16c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" />
+            <path d="M9 14 C4 14, 2 11.5, 2 8 C2 4.5, 4 2, 9 2 C14 2, 18 14, 23 14 C28 14, 30 11.5, 30 8 C30 4.5, 28 2, 23 2 C18 2, 14 14, 9 14 Z" />
           </svg>
         ) : (
           <span
@@ -586,6 +586,29 @@ export function PlayView({
   const [showReelAd, setShowReelAd] = useState(false);
   const countedSessionPuzzlesRef = useRef<Set<string>>(new Set());
 
+  // Purge any stale 4/4 quota regression in localStorage on initial client hydration
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const rawStats = window.localStorage.getItem("chessreels_user_stats_v1");
+      if (rawStats) {
+        const parsed = JSON.parse(rawStats);
+        if (parsed.windowLimit && parsed.windowLimit < 15) {
+          parsed.windowLimit = 15;
+          window.localStorage.setItem("chessreels_user_stats_v1", JSON.stringify(parsed));
+        }
+      }
+      const rawTier = window.localStorage.getItem("chess_reel_tier_config");
+      if (rawTier) {
+        const parsed = JSON.parse(rawTier);
+        if (parsed.freePuzzleLimit && parsed.freePuzzleLimit < 15) {
+          parsed.freePuzzleLimit = 15;
+          window.localStorage.setItem("chess_reel_tier_config", JSON.stringify(parsed));
+        }
+      }
+    } catch {}
+  }, []);
+
   useEffect(() => {
     if (!isBatteryMenuOpen) return;
 
@@ -765,7 +788,7 @@ export function PlayView({
     if (!isHydrated || !userAccount?.id || isGuestAccount(userAccount)) return;
 
     let cancelled = false;
-    fetch(`/api/user/stats?userId=${encodeURIComponent(userAccount.id)}`)
+    fetch(`/api/user/stats?userId=${encodeURIComponent(userAccount.id)}`, { cache: "no-store" })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (cancelled) return;
@@ -1704,7 +1727,7 @@ export function PlayView({
     setCurrentIndex(0);
     initialFetchDoneRef.current = true;
 
-    fetch(`/api/user/stats?userId=${encodeURIComponent(user.id)}`)
+    fetch(`/api/user/stats?userId=${encodeURIComponent(user.id)}`, { cache: "no-store" })
       .then((res) => (res.ok ? res.json() : null))
       .then((statsData) => {
         if (statsData?.puzzlesRemaining !== undefined) {
@@ -1743,12 +1766,8 @@ export function PlayView({
   // Sign out handler: clears all caches and transitions cleanly in a single step without landing page flash
   const handleSignOut = () => {
     const oldUserId = userAccount?.id;
-    clearAllUserAndPuzzleCache(oldUserId);
-    resetStreakStats();
-    if (typeof window !== "undefined") {
-      window.localStorage.removeItem("chessreels_user_stats_v1");
-      window.localStorage.removeItem("quota_last_check");
-    }
+
+    // 1. Optimistically clear local React state
     setUserAccount(null);
     setCurrentElo(0);
     currentEloRef.current = 0;
@@ -1757,7 +1776,29 @@ export function PlayView({
     setQueue([]);
     setCurrentIndex(0);
     setActiveTab("reels");
-    router.replace("/");
+
+    // 2. Synchronously wipe all local and session storages
+    clearAllUserAndPuzzleCache(oldUserId);
+    resetStreakStats();
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.removeItem("chessreels_user_stats_v1");
+        window.localStorage.removeItem("quota_last_check");
+        window.localStorage.removeItem("chess_reel_account");
+        window.localStorage.removeItem("chess_reel_tier_config");
+        window.sessionStorage.clear();
+      } catch {}
+    }
+    if (typeof document !== "undefined") {
+      document.cookie = "chess_reel_session=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    }
+
+    // 3. Instant hard redirect to root
+    if (typeof window !== "undefined") {
+      window.location.href = "/";
+    } else {
+      router.replace("/");
+    }
   };
 
   // Route guard: unauthenticated users redirect cleanly to '/'
@@ -1931,16 +1972,16 @@ export function PlayView({
                       <svg
                         width="18"
                         height="9"
-                        viewBox="1 5 22 14"
+                        viewBox="0 0 32 16"
                         fill="none"
                         stroke="currentColor"
-                        strokeWidth="2.2"
+                        strokeWidth="2.4"
                         strokeLinecap="round"
                         strokeLinejoin="round"
                         className="text-[#c29b78] shrink-0"
                         aria-hidden="true"
                       >
-                        <path d="M6 16c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" />
+                        <path d="M9 14 C4 14, 2 11.5, 2 8 C2 4.5, 4 2, 9 2 C14 2, 18 14, 23 14 C28 14, 30 11.5, 30 8 C30 4.5, 28 2, 23 2 C18 2, 14 14, 9 14 Z" />
                       </svg>
                       <div className="text-[11px] font-bold tracking-wider text-[#c29b78] uppercase">
                         PRO ACCOUNT / UNLIMITED CHARGE

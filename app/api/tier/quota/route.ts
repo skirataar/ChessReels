@@ -3,6 +3,12 @@ import { checkUserQuota, getTierConfig } from "@/lib/tierConfig";
 import prisma from "@/lib/prisma";
 import { isGuestUserId } from "@/lib/guestAccount";
 
+const NO_CACHE_HEADERS = {
+  "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
+  Pragma: "no-cache",
+  Expires: "0",
+};
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = request.nextUrl;
@@ -21,7 +27,7 @@ export async function GET(request: NextRequest) {
       getTierConfig(),
     ]);
 
-    return NextResponse.json({ quota, config });
+    return NextResponse.json({ quota, config }, { headers: NO_CACHE_HEADERS });
   } catch (error) {
     console.error("Failed to fetch user quota:", error);
     return NextResponse.json({ error: "Failed to fetch user quota" }, { status: 500 });

@@ -64,7 +64,14 @@ function getInitialTierState(effectivePro: boolean, userId?: string) {
   if (typeof window !== "undefined") {
     try {
       const rawCfg = window.localStorage.getItem("chess_reel_tier_config");
-      if (rawCfg) activeConfig = { ...DEFAULT_TIER_CONFIG, ...JSON.parse(rawCfg) };
+      if (rawCfg) {
+        const parsed = JSON.parse(rawCfg);
+        if (parsed.freePuzzleLimit && parsed.freePuzzleLimit < 15) {
+          parsed.freePuzzleLimit = 15;
+          window.localStorage.setItem("chess_reel_tier_config", JSON.stringify(parsed));
+        }
+        activeConfig = { ...DEFAULT_TIER_CONFIG, ...parsed, freePuzzleLimit: Math.max(15, parsed.freePuzzleLimit || 15) };
+      }
     } catch {}
   }
   if (typeof window !== "undefined") {
@@ -160,7 +167,7 @@ export function useTierQuota(
 
   // Load live config from API on mount
   useEffect(() => {
-    fetch("/api/tier/config")
+    fetch("/api/tier/config", { cache: "no-store" })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data?.config) {
@@ -245,7 +252,7 @@ export function useTierQuota(
   const syncWithServer = useCallback(async () => {
     if (!userId) return;
     try {
-      const res = await fetch(`/api/tier/quota?userId=${encodeURIComponent(userId)}`);
+      const res = await fetch(`/api/tier/quota?userId=${encodeURIComponent(userId)}`, { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         if (data.config) setConfig(data.config);
@@ -259,7 +266,7 @@ export function useTierQuota(
           }
 
           const storageKey = getTierStorageKey(userId);
-          const limit = data.config?.freePuzzleLimit || data.quota.windowLimit || DEFAULT_TIER_CONFIG.freePuzzleLimit;
+          const limit = Math.max(15, data.config?.freePuzzleLimit || data.quota.windowLimit || DEFAULT_TIER_CONFIG.freePuzzleLimit);
           const hours = data.config?.freeWindowHours || data.quota.windowHours || DEFAULT_TIER_CONFIG.freeWindowHours;
           const windowMs = hours * 3600 * 1000;
           const now = Date.now();
@@ -419,7 +426,7 @@ export function useTierQuota(
     if (!userId) return;
 
     try {
-      const res = await fetch(`/api/user/account?userId=${encodeURIComponent(userId)}`);
+      const res = await fetch(`/api/user/account?userId=${encodeURIComponent(userId)}`, { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         if (data?.user) {
@@ -469,7 +476,8 @@ export function useTierQuota(
         const storageKey = getTierStorageKey(userId);
         const raw = window.localStorage.getItem(storageKey);
         const parsed: LocalTierSession = raw ? JSON.parse(raw) : { solveTimestamps: [], puzzlesSinceLastAd: 0 };
-        const targetUsed = Math.max(0, config.freePuzzleLimit - newRemaining);
+        const effectiveLimit = Math.max(15, config.freePuzzleLimit || 15);
+        const targetUsed = Math.max(0, effectiveLimit - newRemaining);
         parsed.solveTimestamps = (parsed.solveTimestamps || []).slice(-targetUsed);
         window.localStorage.setItem(storageKey, JSON.stringify(parsed));
       } catch {}

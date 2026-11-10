@@ -7,6 +7,7 @@ import { Play, Target, User, Lock, Settings } from "lucide-react";
 import { motion } from "framer-motion";
 import { SettingsModal } from "@/components/SettingsModal";
 import { isGuestAccount } from "@/lib/guestAccount";
+import { clearAllUserAndPuzzleCache } from "@/lib/puzzleCache";
 
 interface NavItem {
   name: string;
@@ -257,6 +258,27 @@ export function BottomNav() {
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         userAccount={userAccount}
+        onSignOut={() => {
+          clearAllUserAndPuzzleCache(userAccount?.id);
+          if (typeof window !== "undefined") {
+            try {
+              window.localStorage.removeItem("chessreels_user_stats_v1");
+              window.localStorage.removeItem("quota_last_check");
+              window.localStorage.removeItem("chess_reel_account");
+              window.localStorage.removeItem("chess_reel_tier_config");
+              window.sessionStorage.clear();
+            } catch {}
+          }
+          if (typeof document !== "undefined") {
+            document.cookie = "chess_reel_session=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+          }
+          setIsSettingsOpen(false);
+          if (typeof window !== "undefined") {
+            window.location.href = "/";
+          } else {
+            router.replace("/");
+          }
+        }}
       />
     </>
   );

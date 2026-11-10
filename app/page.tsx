@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ArrowRight, Check, LogIn, Sparkles } from "lucide-react";
+import { ChevronLeft, ArrowRight, Check, LogIn, Sparkles, ChevronDown } from "lucide-react";
 import { BOARD_THEMES, BoardTheme, setStoredBoardTheme, getStoredBoardTheme } from "@/lib/boardThemes";
 import { clearGuestLocalSession, isGuestAccount } from "@/lib/guestAccount";
 import { prefetchPuzzles, clearAllUserAndPuzzleCache } from "@/lib/puzzleCache";
@@ -830,10 +830,20 @@ export default function RootPage() {
 
         if (data.user) {
           clearAllUserAndPuzzleCache();
+          if (typeof window !== "undefined") {
+            try {
+              window.localStorage.removeItem("chessreels_user_stats_v1");
+              window.localStorage.removeItem("quota_last_check");
+            } catch {}
+          }
           hydrateUserSession(data.user);
           prefetchPuzzles(data.user.elo || 800, 5, data.user.id).catch(() => {});
           document.cookie = `chess_reel_session=${encodeURIComponent(data.user.id)}; path=/; max-age=${60 * 60 * 24 * 30}`;
-          router.replace("/play");
+          if (typeof window !== "undefined") {
+            window.location.href = "/play";
+          } else {
+            router.replace("/play");
+          }
         }
       } catch {
         setAuthError("Network error. Please try again.");
@@ -852,7 +862,11 @@ export default function RootPage() {
     } catch {
       // Ignore storage failures; the play page still loads normally.
     }
-    router.push("/play");
+    if (typeof window !== "undefined") {
+      window.location.href = "/play";
+    } else {
+      router.push("/play");
+    }
   };
 
   // If on post-registration upsell state
@@ -903,117 +917,154 @@ export default function RootPage() {
     );
   }
 
+  // If on initial gate step: 100dvh Hero viewport + below-the-fold scroll-triggered fade-in section
+  if (step === "gate") {
+    return (
+      <div className="min-h-screen w-full select-none bg-[#0a0908] text-[#f5f2eb] flex flex-col items-center font-sans overflow-x-hidden overflow-y-auto">
+        {/* --- 1. HERO VIEWPORT (100dvh Above-the-Fold) --- */}
+        <section className="min-h-[100dvh] w-full max-w-md mx-auto flex flex-col items-center justify-between relative px-4 py-6">
+          {/* Header Wordmark */}
+          <div className="text-center shrink-0 pt-2">
+            <img
+              src="/icons/icon.svg"
+              alt="DoomChess"
+              className="mx-auto mb-2 h-8 w-8 rounded-lg object-contain"
+            />
+            <span className="text-[11px] font-semibold tracking-[0.3em] text-[#c29b78] uppercase font-mono">
+              DOOMCHESS
+            </span>
+            <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-[#f5f2eb] leading-tight mt-1.5">
+              Turn doomscrolling into instinct.
+            </h1>
+            <p className="text-xs text-[#78716c] font-normal tracking-wide mt-1">
+              Infinite tactical chess reels.
+            </p>
+          </div>
+
+          {/* Animated Smothered Mate Vignette */}
+          <div className="w-full flex-1 flex items-center justify-center py-2">
+            <SmotheredMateVignette />
+          </div>
+
+          {/* Bottom Pinned CTAs & Smooth Scroll Down Indicator */}
+          <div className="w-full space-y-3 pb-2 shrink-0 flex flex-col items-center">
+            <button
+              onClick={() => goTo("step-elo", 1)}
+              type="button"
+              className="w-full h-12 rounded-full bg-[#c29b78] hover:bg-[#d4b08f] text-[#0a0908] font-semibold text-sm tracking-wide transition-all duration-150 active:scale-[0.98] shadow-lg shadow-[#c29b78]/20 flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <span>Get Started</span>
+              <ArrowRight className="w-4 h-4 stroke-[2]" />
+            </button>
+
+            <button
+              onClick={() => {
+                setAuthMode("signin");
+                setAuthError(null);
+                goTo("auth", 1);
+              }}
+              type="button"
+              className="w-full h-12 rounded-full bg-[#12100e] hover:bg-[#1a1714] border border-white/[0.08] hover:border-white/20 text-[#f5f2eb] font-medium text-sm transition-all duration-150 active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <LogIn className="w-4 h-4 stroke-[2]" />
+              <span>Sign In</span>
+            </button>
+
+            {/* Smooth Scroll Down Indicator */}
+            <button
+              type="button"
+              onClick={() => {
+                const el = document.getElementById("about-section");
+                el?.scrollIntoView({ behavior: "smooth" });
+              }}
+              className="pt-2 flex flex-col items-center gap-1 text-[11px] text-[#c29b78]/70 hover:text-[#c29b78] transition-colors cursor-pointer group"
+              aria-label="Explore DoomChess"
+            >
+              <span className="tracking-wider uppercase font-mono text-[10px]">Explore DoomChess</span>
+              <ChevronDown className="w-4 h-4 animate-bounce group-hover:translate-y-0.5 transition-transform stroke-[1.5]" />
+            </button>
+          </div>
+        </section>
+
+        {/* --- 2. BELOW-THE-FOLD SECTION (Scroll-Triggered Fade-In) --- */}
+        <motion.section
+          id="about-section"
+          aria-label="About DoomChess"
+          initial={{ opacity: 0, y: 32 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.15 }}
+          transition={{ duration: 0.7, ease: "easeOut" }}
+          className="w-full max-w-4xl mx-auto px-6 py-24 text-xs text-zinc-400 space-y-6 leading-relaxed border-t border-white/[0.08]"
+        >
+          <h2 className="text-sm font-bold uppercase tracking-wider text-[#c29b78]">
+            About DoomChess — Tactical Chess Puzzle Reels &amp; Elo Mastery
+          </h2>
+          <p>
+            DoomChess is a web-based chess training platform engineered to convert passive screen time into sharp tactical pattern recognition. Rather than aimless scrolling, DoomChess presents short-form vertical chess puzzle reels tailored dynamically to your skill level. Every puzzle presents a real game position where a decisive combination, defensive save, or winning tactical maneuver must be identified and executed.
+          </p>
+          <h3 className="text-xs font-semibold text-zinc-200">Adaptive Elo Rating &amp; Calibration</h3>
+          <p>
+            Your tactical strength is measured through an adaptive rating algorithm. When you begin, an onboarding calibration sequence benchmarks your baseline Elo. As you solve or fail puzzles, your rating recalculates in real time based on puzzle difficulty, completion accuracy, and hint usage. Daily streaks track your training consistency, with Streak Freezes available to preserve your momentum during busy days.
+          </p>
+          <h3 className="text-xs font-semibold text-zinc-200">Tactical Themes &amp; Pattern Recognition</h3>
+          <p>
+            Master essential chess motifs through repetitive, curated exposure. DoomChess curates hundreds of thousands of authentic positions featuring forks, pins, skewers, discovered attacks, deflection, overloaded defenders, back-rank weaknesses, and smothered mates. Immediate visual board feedback reinforces correct moves and highlights tactical missteps, building instinctive board vision.
+          </p>
+          <h3 className="text-xs font-semibold text-zinc-200">Distraction-Free Dark Luxury Interface</h3>
+          <p>
+            Built for focused practice on mobile devices and desktop displays, DoomChess features high-contrast custom board themes, crisp vector chess pieces, and smooth gesture navigation. Swipe up to progress to the next puzzle reel, review move history with step controls, or challenge friends on the global leaderboard.
+          </p>
+          <footer className="pt-4 flex flex-wrap items-center justify-between gap-3 text-[11px] text-zinc-500 border-t border-white/[0.04]">
+            <span>2026 DoomChess. All rights reserved.</span>
+            <div className="flex items-center gap-3">
+              <a href="/privacy" className="hover:text-[#c29b78] transition-colors underline underline-offset-2">
+                Privacy Policy
+              </a>
+              <a href="/terms" className="hover:text-[#c29b78] transition-colors underline underline-offset-2">
+                Terms of Service
+              </a>
+              <a href="/play" className="hover:text-[#c29b78] transition-colors underline underline-offset-2">
+                Play Online
+              </a>
+            </div>
+          </footer>
+        </motion.section>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen w-full select-none bg-[#0a0908] text-[#f5f2eb] flex flex-col items-center justify-start p-3 sm:p-6 font-sans overflow-x-hidden overflow-y-auto">
       <div className="max-w-[390px] w-full min-h-[640px] max-h-[760px] flex flex-col justify-between relative overflow-hidden shrink-0 my-auto">
         {/* --- Top Progress Bar & Back Navigation (Steps 1, 2, 3, and Auth) --- */}
-        {step !== "gate" && (
-          <div className="flex items-center gap-3 w-full pt-2 pb-4 shrink-0">
-            <button
-              onClick={handleBack}
-              type="button"
-              className="w-8 h-8 -ml-1 rounded-full flex items-center justify-center text-stone-400 hover:text-white hover:bg-white/[0.06] transition-colors cursor-pointer"
-              aria-label="Go back"
-            >
-              <ChevronLeft className="w-5 h-5 stroke-[1.5]" />
-            </button>
+        <div className="flex items-center gap-3 w-full pt-2 pb-4 shrink-0">
+          <button
+            onClick={handleBack}
+            type="button"
+            className="w-8 h-8 -ml-1 rounded-full flex items-center justify-center text-stone-400 hover:text-white hover:bg-white/[0.06] transition-colors cursor-pointer"
+            aria-label="Go back"
+          >
+            <ChevronLeft className="w-5 h-5 stroke-[1.5]" />
+          </button>
 
-            {/* 3 Progress Segments */}
-            <div className="flex-1 flex items-center gap-1.5">
-              {[1, 2, 3].map((seg) => (
-                <div
-                  key={seg}
-                  className={`h-1 flex-1 rounded-full transition-all duration-300 ${
-                    activeProgressSegment >= seg
-                      ? "bg-[#c29b78]"
-                      : "bg-white/[0.08]"
-                  }`}
-                />
-              ))}
-            </div>
+          {/* 3 Progress Segments */}
+          <div className="flex-1 flex items-center gap-1.5">
+            {[1, 2, 3].map((seg) => (
+              <div
+                key={seg}
+                className={`h-1 flex-1 rounded-full transition-all duration-300 ${
+                  activeProgressSegment >= seg
+                    ? "bg-[#c29b78]"
+                    : "bg-white/[0.08]"
+                }`}
+              />
+            ))}
           </div>
-        )}
+        </div>
 
         {/* --- Central State Machine Surface --- */}
         <div className="flex-1 w-full relative overflow-hidden flex flex-col">
           <AnimatePresence mode="wait" custom={direction}>
-            {/* ============================================================ */}
-            {/* STATE 0: 'gate' (The Minimal App Entry)                      */}
-            {/* ============================================================ */}
-            {step === "gate" && (
-              <motion.div
-                key="gate"
-                custom={direction}
-                variants={slideVariants}
-                initial="initial"
-                animate="animate"
-                exit="exit"
-                className="w-full h-full flex flex-col justify-between pt-4"
-              >
-                {/* Header Wordmark */}
-                <div className="text-center shrink-0">
-                  <img
-                    src="/icons/icon.svg"
-                    alt="DoomChess"
-                    className="mx-auto mb-2 h-8 w-8 rounded-lg object-contain"
-                  />
-                  <span className="text-[11px] font-semibold tracking-[0.3em] text-[#c29b78] uppercase font-mono">
-                    DOOMCHESS
-                  </span>
-                  <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-[#f5f2eb] leading-tight mt-2">
-                    Turn doomscrolling into instinct.
-                  </h1>
-                  <p className="text-xs text-[#78716c] font-normal tracking-wide mt-1.5">
-                    Infinite tactical chess reels.
-                  </p>
-                </div>
-
-                {/* Animated Smothered Mate Vignette */}
-                <SmotheredMateVignette />
-
-                {/* Bottom Pinned CTAs */}
-                <div className="w-full space-y-2.5 pb-2 shrink-0">
-                  <button
-                    onClick={() => goTo("step-elo", 1)}
-                    type="button"
-                    className="w-full h-12 rounded-full bg-[#c29b78] hover:bg-[#d4b08f] text-[#0a0908] font-semibold text-sm tracking-wide transition-all duration-150 active:scale-[0.98] shadow-lg shadow-[#c29b78]/20 flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <span>Get Started</span>
-                    <ArrowRight className="w-4 h-4 stroke-[2]" />
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      setAuthMode("signin");
-                      setAuthError(null);
-                      goTo("auth", 1);
-                    }}
-                    type="button"
-                    className="w-full h-12 rounded-full bg-[#12100e] hover:bg-[#1a1714] border border-white/[0.08] hover:border-white/20 text-[#f5f2eb] font-medium text-sm transition-all duration-150 active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <LogIn className="w-4 h-4 stroke-[2]" />
-                    <span>Sign In</span>
-                  </button>
-
-                  {/* Public Legal Compliance Links */}
-                  <div className="pt-2 flex items-center justify-center gap-3 text-[10px] text-zinc-500 font-mono">
-                    <a
-                      href="/privacy"
-                      className="hover:text-[#c29b78] transition-colors underline underline-offset-2"
-                    >
-                      Privacy Policy
-                    </a>
-                    <span className="w-1 h-1 rounded-full bg-zinc-700 inline-block" aria-hidden="true" />
-                    <a
-                      href="/terms"
-                      className="hover:text-[#c29b78] transition-colors underline underline-offset-2"
-                    >
-                      Terms of Service
-                    </a>
-                  </div>
-                </div>
-              </motion.div>
-            )}
 
             {/* ============================================================ */}
             {/* STATE 1: 'step-elo' (Starting Rating Calibration Slider)     */}
@@ -1640,47 +1691,6 @@ export default function RootPage() {
           </AnimatePresence>
         </div>
       </div>
-
-      {/* --- Semantic SEO & AdSense Crawler Content Block (350+ Words) --- */}
-      {step === "gate" && (
-        <section
-          aria-label="About DoomChess"
-          className="w-full max-w-xl mx-auto mt-10 pt-8 border-t border-white/[0.08] text-xs text-zinc-400 space-y-4 px-4 pb-12 leading-relaxed"
-        >
-          <h2 className="text-sm font-bold uppercase tracking-wider text-[#c29b78]">
-            About DoomChess — Tactical Chess Puzzle Reels &amp; Elo Mastery
-          </h2>
-          <p>
-            DoomChess is a web-based chess training platform engineered to convert passive screen time into sharp tactical pattern recognition. Rather than aimless scrolling, DoomChess presents short-form vertical chess puzzle reels tailored dynamically to your skill level. Every puzzle presents a real game position where a decisive combination, defensive save, or winning tactical maneuver must be identified and executed.
-          </p>
-          <h3 className="text-xs font-semibold text-zinc-200">Adaptive Elo Rating &amp; Calibration</h3>
-          <p>
-            Your tactical strength is measured through an adaptive rating algorithm. When you begin, an onboarding calibration sequence benchmarks your baseline Elo. As you solve or fail puzzles, your rating recalculates in real time based on puzzle difficulty, completion accuracy, and hint usage. Daily streaks track your training consistency, with Streak Freezes available to preserve your momentum during busy days.
-          </p>
-          <h3 className="text-xs font-semibold text-zinc-200">Tactical Themes &amp; Pattern Recognition</h3>
-          <p>
-            Master essential chess motifs through repetitive, curated exposure. DoomChess curates hundreds of thousands of authentic positions featuring forks, pins, skewers, discovered attacks, deflection, overloaded defenders, back-rank weaknesses, and smothered mates. Immediate visual board feedback reinforces correct moves and highlights tactical missteps, building instinctive board vision.
-          </p>
-          <h3 className="text-xs font-semibold text-zinc-200">Distraction-Free Dark Luxury Interface</h3>
-          <p>
-            Built for focused practice on mobile devices and desktop displays, DoomChess features high-contrast custom board themes, crisp vector chess pieces, and smooth gesture navigation. Swipe up to progress to the next puzzle reel, review move history with step controls, or challenge friends on the global leaderboard.
-          </p>
-          <footer className="pt-4 flex flex-wrap items-center justify-between gap-3 text-[11px] text-zinc-500 border-t border-white/[0.04]">
-            <span>2026 DoomChess. All rights reserved.</span>
-            <div className="flex items-center gap-3">
-              <a href="/privacy" className="hover:text-[#c29b78] transition-colors underline underline-offset-2">
-                Privacy Policy
-              </a>
-              <a href="/terms" className="hover:text-[#c29b78] transition-colors underline underline-offset-2">
-                Terms of Service
-              </a>
-              <a href="/play" className="hover:text-[#c29b78] transition-colors underline underline-offset-2">
-                Play Online
-              </a>
-            </div>
-          </footer>
-        </section>
-      )}
     </div>
   );
 }

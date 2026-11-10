@@ -4,6 +4,12 @@ import { isGuestUserId } from "@/lib/guestAccount";
 import { isActiveProAccount } from "@/lib/tierTypes";
 import { checkUserQuota } from "@/lib/tierConfig";
 
+const NO_CACHE_HEADERS = {
+  "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
+  Pragma: "no-cache",
+  Expires: "0",
+};
+
 export async function GET(request: NextRequest) {
   try {
     const sessionCookie = request.cookies.get("chess_reel_session")?.value;
@@ -35,7 +41,7 @@ export async function GET(request: NextRequest) {
           puzzlesRemaining: 15,
           nextQuotaRefillTime: null,
         },
-      });
+      }, { headers: NO_CACHE_HEADERS });
     }
 
     const user = await prisma.user.findUnique({
@@ -98,7 +104,7 @@ export async function GET(request: NextRequest) {
         puzzlesRemaining: quota.puzzlesRemaining,
         nextQuotaRefillTime: quota.resetsAt,
       },
-    });
+    }, { headers: NO_CACHE_HEADERS });
   } catch (error) {
     console.error("[/api/user/stats GET] Error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

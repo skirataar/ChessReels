@@ -169,6 +169,8 @@ export function clearAllUserAndPuzzleCache(userId?: string): void {
   try {
     const keysToRemove = [
       "chessreels_user_stats_v1",
+      "quota_last_check",
+      "chess_reel_tier_config",
       "chess_reel_account",
       "chess_reel_user_elo",
       "chess_reel_elo",

@@ -209,9 +209,26 @@ export default function ProfileStatsPage() {
   };
 
   const handleSignOut = () => {
-    clearAllUserAndPuzzleCache(userAccount?.id);
+    const oldUserId = userAccount?.id;
     setUserAccount(null);
-    router.replace("/");
+    clearAllUserAndPuzzleCache(oldUserId);
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.removeItem("chessreels_user_stats_v1");
+        window.localStorage.removeItem("quota_last_check");
+        window.localStorage.removeItem("chess_reel_account");
+        window.localStorage.removeItem("chess_reel_tier_config");
+        window.sessionStorage.clear();
+      } catch {}
+    }
+    if (typeof document !== "undefined") {
+      document.cookie = "chess_reel_session=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    }
+    if (typeof window !== "undefined") {
+      window.location.href = "/";
+    } else {
+      router.replace("/");
+    }
   };
 
   const handleToggleMute = () => {
