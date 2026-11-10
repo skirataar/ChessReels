@@ -122,7 +122,7 @@ export function LandingPage({
         <div className="w-full grid grid-cols-3 gap-2 mt-4 text-center">
           <div className="py-2 px-1.5 rounded-xl bg-[#171514] border border-white/5 flex flex-col items-center">
             <Zap className="w-3.5 h-3.5 text-amber-400 mb-0.5" />
-            <div className="text-[10px] font-bold text-zinc-200">Reel Feed</div>
+            <div className="text-[10px] font-bold text-zinc-200">Tactical Feed</div>
             <div className="text-[9px] text-zinc-400">Swipe tactics</div>
           </div>
 

@@ -950,7 +950,7 @@ export default function RootPage() {
               Turn doomscrolling into instinct.
             </h1>
             <p className="text-xs text-[#78716c] font-normal tracking-wide mt-1">
-              Infinite tactical chess reels.
+              Infinite tactical chess puzzles.
             </p>
           </div>
 
@@ -1010,10 +1010,10 @@ export default function RootPage() {
           className="w-full max-w-4xl mx-auto px-6 py-24 text-xs text-zinc-400 space-y-6 leading-relaxed border-t border-white/[0.08]"
         >
           <h2 className="text-sm font-bold uppercase tracking-wider text-[#c29b78]">
-            About DoomChess — Tactical Chess Puzzle Reels &amp; Elo Mastery
+            About DoomChess — Tactical Chess Puzzles &amp; Elo Mastery
           </h2>
           <p>
-            DoomChess is a web-based chess training platform engineered to convert passive screen time into sharp tactical pattern recognition. Rather than aimless scrolling, DoomChess presents short-form vertical chess puzzle reels tailored dynamically to your skill level. Every puzzle presents a real game position where a decisive combination, defensive save, or winning tactical maneuver must be identified and executed.
+            DoomChess is a web-based chess training platform engineered to convert passive screen time into sharp tactical pattern recognition. Rather than aimless scrolling, DoomChess presents short-form vertical chess puzzles tailored dynamically to your skill level. Every puzzle presents a real game position where a decisive combination, defensive save, or winning tactical maneuver must be identified and executed.
           </p>
           <h3 className="text-xs font-semibold text-zinc-200">Adaptive Elo Rating &amp; Calibration</h3>
           <p>
@@ -1025,7 +1025,7 @@ export default function RootPage() {
           </p>
           <h3 className="text-xs font-semibold text-zinc-200">Distraction-Free Dark Luxury Interface</h3>
           <p>
-            Built for focused practice on mobile devices and desktop displays, DoomChess features high-contrast custom board themes, crisp vector chess pieces, and smooth gesture navigation. Swipe up to progress to the next puzzle reel, review move history with step controls, or challenge friends on the global leaderboard.
+            Built for focused practice on mobile devices and desktop displays, DoomChess features high-contrast custom board themes, crisp vector chess pieces, and smooth gesture navigation. Swipe up to progress to the next puzzle, review move history with step controls, or challenge friends on the global leaderboard.
           </p>
           <footer className="pt-4 flex flex-wrap items-center justify-between gap-3 text-[11px] text-zinc-500 border-t border-white/[0.04]">
             <span>2026 DoomChess. All rights reserved.</span>
@@ -1346,7 +1346,7 @@ export default function RootPage() {
                     Choose your board.
                   </h2>
                   <p className="text-xs text-[#78716c] mt-1">
-                    Select your aesthetic for the puzzle reels feed.
+                    Select your aesthetic for the tactical puzzle feed.
                   </p>
 
                   {/* 2x3 Grid of Board Options (Pure checkerboards, No pieces) */}

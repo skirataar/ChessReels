@@ -406,10 +406,6 @@ export function useTierQuota(
         }
       } catch {}
 
-      if (isQuotaDepleted) {
-        setIsQuotaModalOpen(true);
-      }
-
       return {
         shouldShowAd: false,
         quotaReached: isQuotaDepleted,

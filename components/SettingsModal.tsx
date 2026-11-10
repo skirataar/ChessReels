@@ -307,7 +307,7 @@ export function SettingsModal({
               </h3>
             </div>
             <p className="text-xs text-[#a8a29e] mb-3">
-              Applied instantly to your puzzle reels.
+              Applied instantly to your tactical puzzles.
             </p>
 
             <div className="grid grid-cols-2 gap-2.5">
@@ -520,13 +520,13 @@ export function SettingsModal({
           <div className="h-px bg-white/[0.06]" />
 
           {/* ======================================================== */}
-          {/* 4. REEL GAMEPLAY PREFERENCES                             */}
+          {/* 4. PUZZLE GAMEPLAY PREFERENCES                           */}
           {/* ======================================================== */}
           <div>
             <div className="flex items-center gap-2 mb-1.5">
               <Sparkles className="w-4 h-4 text-[#c29b78]" />
               <h3 className="text-xs font-semibold uppercase tracking-wider text-[#c29b78]">
-                Reel Experience
+                Puzzle Experience
               </h3>
             </div>
 

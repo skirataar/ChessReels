@@ -1168,7 +1168,8 @@ export function PlayView({
     }
     setShowReelAd(false);
 
-    if (!canPlay && !isPro && !isCalibrating) {
+    const userCanPlay = canPlay || puzzlesRemaining > 0;
+    if (!userCanPlay && puzzlesRemaining <= 0 && !isPro && !isCalibrating) {
       if (!currentPuzzle) {
         const lastSolvedRaw =
           typeof window !== "undefined"
@@ -1298,7 +1299,8 @@ export function PlayView({
     if (!isHydrated) return;
     if (!userAccount || !userAccount.id) return;
 
-    if (canPlay || isPro || isCalibrating) {
+    const userCanPlay = canPlay || puzzlesRemaining > 0;
+    if (userCanPlay || isPro || isCalibrating) {
       if (!initialFetchDoneRef.current) {
         initialFetchDoneRef.current = true;
         const elo = userAccount.elo || currentEloRef.current || 800;
@@ -1338,7 +1340,7 @@ export function PlayView({
       }
     } else {
       // Free user paywalled on mount/refresh: show previous solved puzzle and do not advance
-      if (!initialFetchDoneRef.current) {
+      if (!initialFetchDoneRef.current && puzzlesRemaining <= 0) {
         const lastSolvedRaw =
           typeof window !== "undefined"
             ? window.localStorage.getItem("chess_reel_last_solved_puzzle")
@@ -1966,7 +1968,7 @@ export function PlayView({
                         aria-hidden="true"
                       />
                       <div className="text-[11px] font-bold tracking-wider text-[#c29b78] uppercase">
-                        PRO ACCOUNT / UNLIMITED CHARGE
+                        PRO ACCOUNT / INFINITE CHARGE
                       </div>
                     </div>
                     <div className="mt-1.5 text-[11px] leading-relaxed text-zinc-400">
@@ -1979,7 +1981,7 @@ export function PlayView({
               isCalibrating ? (
                 <div
                   className="flex items-center gap-1 text-[11px] font-bold text-[#c29b78]"
-                  title={`Placement Calibration: Puzzle ${currentCalibrationStep} of 6 (Quota starts after placement)`}
+                  title={`Placement Calibration: Puzzle ${currentCalibrationStep} of 6 (Energy starts after placement)`}
                   data-testid="header-calibration-badge"
                 >
                   <Target className="w-3.5 h-3.5 text-[#c29b78] stroke-[2]" />
@@ -1991,8 +1993,8 @@ export function PlayView({
                     onClick={() => setIsBatteryMenuOpen((open) => !open)}
                     data-testid="header-quota-btn"
                     className="flex items-center gap-1 text-[11px] font-bold transition-all cursor-pointer active:scale-95"
-                    title={`Free Quota: ${puzzlesRemaining}/${windowLimit} puzzles remaining this ${windowHours}h window. Tap for details.`}
-                    aria-label="View free puzzle quota"
+                    title={`Energy: ${puzzlesRemaining}/${windowLimit} charges remaining this ${windowHours}h window. Tap for details.`}
+                    aria-label="View energy charge"
                     aria-expanded={isBatteryMenuOpen}
                     suppressHydrationWarning
                   >
@@ -2014,18 +2016,18 @@ export function PlayView({
                             <div>
                               {isDepleted ? (
                                 <div className="text-[11px] font-bold tracking-wide text-rose-400 uppercase">
-                                  BATTERY DEPLETED (0/{windowLimit})
+                                  ENERGY DEPLETED (0/{windowLimit})
                                 </div>
                               ) : (
                                 <div className="text-xs font-semibold text-zinc-100">
-                                  {puzzlesRemaining} / {windowLimit} Puzzles Remaining
+                                  {puzzlesRemaining} / {windowLimit} Energy
                                 </div>
                               )}
                               <div className="mt-1 text-[11px] font-mono text-zinc-400">
                                 {isFull ? (
-                                  `Battery full (${windowLimit}/${windowLimit})`
+                                  `Full charge (${windowLimit}/${windowLimit})`
                                 ) : (
-                                  `Recharging in ${recharge.hours}h ${recharge.minutes}m ${recharge.seconds}s`
+                                  `Full charge in ${recharge.hours}h ${recharge.minutes}m ${recharge.seconds}s`
                                 )}
                               </div>
                             </div>
@@ -2155,7 +2157,7 @@ export function PlayView({
             <div className="w-full aspect-square bg-[#22201e] rounded-xl border border-white/5 animate-pulse my-2 flex flex-col items-center justify-center gap-3 shadow-2xl">
               <RefreshCw className="w-8 h-8 text-[#c29b78] animate-spin" />
               <div className="text-xs text-[#a3a3a3] font-semibold tracking-wider uppercase">
-                Preparing next reel...
+                Preparing next puzzle...
               </div>
             </div>
 
@@ -2165,7 +2167,7 @@ export function PlayView({
         ) : (
           <div className="w-full flex-1 flex flex-col items-center justify-between touch-none overscroll-none overflow-hidden">
             {/* Free Tier Quota Exhausted Banner with Refill Countdown & Upgrade CTA */}
-            {isHydrated && !canPlay && !isPro && !isCalibrating && (
+            {isHydrated && !canPlay && puzzlesRemaining <= 0 && !isPro && !isCalibrating && (
               <div
                 className="w-full mx-auto px-3 mt-1.5 mb-1 animate-in fade-in slide-in-from-top-1 duration-200"
                 style={{
@@ -2185,13 +2187,13 @@ export function PlayView({
                     <Zap className="w-4 h-4 text-amber-400 shrink-0 fill-amber-400/20" />
                     <div className="flex flex-col min-w-0">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-black text-white">Daily Limit Reached</span>
+                        <span className="text-xs font-black text-white">Energy Depleted</span>
                         <span className="text-[10px] text-amber-400 font-mono font-bold">
                           (0/{windowLimit})
                         </span>
                       </div>
                       <span className="text-[10px] text-zinc-400 truncate font-mono">
-                        Refill in {Math.floor(resetsInMs / 3600000)}h {Math.floor((resetsInMs % 3600000) / 60000)}m | Solved puzzle shown
+                        Full charge in {Math.floor(resetsInMs / 3600000)}h {Math.floor((resetsInMs % 3600000) / 60000)}m | Solved puzzle shown
                       </span>
                     </div>
                   </div>
@@ -2236,7 +2238,7 @@ export function PlayView({
                 guestId={userAccount?.id || guestId}
                 streak={dailyStreak}
                 combo={combo}
-                canPlay={canPlay}
+                canPlay={canPlay || puzzlesRemaining > 0}
                 isPaywallOpen={isQuotaModalOpen}
                 lastEloChange={lastEloChange}
                 isCalibration={isCalibrating}
@@ -2358,7 +2360,8 @@ export function PlayView({
         isOpen={isQuotaModalOpen}
         onClose={() => {
           setIsQuotaModalOpen(false);
-          if (!canPlay && !isPro && !isCalibrating) {
+          const userCanPlay = canPlay || puzzlesRemaining > 0;
+          if (!userCanPlay && puzzlesRemaining <= 0 && !isPro && !isCalibrating) {
             if (!currentPuzzle) {
               const lastSolvedRaw =
                 typeof window !== "undefined"

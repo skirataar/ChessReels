@@ -90,7 +90,7 @@ export function CalibrationCompleteModal({
           </div>
 
           <p className="text-[11px] text-[#78716c] pt-1 leading-relaxed">
-            Continuous puzzle reels are now personalized to match your tactical baseline.
+            Continuous tactical puzzles are now personalized to match your tactical baseline.
           </p>
         </div>
 
@@ -100,7 +100,7 @@ export function CalibrationCompleteModal({
           onClick={onClose}
           className="w-full py-3 rounded-xl bg-[#c29b78] hover:bg-[#d4af8c] active:scale-[0.99] text-[#0a0908] font-semibold text-xs tracking-wide uppercase transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-lg shadow-[#c29b78]/10"
         >
-          <span>Start Tactical Reels</span>
+          <span>Start Tactical Puzzles</span>
           <ArrowRight className="w-3.5 h-3.5 stroke-[2.5]" />
         </button>
       </div>

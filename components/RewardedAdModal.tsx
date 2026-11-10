@@ -210,8 +210,8 @@ export function RewardedAdModal({
               </h3>
               <p className="text-xs text-zinc-400 leading-relaxed max-w-xs mx-auto">
                 {isSuccess
-                  ? "Your liquid battery has been replenished. Jump straight back into tactical reels."
-                  : "Master 20,000+ GM-level tactical reels with instant feedback and adaptive Elo."}
+                  ? "Your liquid battery has been replenished. Jump straight back into tactical puzzles."
+                  : "Master 20,000+ GM-level tactical puzzles with instant feedback and adaptive Elo."}
               </p>
             </div>
 

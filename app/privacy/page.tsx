@@ -37,7 +37,7 @@ export default function PrivacyPage() {
               1. Overview & Scope
             </h2>
             <p>
-              DoomChess (&quot;we&quot;, &quot;our&quot;, or &quot;us&quot;) provides mobile-first tactical chess training, puzzle reels, and Elo evaluation services. This Privacy Policy describes how we collect, use, and protect your information when you access our web application.
+              DoomChess (&quot;we&quot;, &quot;our&quot;, or &quot;us&quot;) provides mobile-first tactical chess training, continuous puzzles, and Elo evaluation services. This Privacy Policy describes how we collect, use, and protect your information when you access our web application.
             </p>
           </section>
 

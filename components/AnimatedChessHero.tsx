@@ -74,7 +74,7 @@ export function AnimatedChessHero() {
         className="absolute -top-3.5 -left-3 z-30 px-2.5 py-1 rounded-full bg-[#1e1c1a]/95 border border-amber-500/40 text-amber-300 text-[11px] font-bold flex items-center gap-1.5 shadow-xl shadow-black/80 backdrop-blur-md"
       >
         <Zap className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-        <span>Tactical Reel #402</span>
+        <span>Tactical Puzzle #402</span>
       </motion.div>
 
       <motion.div
@@ -91,7 +91,7 @@ export function AnimatedChessHero() {
         {/* Top Reel HUD Header */}
         <div className="w-full flex items-center justify-between gap-2 px-1 mb-2.5">
           <div className="flex items-center gap-1.5 bg-[#252220] px-2.5 py-1 rounded-full border border-white/5">
-            <span className="text-amber-400 font-bold text-xs">⚡ 1540</span>
+            <span className="text-amber-400 font-bold text-xs flex items-center gap-1"><Zap className="w-3 h-3 fill-amber-400 text-amber-400" /> 1540</span>
             <span className="text-[10px] text-zinc-400 font-semibold uppercase">Elo</span>
           </div>
 

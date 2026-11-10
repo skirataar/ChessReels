@@ -384,7 +384,7 @@ export function LeaderboardModal({
                   ? "Friends Ranking"
                   : "Friend Requests"}
               </h2>
-              <p className="text-[11px] text-[#78716c]">Tactical Reel Leaderboard</p>
+              <p className="text-[11px] text-[#78716c]">Tactical Puzzle Leaderboard</p>
             </div>
           </div>
           <button

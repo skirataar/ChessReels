@@ -28,6 +28,7 @@ import {
   AlertCircle,
   Play,
   ArrowLeft,
+  ChevronRight,
   Snowflake,
 } from "lucide-react";
 import { sounds } from "@/lib/audio";
@@ -478,12 +479,12 @@ export function ProfileModal({
                 className="flex items-center gap-1.5 text-xs font-semibold text-[#c29b78] hover:text-[#d4b08f] transition-colors cursor-pointer py-1.5 px-2 rounded-lg hover:bg-white/5 active:scale-95"
               >
                 <ArrowLeft className="w-4 h-4 shrink-0" />
-                <span>← Back to Saved</span>
+                <span>Back to Saved</span>
               </button>
 
               <div className="text-xs text-[#a3a3a3] font-mono flex items-center gap-2">
                 <span className="text-white font-semibold">#{activeSavedPuzzle.id}</span>
-                <span>•</span>
+                <span>|</span>
                 <span>{activeSavedPuzzle.rating} Elo</span>
               </div>
 
@@ -605,7 +606,7 @@ export function ProfileModal({
                 <div className="space-y-1">
                   <p className="text-sm font-bold text-white">No Saved Puzzles Yet</p>
                   <p className="text-xs text-[#a3a3a3] max-w-xs leading-relaxed">
-                    Tap the bookmark icon 🔖 directly under any puzzle reel while playing to store key tactics for later study.
+                    Tap the bookmark icon directly under any tactical puzzle while playing to store key tactics for later study.
                   </p>
                 </div>
               </div>
@@ -953,8 +954,8 @@ export function ProfileModal({
 
               <p className="text-[11px] text-[#a3a3a3] leading-relaxed">
                 {isUpgraded
-                  ? "You have full access to 100% Ad-Free reels, Stockfish deep move analysis, and practice modes."
-                  : "Free tier includes puzzle reels with ad intervals. Upgrade to Pro for zero ads and practice mode."}
+                  ? "You have full access to 100% Ad-Free puzzles, Stockfish deep move analysis, and practice modes."
+                  : "Free tier includes tactical puzzles with ad intervals. Upgrade to Pro for zero ads and practice mode."}
               </p>
 
               <button
@@ -1171,9 +1172,7 @@ export function ProfileModal({
                       Compare Free vs Premium plans
                     </div>
                   </div>
-                  <span className="text-xs text-[#a3a3a3] group-hover:text-[#c29b78] transition-colors font-bold">
-                    →
-                  </span>
+                  <ChevronRight className="w-4 h-4 text-[#a3a3a3] group-hover:text-[#c29b78] transition-colors" />
                 </button>
               )}
             </div>

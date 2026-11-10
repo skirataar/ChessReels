@@ -21,7 +21,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Doomchess | Tactical Chess Puzzles & Endless Reels",
+  title: "Doomchess | Tactical Chess Puzzles & Endless Training",
   description: "Turn doomscrolling into tactical chess mastery. Solve bite-sized chess puzzles, track your ELO, and master opening repertoires.",
   metadataBase: new URL("https://doomchess.online"),
   manifest: "/manifest.json",
@@ -40,8 +40,8 @@ export const metadata: Metadata = {
     ],
   },
   openGraph: {
-    title: "Doomchess | Tactical Chess Puzzles & Endless Reels",
-    description: "Turn doomscrolling into tactical chess mastery with infinite puzzle reels.",
+    title: "Doomchess | Tactical Chess Puzzles & Endless Training",
+    description: "Turn doomscrolling into tactical chess mastery with infinite tactical puzzles.",
     url: "https://doomchess.online",
     siteName: "Doomchess",
     images: [

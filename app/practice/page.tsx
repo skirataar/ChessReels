@@ -305,8 +305,8 @@ export default function PracticePage() {
             </div>
             <p className="text-[11px] text-[#a3a3a3]">
               {isPro
-                ? "Targeted tactics training • No rating penalty"
-                : "Reserved exclusively for Chess Reel Pro members"}
+                ? "Targeted tactics training | No rating penalty"
+                : "Reserved exclusively for DoomChess Pro members"}
             </p>
           </div>
 
@@ -417,7 +417,7 @@ export default function PracticePage() {
                 </div>
                 <div>
                   <div className="text-xs font-bold text-white">Unlimited Unranked Drills</div>
-                  <div className="text-[11px] text-zinc-400">Zero quota limits, no timer stress, and zero rating loss</div>
+                  <div className="text-[11px] text-zinc-400">Zero energy limits, no timer stress, and zero rating loss</div>
                 </div>
               </div>
             </div>

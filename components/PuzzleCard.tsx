@@ -2042,7 +2042,7 @@ export function PuzzleCard({
     setLikesCount((prev) => (nextLiked ? prev + 1 : Math.max(0, prev - 1)));
 
     if (nextLiked) {
-      showToast("Added to Liked Puzzles ❤️");
+      showToast("Added to Liked Puzzles");
     }
 
     try {
@@ -2072,13 +2072,13 @@ export function PuzzleCard({
   // Right Rail Action: Share
   const handleShare = async () => {
     haptics.tap();
-    const shareText = `Can you solve this ${puzzle?.rating ?? 1200} Elo puzzle on Chess Reel? ❤️ ${likesCount} players liked it!`;
+    const shareText = `Can you solve this ${puzzle?.rating ?? 1200} Elo puzzle on DoomChess? ${likesCount} players liked it!`;
     const shareUrl = typeof window !== "undefined" ? window.location.href : "";
 
     if (navigator.share) {
       try {
         await navigator.share({
-          title: "Chess Reel Challenge",
+          title: "Tactical Chess Challenge",
           text: shareText,
           url: shareUrl,
         });
@@ -2897,7 +2897,7 @@ export function PuzzleCard({
                     }}
                     className="w-full h-11 bg-[#c29b78] hover:bg-[#d4b08f] text-[#12100e] font-semibold rounded-xl shadow-lg shadow-[#c29b78]/20 flex items-center justify-center gap-2 transition-transform active:scale-95 cursor-pointer text-sm"
                   >
-                    <span>Next Reel</span>
+                    <span>Next Puzzle</span>
                     {autoNextCountdown !== null && (
                       <span className="text-xs bg-[#12100e]/20 px-2 py-0.5 rounded-full font-mono">
                         {autoNextCountdown}s

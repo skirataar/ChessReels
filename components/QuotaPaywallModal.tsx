@@ -727,12 +727,12 @@ export function QuotaPaywallModal({
                 <span>DoomChess Pro</span>
               </div>
               <h2 className="text-xl font-black tracking-tight text-white leading-tight">
-                {reason === "practice" ? "Unlock Practice Mode" : "Free Quota Reached"}
+                {reason === "practice" ? "Unlock Practice Mode" : "Energy Depleted"}
               </h2>
               <p className="text-[11px] text-zinc-400 leading-relaxed mt-0.5">
                 {reason === "practice"
                   ? "Custom tactical themes, unranked drills, and unlimited training."
-                  : `Free members get ${limit} reels every ${windowHours}h. Go unlimited.`}
+                  : `Free members get ${limit} puzzles every ${windowHours}h. Infinite Charge.`}
               </p>
             </div>
           </div>
@@ -743,7 +743,7 @@ export function QuotaPaywallModal({
                 <Clock className="w-4 h-4 text-[#c29b78] shrink-0" />
                 <div>
                   <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-zinc-500">
-                    Next free refill
+                    Full charge in
                   </div>
                   <div className="text-sm font-black font-mono text-[#e2c3a4]">
                     {msLeft > 0 ? formattedTime : "Ready to play"}
@@ -769,8 +769,8 @@ export function QuotaPaywallModal({
           {[
             {
               icon: InfinityIcon,
-              title: "Unlimited Daily Tactical Reels",
-              text: "No 15-puzzle window cooldown",
+              title: "Infinite Daily Tactical Puzzles",
+              text: "Infinite Charge with zero cooldown",
             },
             {
               icon: Zap,
@@ -944,7 +944,7 @@ export function QuotaPaywallModal({
             onClick={onClose}
             className="w-full py-2 rounded-xl bg-transparent hover:bg-white/[0.04] text-zinc-500 hover:text-zinc-300 font-semibold text-[11px] transition-colors cursor-pointer"
           >
-            {reason === "practice" ? "Maybe later" : "Wait for free refill"}
+            {reason === "practice" ? "Maybe later" : "Wait for full charge"}
           </button>
 
           {reason === "quota" && onWatchAd && (

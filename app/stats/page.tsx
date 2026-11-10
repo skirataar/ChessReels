@@ -18,6 +18,7 @@ import {
   TrendingUp,
   Award,
   ArrowLeft,
+  ArrowRight,
   Crown,
   LogOut,
   UserPlus,
@@ -268,7 +269,7 @@ export default function ProfileStatsPage() {
           <Link
             href="/play"
             className="p-2 rounded-xl bg-[#22201e] hover:bg-[#2d2a28] text-[#a3a3a3] hover:text-[#f5f5f5] border border-white/5 transition-all cursor-pointer"
-            aria-label="Back to Reels"
+            aria-label="Back to Puzzles"
           >
             <ArrowLeft className="w-4 h-4" />
           </Link>
@@ -463,9 +464,10 @@ export default function ProfileStatsPage() {
             <span>Sign in to save your rating and streaks</span>
             <button
               onClick={() => setIsAuthOpen(true)}
-              className="text-[#c29b78] font-bold hover:underline cursor-pointer"
+              className="text-[#c29b78] font-bold hover:underline cursor-pointer inline-flex items-center gap-1"
             >
-              Create Account →
+              <span>Create Account</span>
+              <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
         )}
