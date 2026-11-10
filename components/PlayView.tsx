@@ -1847,8 +1847,8 @@ export function PlayView({
       )}
 
       {/* 1. Fixed Top Header */}
-      <header className="fixed top-0 inset-x-0 z-40 bg-[#0f0e0d]/92 backdrop-blur-xl pt-safe border-b border-white/[0.06]">
-        <div className="h-14 px-3.5 max-w-md mx-auto flex items-center justify-between gap-2">
+      <header className="fixed top-0 left-1/2 -translate-x-1/2 z-40 w-full max-w-[480px] bg-[#0f0e0d]/92 backdrop-blur-xl pt-safe border-b border-white/[0.06] rounded-b-2xl shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
+        <div className="h-14 px-4 w-full flex items-center justify-between gap-2">
           {/* Brand Logo & Title */}
           <div className="flex items-center gap-2 shrink-0">
             <img
@@ -2247,7 +2247,7 @@ export function PlayView({
           role="status"
           aria-label="Energy Depleted"
           data-testid="quota-depleted-hud"
-          className="fixed bottom-[62px] left-1/2 -translate-x-1/2 z-30 w-full max-w-[420px] px-3 animate-in fade-in slide-in-from-bottom-2 duration-200"
+          className="fixed bottom-14 left-1/2 -translate-x-1/2 z-30 w-full max-w-[480px] px-3 py-1.5 animate-in fade-in slide-in-from-bottom-2 duration-200"
         >
           <div
             data-testid="quota-depleted-banner"

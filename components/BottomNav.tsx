@@ -152,9 +152,9 @@ export function BottomNav() {
     <>
       <nav
         aria-label="Bottom Navigation"
-        className="fixed bottom-0 inset-x-0 z-40 h-14 bg-[#0a0908]/95 backdrop-blur-xl border-t border-white/[0.07] flex items-center justify-around px-4"
+        className="fixed bottom-0 left-1/2 -translate-x-1/2 z-40 w-full max-w-[480px] h-14 bg-[#0a0908]/95 backdrop-blur-xl border-t border-white/[0.07] px-4 flex items-center justify-around rounded-t-2xl shadow-[0_-10px_30px_rgba(0,0,0,0.8)]"
       >
-        <div className="w-full max-w-[420px] mx-auto h-full grid grid-cols-4 items-center">
+        <div className="w-full h-full grid grid-cols-4 items-center">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const isActive =
