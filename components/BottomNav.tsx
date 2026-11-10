@@ -3,8 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Play, Target, User, Lock, Settings } from "lucide-react";
-import { motion } from "framer-motion";
+import { Play, Target, User, Settings } from "lucide-react";
 import { SettingsModal } from "@/components/SettingsModal";
 import { isGuestAccount } from "@/lib/guestAccount";
 import { clearAllUserAndPuzzleCache } from "@/lib/puzzleCache";
@@ -153,104 +152,95 @@ export function BottomNav() {
     <>
       <nav
         aria-label="Bottom Navigation"
-        className="fixed bottom-0 left-0 right-0 z-40 flex items-center justify-center pointer-events-none pb-safe"
+        className="fixed bottom-0 inset-x-0 z-40 h-14 bg-[#0a0908]/95 backdrop-blur-xl border-t border-white/[0.07] flex items-center justify-around px-4"
       >
-        <div className="w-full max-w-[360px] sm:max-w-[380px] mx-auto px-2 pb-2 pt-0.5 pointer-events-auto">
-          <div className="relative flex items-center justify-around h-12 rounded-full bg-[#201e1d]/95 backdrop-blur-xl border border-white/10 shadow-xl shadow-black/80 px-2">
-            {NAV_ITEMS.map((item) => {
-              const Icon = item.icon;
-              const isActive =
-                (item.href === "#settings" && isSettingsOpen) ||
-                (item.href === "/play" && (pathname === "/" || pathname === "/play") && !isSettingsOpen) ||
-                (item.href === "/practice" && pathname === "/practice" && !isSettingsOpen) ||
-                (item.href === "/stats" && (pathname === "/stats" || pathname === "/profile") && !isSettingsOpen);
+        <div className="w-full max-w-[420px] mx-auto h-full grid grid-cols-4 items-center">
+          {NAV_ITEMS.map((item) => {
+            const Icon = item.icon;
+            const isActive =
+              (item.href === "#settings" && isSettingsOpen) ||
+              (item.href === "/play" && (pathname === "/" || pathname === "/play") && !isSettingsOpen) ||
+              (item.href === "/practice" && pathname === "/practice" && !isSettingsOpen) ||
+              (item.href === "/stats" && (pathname === "/stats" || pathname === "/profile") && !isSettingsOpen);
 
-              const isProfile = item.name === "Profile";
-              const userImage = userAccount?.image || userAccount?.avatarUrl || userAccount?.avatar;
+            const isProfile = item.name === "Profile";
+            const userImage = userAccount?.image || userAccount?.avatarUrl || userAccount?.avatar;
 
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  data-testid={`bottom-nav-${item.name.toLowerCase()}`}
-                  data-nav-item={item.name.toLowerCase()}
-                  onClick={(e) => handleNavClick(e, item.href)}
-                  className="relative flex-1 flex flex-col items-center justify-center py-0.5 transition-all duration-200 select-none group"
-                >
-                  <motion.div
-                    whileTap={{ scale: 0.94 }}
-                    animate={
-                      isActive
-                        ? {
-                            scale: 1.04,
-                            y: -1,
-                          }
-                        : { scale: 1, y: 0 }
-                    }
-                    transition={{ type: "spring", stiffness: 400, damping: 25 }}
-                    className={`flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-full transition-colors ${
-                      isActive
-                        ? "text-[#c29b78] bg-[#c29b78]/15 shadow-[0_0_12px_rgba(194,155,120,0.2)] border border-[#c29b78]/30"
-                        : "text-[#a3a3a3] hover:text-[#f5f5f5]"
-                    }`}
-                  >
-                    <div className="relative flex items-center justify-center">
-                      {isProfile ? (
-                        userImage && !avatarError ? (
-                          <img
-                            src={userImage}
-                            alt="Profile"
-                            data-testid="bottom-nav-profile-avatar"
-                            onError={() => setAvatarError(true)}
-                            className={`w-6 h-6 rounded-full object-cover transition-all ${
-                              isPro
-                                ? "ring-2 ring-amber-400 ring-offset-1 ring-offset-[#201e1d] shadow-[0_0_6px_rgba(245,158,11,0.35)]"
-                                : "ring-2 ring-white/20 ring-offset-1 ring-offset-[#201e1d]"
-                            }`}
-                          />
-                        ) : (
-                          <div
-                            data-testid="bottom-nav-profile-avatar"
-                            className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
-                              isPro
-                                ? "ring-2 ring-amber-400 ring-offset-1 ring-offset-[#201e1d] text-amber-400 shadow-[0_0_6px_rgba(245,158,11,0.35)]"
-                                : "ring-2 ring-white/20 ring-offset-1 ring-offset-[#201e1d] text-[#a3a3a3]"
-                            }`}
-                          >
-                            <User className="w-4 h-4" strokeWidth={1.5} />
-                          </div>
-                        )
-                      ) : (
-                        <Icon
-                          className={`w-4 h-4 transition-transform duration-200 ${
-                            isActive
-                              ? "stroke-[2.5] text-[#c29b78] fill-[#c29b78]/20"
-                              : "stroke-[2] text-[#a3a3a3] group-hover:text-[#f5f5f5]"
-                          }`}
-                        />
-                      )}
-                      {hasMounted && item.href === "/practice" && !isPro && (
-                        <span
-                          data-testid="bottom-nav-practice-lock"
-                          className="absolute -top-1 -right-1.5 px-1 py-0.2 rounded-full bg-amber-500 text-[7px] font-black text-zinc-950 flex items-center justify-center border border-[#22201e] shadow-sm"
-                          title="Pro only"
-                        >
-                          <Lock className="w-1.5 h-1.5" />
-                        </span>
-                      )}
-                    </div>
-                    <span
-                      className={`text-[10px] font-bold tracking-tight flex items-center gap-1 ${
-                        isActive ? "text-[#c29b78]" : "text-[#a3a3a3] group-hover:text-[#f5f5f5]"
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                data-testid={`bottom-nav-${item.name.toLowerCase()}`}
+                data-nav-item={item.name.toLowerCase()}
+                onClick={(e) => handleNavClick(e, item.href)}
+                className={`relative h-full flex flex-col items-center justify-center gap-1 transition-colors select-none group cursor-pointer ${
+                  isActive ? "text-[#c29b78]" : "text-zinc-500 hover:text-zinc-300"
+                }`}
+              >
+                {isActive && (
+                  <span className="absolute top-0 w-6 h-[2px] rounded-full bg-[#c29b78] shadow-[0_0_8px_rgba(194,155,120,0.6)]" />
+                )}
+
+                <div className="relative flex items-center justify-center">
+                  {isProfile ? (
+                    userImage && !avatarError ? (
+                      <img
+                        src={userImage}
+                        alt="Profile"
+                        data-testid="bottom-nav-profile-avatar"
+                        onError={() => setAvatarError(true)}
+                        className={`w-5 h-5 rounded-full object-cover transition-all ${
+                          isPro
+                            ? "ring-1.5 ring-[#c29b78] shadow-[0_0_6px_rgba(194,155,120,0.35)]"
+                            : isActive
+                            ? "ring-1.5 ring-[#c29b78]"
+                            : "ring-1 ring-white/20"
+                        }`}
+                      />
+                    ) : (
+                      <div
+                        data-testid="bottom-nav-profile-avatar"
+                        className={`w-5 h-5 rounded-full flex items-center justify-center transition-all ${
+                          isPro
+                            ? "ring-1.5 ring-[#c29b78] text-[#c29b78] shadow-[0_0_6px_rgba(194,155,120,0.35)]"
+                            : isActive
+                            ? "ring-1.5 ring-[#c29b78] text-[#c29b78]"
+                            : "ring-1 ring-white/20 text-zinc-500 group-hover:text-zinc-300"
+                        }`}
+                      >
+                        <User className="w-3.5 h-3.5" strokeWidth={1.75} />
+                      </div>
+                    )
+                  ) : (
+                    <Icon
+                      className={`w-4 h-4 transition-transform duration-200 ${
+                        isActive
+                          ? "stroke-[2.2] text-[#c29b78]"
+                          : "stroke-[1.8] text-zinc-500 group-hover:text-zinc-300"
                       }`}
+                    />
+                  )}
+                  {hasMounted && item.href === "/practice" && !isPro && (
+                    <span
+                      data-testid="bottom-nav-practice-lock"
+                      className="absolute -top-1.5 -right-5 px-1 py-[1px] text-[8px] font-bold tracking-widest uppercase rounded bg-[#c29b78]/15 text-[#c29b78] border border-[#c29b78]/30"
+                      title="Pro only"
                     >
-                      <span>{item.name}</span>
+                      PRO
                     </span>
-                  </motion.div>
-                </Link>
-              );
-            })}
-          </div>
+                  )}
+                </div>
+
+                <span
+                  className={`text-[10px] tracking-wider uppercase transition-colors ${
+                    isActive ? "font-semibold text-[#c29b78]" : "font-medium text-zinc-500 group-hover:text-zinc-300"
+                  }`}
+                >
+                  {item.name}
+                </span>
+              </Link>
+            );
+          })}
         </div>
       </nav>
 

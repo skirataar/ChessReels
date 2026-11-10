@@ -2241,57 +2241,49 @@ export function PlayView({
         )}
       </main>
 
-      {/* Floating Obsidian & Brushed-Gold HUD Pill */}
+      {/* Floating Out of Energy HUD Bar Docked Cleanly Above Bottom Nav */}
       {isHydrated && puzzlesRemaining <= 0 && !isPro && !isCalibrating && activeTab === "reels" && (
         <aside
           role="status"
           aria-label="Energy Depleted"
           data-testid="quota-depleted-hud"
-          className="fixed bottom-5 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-[420px] animate-in fade-in slide-in-from-bottom-3 duration-300"
+          className="fixed bottom-[62px] left-1/2 -translate-x-1/2 z-30 w-full max-w-[420px] px-3 animate-in fade-in slide-in-from-bottom-2 duration-200"
         >
           <div
             data-testid="quota-depleted-banner"
-            className="rounded-2xl bg-[#0a0908]/90 backdrop-blur-xl border border-white/[0.08] shadow-[0_20px_50px_rgba(0,0,0,0.85),0_0_0_1px_rgba(194,155,120,0.18)] p-2.5 pl-3.5 flex items-center justify-between gap-3"
+            className="h-11 rounded-lg bg-[#12100e]/95 backdrop-blur-md border border-[#c29b78]/25 px-3 flex items-center justify-between gap-2 shadow-[0_-8px_24px_rgba(0,0,0,0.6)]"
           >
-            {/* Left Status Group (Minimalist Indicator + Live Timer) */}
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-8 h-8 rounded-xl bg-rose-500/10 border border-rose-500/25 flex items-center justify-center shrink-0">
-                <svg
-                  viewBox="0 0 24 24"
-                  className="w-3.5 h-3.5 stroke-rose-400 stroke-[2] fill-none"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M13 2 L3 14 h9 l-1 8 10-12 h-9 l1-8 z" />
-                </svg>
-              </div>
-              <div className="flex flex-col min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[12px] font-semibold tracking-tight text-zinc-100">
-                    Out of Energy
-                  </span>
-                  <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-white/[0.06] text-rose-400">
-                    0/15
-                  </span>
-                </div>
-                <span className="text-[11px] font-mono text-zinc-400 tracking-tight">
-                  Recharges in {formattedCountdown}
-                </span>
-              </div>
+            {/* Left side */}
+            <div className="flex items-center gap-1.5 min-w-0">
+              <svg
+                viewBox="0 0 24 24"
+                className="w-3.5 h-3.5 stroke-rose-400 stroke-[2] fill-none shrink-0"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M13 2 L3 14 h9 l-1 8 10-12 h-9 l1-8 z" />
+              </svg>
+              <span className="text-[11px] font-semibold text-zinc-100 whitespace-nowrap">
+                0/15 Energy
+              </span>
+              <span className="text-[11px] font-mono text-zinc-500 tracking-tight truncate flex items-center gap-1">
+                <span className="w-1 h-1 rounded-full bg-zinc-500 shrink-0 inline-block" aria-hidden="true" />
+                <span>{formattedCountdown}</span>
+              </span>
             </div>
 
-            {/* Right Action Group (Dual High-Conversion Pills) */}
+            {/* Right side */}
             <div className="flex items-center gap-1.5 shrink-0">
               <button
                 type="button"
                 data-testid="hud-watch-ad-btn"
                 onClick={() => setIsRewardedAdOpen(true)}
-                className="h-8 px-2.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] active:scale-[0.97] border border-white/[0.1] text-zinc-200 text-[11px] font-semibold tracking-tight flex items-center gap-1 transition-all cursor-pointer"
+                className="h-7 px-2.5 rounded-md bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.97] border border-white/[0.1] text-zinc-200 text-[11px] font-medium flex items-center gap-1 transition-all cursor-pointer"
               >
                 <svg
                   viewBox="0 0 24 24"
-                  className="w-3 h-3 fill-[#c29b78] stroke-none"
+                  className="w-2.5 h-2.5 fill-[#c29b78] stroke-none shrink-0"
                   aria-hidden="true"
                 >
                   <polygon points="6 3 20 12 6 21 6 3" />
@@ -2306,11 +2298,11 @@ export function PlayView({
                   setPaywallReason("quota");
                   setIsQuotaModalOpen(true);
                 }}
-                className="h-8 px-3 rounded-xl bg-[#c29b78] hover:bg-[#d1ab88] active:scale-[0.97] text-[#0a0908] text-[11px] font-bold tracking-wide flex items-center gap-1 transition-all shadow-[0_4px_14px_rgba(194,155,120,0.25)] cursor-pointer"
+                className="h-7 px-2.5 rounded-md bg-[#c29b78] hover:bg-[#d1ab88] active:scale-[0.97] text-[#0a0908] text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer"
               >
                 <svg
                   viewBox="0 0 24 24"
-                  className="w-3.5 h-3.5 stroke-[#0a0908] stroke-[2.2] fill-none"
+                  className="w-3 h-3 stroke-[#0a0908] stroke-[2.2] fill-none shrink-0"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   aria-hidden="true"
