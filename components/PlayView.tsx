@@ -190,8 +190,8 @@ function ChargeBattery({ remaining, unlimited = false }: { remaining: number; un
   return (
     <div className="flex items-center shrink-0" data-testid="charge-battery-capsule">
       <div
-        className={`w-9 h-[18px] rounded-[5px] relative overflow-hidden bg-zinc-800/90 border flex items-center justify-center ${
-          isZero ? "border-rose-500/70 animate-pulse" : "border-white/15"
+        className={`w-9 h-[18px] rounded-[5px] relative overflow-hidden flex items-center justify-center ${
+          isZero ? "border border-rose-500/60 bg-rose-950/20" : "bg-zinc-800/90 border border-white/15"
         }`}
       >
         {/* Dynamic fill layer */}
@@ -209,7 +209,9 @@ function ChargeBattery({ remaining, unlimited = false }: { remaining: number; un
         ) : (
           <span
             className={`relative z-10 font-mono text-[11px] font-black leading-none tracking-tighter ${
-              remaining >= 10
+              remaining <= 0
+                ? "text-rose-400 font-bold"
+                : remaining >= 10
                 ? "text-[#0a0908]"
                 : "text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]"
             }`}
@@ -221,7 +223,7 @@ function ChargeBattery({ remaining, unlimited = false }: { remaining: number; un
       {/* Positive terminal nub */}
       <div
         className={`w-[2.5px] h-[7.5px] rounded-r-[2px] transition-colors ${
-          isFull ? "bg-[#c29b78]" : "bg-zinc-500/80"
+          isFull ? "bg-[#c29b78]" : isZero ? "bg-rose-500/60" : "bg-zinc-500/80"
         }`}
       />
     </div>
@@ -601,13 +603,28 @@ export function PlayView({
   }, []);
 
   useEffect(() => {
-    if (!isBatteryMenuOpen) return;
+    const shouldTick = isBatteryMenuOpen || (puzzlesRemaining <= 0 && !isPro);
+    if (!shouldTick) return;
 
     const updateTime = () => setBatteryNow(Date.now());
     updateTime();
     const interval = window.setInterval(updateTime, 1000);
     return () => window.clearInterval(interval);
-  }, [isBatteryMenuOpen]);
+  }, [isBatteryMenuOpen, puzzlesRemaining, isPro]);
+
+  const resetAt = resetsAt || (batteryNow > 0 ? batteryNow + resetsInMs : 0);
+  const rechargeCountdown =
+    batteryNow > 0 && resetAt > 0
+      ? getRechargeParts(resetAt, batteryNow)
+      : { hours: 0, minutes: 0, seconds: 0 };
+  const formattedCountdown =
+    rechargeCountdown.hours > 0
+      ? `${rechargeCountdown.hours}h ${rechargeCountdown.minutes}m`
+      : rechargeCountdown.minutes > 0
+      ? `${rechargeCountdown.minutes}m ${rechargeCountdown.seconds}s`
+      : rechargeCountdown.seconds > 0
+      ? `${rechargeCountdown.seconds}s`
+      : "ready";
 
   useEffect(() => {
     if (!isBatteryMenuOpen) return;
@@ -2166,52 +2183,6 @@ export function PlayView({
           </div>
         ) : (
           <div className="w-full flex-1 flex flex-col items-center justify-between touch-none overscroll-none overflow-hidden">
-            {/* Free Tier Quota Exhausted Banner with Refill Countdown & Upgrade CTA */}
-            {isHydrated && !canPlay && puzzlesRemaining <= 0 && !isPro && !isCalibrating && (
-              <div
-                className="w-full mx-auto px-3 mt-1.5 mb-1 animate-in fade-in slide-in-from-top-1 duration-200"
-                style={{
-                  width: "min(calc(100vw - 24px), calc(100dvh - 230px), 520px)",
-                  maxWidth: "min(calc(100vw - 24px), calc(100dvh - 230px), 520px)",
-                }}
-              >
-                <div
-                  data-testid="quota-depleted-banner"
-                  onClick={() => {
-                    setPaywallReason("quota");
-                    setIsQuotaModalOpen(true);
-                  }}
-                  className="p-2.5 rounded-xl bg-gradient-to-r from-[#22201e] via-[#2a241d] to-[#22201e] border border-amber-500/40 shadow-lg flex items-center justify-between gap-2 cursor-pointer hover:border-amber-500/70 transition-all active:scale-98"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <Zap className="w-4 h-4 text-amber-400 shrink-0 fill-amber-400/20" />
-                    <div className="flex flex-col min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-black text-white">Energy Depleted</span>
-                        <span className="text-[10px] text-amber-400 font-mono font-bold">
-                          (0/{windowLimit})
-                        </span>
-                      </div>
-                      <span className="text-[10px] text-zinc-400 truncate font-mono">
-                        Full charge in {Math.floor(resetsInMs / 3600000)}h {Math.floor((resetsInMs % 3600000) / 60000)}m | Solved puzzle shown
-                      </span>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setPaywallReason("quota");
-                      setIsQuotaModalOpen(true);
-                    }}
-                    className="px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-amber-400 to-[#c29b78] hover:from-amber-300 hover:to-[#dfba94] text-zinc-950 text-[10px] font-black uppercase tracking-wider shrink-0 flex items-center gap-1 shadow-sm cursor-pointer"
-                  >
-                    <Sparkles className="w-3.5 h-3.5 text-[#c29b78] inline-block shrink-0" strokeWidth={1.5} />
-                    <span>Pro</span>
-                  </button>
-                </div>
-              </div>
-            )}
             {showReelAd && !isPro ? (
               <ReelAdCard
                 isPro={isPro}
@@ -2269,6 +2240,89 @@ export function PlayView({
           </div>
         )}
       </main>
+
+      {/* Floating Obsidian & Brushed-Gold HUD Pill */}
+      {isHydrated && puzzlesRemaining <= 0 && !isPro && !isCalibrating && activeTab === "reels" && (
+        <aside
+          role="status"
+          aria-label="Energy Depleted"
+          data-testid="quota-depleted-hud"
+          className="fixed bottom-5 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-[420px] animate-in fade-in slide-in-from-bottom-3 duration-300"
+        >
+          <div
+            data-testid="quota-depleted-banner"
+            className="rounded-2xl bg-[#0a0908]/90 backdrop-blur-xl border border-white/[0.08] shadow-[0_20px_50px_rgba(0,0,0,0.85),0_0_0_1px_rgba(194,155,120,0.18)] p-2.5 pl-3.5 flex items-center justify-between gap-3"
+          >
+            {/* Left Status Group (Minimalist Indicator + Live Timer) */}
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-xl bg-rose-500/10 border border-rose-500/25 flex items-center justify-center shrink-0">
+                <svg
+                  viewBox="0 0 24 24"
+                  className="w-3.5 h-3.5 stroke-rose-400 stroke-[2] fill-none"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M13 2 L3 14 h9 l-1 8 10-12 h-9 l1-8 z" />
+                </svg>
+              </div>
+              <div className="flex flex-col min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[12px] font-semibold tracking-tight text-zinc-100">
+                    Out of Energy
+                  </span>
+                  <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-white/[0.06] text-rose-400">
+                    0/15
+                  </span>
+                </div>
+                <span className="text-[11px] font-mono text-zinc-400 tracking-tight">
+                  Recharges in {formattedCountdown}
+                </span>
+              </div>
+            </div>
+
+            {/* Right Action Group (Dual High-Conversion Pills) */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                data-testid="hud-watch-ad-btn"
+                onClick={() => setIsRewardedAdOpen(true)}
+                className="h-8 px-2.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] active:scale-[0.97] border border-white/[0.1] text-zinc-200 text-[11px] font-semibold tracking-tight flex items-center gap-1 transition-all cursor-pointer"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  className="w-3 h-3 fill-[#c29b78] stroke-none"
+                  aria-hidden="true"
+                >
+                  <polygon points="6 3 20 12 6 21 6 3" />
+                </svg>
+                <span>+3 Free</span>
+              </button>
+
+              <button
+                type="button"
+                data-testid="hud-upgrade-pro-btn"
+                onClick={() => {
+                  setPaywallReason("quota");
+                  setIsQuotaModalOpen(true);
+                }}
+                className="h-8 px-3 rounded-xl bg-[#c29b78] hover:bg-[#d1ab88] active:scale-[0.97] text-[#0a0908] text-[11px] font-bold tracking-wide flex items-center gap-1 transition-all shadow-[0_4px_14px_rgba(194,155,120,0.25)] cursor-pointer"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  className="w-3.5 h-3.5 stroke-[#0a0908] stroke-[2.2] fill-none"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M18.178 8c5.096 0 5.096 8 0 8-5.095 0-7.133-8-12.739-8-4.585 0-4.585 8 0 8 5.606 0 7.644-8 12.74-8z" />
+                </svg>
+                <span>PRO</span>
+              </button>
+            </div>
+          </div>
+        </aside>
+      )}
 
       {/* 3. Modals & Drawers */}
       <LeaderboardModal
