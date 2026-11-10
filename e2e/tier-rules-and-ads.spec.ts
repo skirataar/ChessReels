@@ -157,7 +157,7 @@ test.describe("Tier Rules, Ads, Pricing & Placement Calibration", () => {
     });
   });
 
-  test("4. Sponsored Ad break displays ₹200 pricing, 3s skip countdown and Pro CTA", async ({ page }) => {
+  test("4. Sponsored between-reels ad break displays DoomChess Reel Break and Pro CTA", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("http://localhost:3000/play");
     await page.evaluate(() => {
@@ -178,20 +178,19 @@ test.describe("Tier Rules, Ads, Pricing & Placement Calibration", () => {
     });
     await page.waitForTimeout(500);
 
-    await expect(page.locator("text=Sponsored Break")).toBeVisible();
-    await expect(page.locator("text=Upgrade (₹200/mo)")).toBeVisible();
+    await expect(page.locator("text=DOOMCHESS REEL BREAK")).toBeVisible();
+    await expect(page.locator("text=UPGRADE TO PRO")).toBeVisible();
 
     await page.screenshot({
       path: path.join(ARTIFACT_DIR, "ad_modal_break.png"),
     });
 
-    await page.waitForTimeout(3200);
-    const continueBtn = page.locator("button:has-text('Continue to Next Puzzle')");
+    const continueBtn = page.locator("button:has-text('Continue / Next Reel')");
     await expect(continueBtn).toBeVisible();
     await continueBtn.click();
     await page.waitForTimeout(500);
 
-    await expect(page.locator("text=Sponsored Break")).not.toBeVisible();
+    await expect(page.locator("text=DOOMCHESS REEL BREAK")).not.toBeVisible();
   });
 
   test("5. Main screen removes Puzzle hashtag & Placement test exempts quota with balanced Elo", async ({ page }) => {

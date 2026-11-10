@@ -341,13 +341,6 @@ export function useTierQuota(
       const remaining = Math.max(0, config.freePuzzleLimit - timestamps.length);
       const isQuotaDepleted = remaining === 0;
 
-      // Check ad trigger: every `adFrequencyPuzzles` (default 2)
-      let shouldShowAd = false;
-      if (nextAdCount >= config.adFrequencyPuzzles) {
-        shouldShowAd = true;
-        nextAdCount = 0;
-      }
-
       setPuzzlesRemaining(remaining);
       setCanPlay(!isQuotaDepleted);
       setPuzzlesSinceLastAd(nextAdCount);
@@ -369,14 +362,12 @@ export function useTierQuota(
         }
       } catch {}
 
-      if (shouldShowAd) {
-        setIsAdOpen(true);
-      } else if (isQuotaDepleted) {
+      if (isQuotaDepleted) {
         setIsQuotaModalOpen(true);
       }
 
       return {
-        shouldShowAd,
+        shouldShowAd: false,
         quotaReached: isQuotaDepleted,
       };
     },

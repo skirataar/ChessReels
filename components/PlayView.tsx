@@ -19,7 +19,6 @@ import { ProfileModal } from "@/components/ProfileModal";
 import { AuthModal } from "@/components/AuthModal";
 import { CalibrationCompleteModal } from "@/components/CalibrationCompleteModal";
 import { StatsModal } from "@/components/StatsModal";
-import { AdModal } from "@/components/AdModal";
 import { QuotaPaywallModal } from "@/components/QuotaPaywallModal";
 import {
   popNextPuzzle,
@@ -561,7 +560,7 @@ export function PlayView({
 
   const [isStreakDropdownOpen, setIsStreakDropdownOpen] = useState(false);
 
-  // Tier Quota & Ad Rules: Free: 4 puzzles / 4h, Ads every 2 puzzles; Pro: Unlimited & 0 Ads
+  // Tier Quota & Ad Rules: Free: 15 puzzles / 4h, Ads every 3 puzzles; Pro: Unlimited & 0 Ads
   const {
     isPro,
     canPlay,
@@ -571,9 +570,7 @@ export function PlayView({
     windowHours,
     resetsInMs,
     resetsAt,
-    isAdOpen,
     isQuotaModalOpen,
-    setIsAdOpen,
     setIsQuotaModalOpen,
     recordPuzzlePlayed,
     refreshSubscription,
@@ -691,10 +688,11 @@ export function PlayView({
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      (window as any).__triggerAdModal = () => setIsAdOpen(true);
+      (window as any).__triggerAdModal = () => setShowReelAd(true);
+      (window as any).__triggerReelAd = () => setShowReelAd(true);
       (window as any).__triggerQuotaModal = () => setIsQuotaModalOpen(true);
     }
-  }, [setIsAdOpen, setIsQuotaModalOpen]);
+  }, [setIsQuotaModalOpen]);
 
   // Calibration placement status
   const isCalibrating = Boolean(userAccount && !userAccount.isCalibrated);
@@ -2304,25 +2302,6 @@ export function PlayView({
         bestCombo={bestCombo}
         totalSolved={totalSolved}
         totalFailed={totalFailed}
-      />
-
-      {/* 4. Sponsored Ad Interstitial (Shown every 2 puzzles for free users) */}
-      <AdModal
-        isOpen={isAdOpen}
-        onClose={() => {
-          setIsAdOpen(false);
-          if (!canPlay && !isPro) {
-            setPaywallReason("quota");
-            setIsQuotaModalOpen(true);
-          } else {
-            goToNextPuzzle();
-          }
-        }}
-        onUpgradeToPro={() => {
-          setIsAdOpen(false);
-          setPaywallReason("quota");
-          setIsQuotaModalOpen(true);
-        }}
       />
 
       {/* Rewarded Ad Modal (+3 puzzles) */}
