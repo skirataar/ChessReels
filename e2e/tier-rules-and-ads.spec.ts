@@ -24,14 +24,14 @@ test.describe("Tier Rules, Ads, Pricing & Placement Calibration", () => {
     await expect(tierTab).toBeVisible({ timeout: 5000 });
     await tierTab.click();
 
-    // Verify current values: 4 puzzles, 4 hours, 2 ad freq, 200 INR/mo, 5% annual discount
+    // Verify current values: 15 puzzles, 4 hours, 2 ad freq, 200 INR/mo, 5% annual discount
     const limitInput = page.locator("input[name='freePuzzleLimit']");
     const hoursInput = page.locator("input[name='freeWindowHours']");
     const adFreqInput = page.locator("input[name='adFrequencyPuzzles']");
     const priceInput = page.locator("input[name='proMonthlyPrice']");
     const discountInput = page.locator("input[name='annualDiscountPercent']");
 
-    await expect(limitInput).toHaveValue("4");
+    await expect(limitInput).toHaveValue("15");
     await expect(hoursInput).toHaveValue("4");
     await expect(adFreqInput).toHaveValue("2");
     await expect(priceInput).toHaveValue("200");
@@ -81,13 +81,13 @@ test.describe("Tier Rules, Ads, Pricing & Placement Calibration", () => {
     const energyBadge = page.locator("button[data-testid='header-quota-btn']");
     await expect(energyBadge).toBeVisible();
     const energyText = await energyBadge.textContent();
-    expect(energyText).toContain("4/4");
+    expect(energyText).toContain("15");
 
-    // Simulate quota reached (4 solves in current window)
+    // Simulate quota reached (15 solves in current window)
     await page.evaluate(() => {
       const now = Date.now();
       const exhausted = JSON.stringify({
-        solveTimestamps: [now - 300000, now - 200000, now - 100000, now],
+        solveTimestamps: Array.from({ length: 15 }, (_, i) => now - (15 - i) * 10000),
         puzzlesSinceLastAd: 1,
       });
       localStorage.setItem("chess_reel_tier_session", exhausted);
@@ -96,10 +96,10 @@ test.describe("Tier Rules, Ads, Pricing & Placement Calibration", () => {
     await page.reload();
     await page.waitForTimeout(1500);
 
-    // Energy badge should now show 0/4
+    // Energy badge should now show 0
     const exhaustedBadge = page.locator("button[data-testid='header-quota-btn']");
     await expect(exhaustedBadge).toBeVisible();
-    expect(await exhaustedBadge.textContent()).toContain("0/4");
+    expect(await exhaustedBadge.textContent()).toContain("0");
 
     // If modal auto-opened on quota depletion or needs click, ensure it's visible
     const quotaModalTitle = page.locator("text=Free Quota Reached");

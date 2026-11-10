@@ -770,7 +770,11 @@ export function PlayView({
       .then((data) => {
         if (cancelled) return;
         if (data?.stats) {
-          const dbStats = data.stats;
+          const dbStats = {
+            ...data.stats,
+            puzzlesRemaining: data.puzzlesRemaining ?? data.stats.puzzlesRemaining,
+            nextQuotaRefillTime: data.nextQuotaRefillTime ?? data.stats.nextQuotaRefillTime,
+          };
           setCurrentElo(dbStats.elo);
           currentEloRef.current = dbStats.elo;
           window.localStorage.setItem("chessreels_user_stats_v1", JSON.stringify(dbStats));
@@ -1707,9 +1711,14 @@ export function PlayView({
           applyBonusRecharge(statsData.puzzlesRemaining, statsData.nextQuotaRefillTime);
         }
         if (statsData?.stats) {
-          setCurrentElo(statsData.stats.elo);
-          currentEloRef.current = statsData.stats.elo;
-          window.localStorage.setItem("chessreels_user_stats_v1", JSON.stringify(statsData.stats));
+          const dbStats = {
+            ...statsData.stats,
+            puzzlesRemaining: statsData.puzzlesRemaining ?? statsData.stats.puzzlesRemaining,
+            nextQuotaRefillTime: statsData.nextQuotaRefillTime ?? statsData.stats.nextQuotaRefillTime,
+          };
+          setCurrentElo(dbStats.elo);
+          currentEloRef.current = dbStats.elo;
+          window.localStorage.setItem("chessreels_user_stats_v1", JSON.stringify(dbStats));
         }
       })
       .catch(() => {});
@@ -2321,7 +2330,7 @@ export function PlayView({
         currentPuzzlesRemaining={puzzlesRemaining}
       />
 
-      {/* 5. Free Tier Quota Paywall Modal (5 puzzles per 4h window) */}
+      {/* 5. Free Tier Quota Paywall Modal (15 puzzles per 4h window) */}
       <QuotaPaywallModal
         isOpen={isQuotaModalOpen}
         onClose={() => {
@@ -2357,6 +2366,9 @@ export function PlayView({
         limit={windowLimit}
         windowHours={windowHours}
         reason={paywallReason}
+        onWatchAd={() => {
+          setIsRewardedAdOpen(true);
+        }}
       />
     </div>
   );

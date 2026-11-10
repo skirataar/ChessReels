@@ -25,8 +25,11 @@ export async function ensureSettingsTable(): Promise<void> {
         "updated_at" TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       );
     `);
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "bonusQuota" INTEGER DEFAULT 0;
+    `);
   } catch (err) {
-    console.warn("Could not ensure system_settings table:", err);
+    console.warn("Could not ensure system_settings table or bonusQuota column:", err);
   }
 }
 
@@ -200,6 +203,7 @@ export async function checkUserQuota(
   let subscriptionPlan: string | null = null;
   let paymentProvider: string | null = null;
   let currentPeriodEnd: string | null = null;
+  let userBonusQuota = 0;
 
   if (userId && !userId.startsWith("guest-")) {
     try {
@@ -207,6 +211,7 @@ export async function checkUserQuota(
         where: { id: userId },
         select: {
           plan: true,
+          bonusQuota: true,
           isPro: true,
           subscriptionStatus: true,
           subscriptionPlan: true,
@@ -219,6 +224,7 @@ export async function checkUserQuota(
       subscriptionPlan = dbUser?.subscriptionPlan ?? null;
       paymentProvider = dbUser?.paymentProvider ?? null;
       currentPeriodEnd = dbUser?.currentPeriodEnd?.toISOString() ?? null;
+      userBonusQuota = dbUser?.bonusQuota ?? 0;
     } catch {
       effectivePro = isProPlan(userPlan);
     }
@@ -261,20 +267,37 @@ export async function checkUserQuota(
     });
 
     const usedInWindow = recentSolves.length;
-    const puzzlesRemaining = Math.max(0, config.freePuzzleLimit - usedInWindow);
+
+    // If window expired and user has 0 solves in window, clear old bonusQuota from DB
+    if (usedInWindow === 0 && userBonusQuota > 0 && userId && !userId.startsWith("guest-")) {
+      prisma.user.update({
+        where: { id: userId },
+        data: { bonusQuota: 0 },
+      }).catch(() => {});
+      userBonusQuota = 0;
+    }
+
+    // Effective used quota deducts bonus charges earned from rewarded ads
+    const effectiveUsed = Math.max(0, usedInWindow - userBonusQuota);
+    const puzzlesRemaining = Math.min(
+      config.freePuzzleLimit,
+      Math.max(0, config.freePuzzleLimit - effectiveUsed)
+    );
     const canPlay = puzzlesRemaining > 0;
 
     let resetsInMs = 0;
     let resetsAt: string | null = null;
 
-    if (usedInWindow >= config.freePuzzleLimit && recentSolves.length > 0) {
-      // Time until the oldest solve exits the rolling window
-      const oldestSolveTime = new Date(recentSolves[0].solvedAt).getTime();
+    if (effectiveUsed >= config.freePuzzleLimit && recentSolves.length > userBonusQuota) {
+      // Time until the oldest uncompensated solve exits the rolling window
+      const resetIndex = Math.min(userBonusQuota, recentSolves.length - 1);
+      const oldestSolveTime = new Date(recentSolves[resetIndex].solvedAt).getTime();
       const resetTime = oldestSolveTime + windowDurationMs;
       resetsInMs = Math.max(0, resetTime - Date.now());
       resetsAt = new Date(resetTime).toISOString();
-    } else if (usedInWindow > 0 && recentSolves.length > 0) {
-      const oldestSolveTime = new Date(recentSolves[0].solvedAt).getTime();
+    } else if (effectiveUsed > 0 && recentSolves.length > 0) {
+      const resetIndex = Math.min(userBonusQuota, recentSolves.length - 1);
+      const oldestSolveTime = new Date(recentSolves[resetIndex].solvedAt).getTime();
       const resetTime = oldestSolveTime + windowDurationMs;
       resetsInMs = Math.max(0, resetTime - Date.now());
       resetsAt = new Date(resetTime).toISOString();
