@@ -14,6 +14,8 @@ export interface UserStatsCache {
   isFrozenState: boolean;
   perfectWeekCounter: number;
   comboCount: number;
+  puzzlesRemaining?: number;
+  nextQuotaRefillTime?: string | null;
 }
 
 const DEFAULT_STATS: UserStatsCache = {
@@ -80,6 +82,11 @@ export function getStoredUserStats(): UserStatsCache {
             typeof parsed.comboCount === "number" && !isNaN(parsed.comboCount)
               ? Math.max(0, parsed.comboCount)
               : 0,
+          puzzlesRemaining:
+            typeof parsed.puzzlesRemaining === "number" && !isNaN(parsed.puzzlesRemaining)
+              ? parsed.puzzlesRemaining
+              : undefined,
+          nextQuotaRefillTime: parsed.nextQuotaRefillTime || null,
         };
       }
     }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { isGuestUserId } from "@/lib/guestAccount";
 import { isActiveProAccount } from "@/lib/tierTypes";
+import { checkUserQuota } from "@/lib/tierConfig";
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,6 +17,10 @@ export async function GET(request: NextRequest) {
         isPro: false,
         subscriptionStatus: "none",
         currentPeriodEnd: null,
+        puzzlesRemaining: 15,
+        nextQuotaRefillTime: null,
+        windowLimit: 15,
+        windowHours: 4,
         stats: {
           elo: 1200,
           currentStreak: 0,
@@ -27,6 +32,8 @@ export async function GET(request: NextRequest) {
           isPro: false,
           subscriptionStatus: "none",
           currentPeriodEnd: null,
+          puzzlesRemaining: 15,
+          nextQuotaRefillTime: null,
         },
       });
     }
@@ -63,12 +70,20 @@ export async function GET(request: NextRequest) {
       ? user.currentPeriodEnd.toISOString()
       : null;
 
+    const quota = await checkUserQuota(targetUserId, user.plan);
+
     return NextResponse.json({
       success: true,
       user: { ...user, isPro, plan: isPro ? "premium" : "free" },
       isPro,
       subscriptionStatus: user.subscriptionStatus ?? "none",
       currentPeriodEnd,
+      puzzlesRemaining: quota.puzzlesRemaining,
+      nextQuotaRefillTime: quota.resetsAt,
+      resetsInMs: quota.resetsInMs,
+      canPlay: quota.canPlay,
+      windowLimit: quota.windowLimit,
+      windowHours: quota.windowHours,
       stats: {
         elo: user.elo,
         currentStreak: user.streak,
@@ -80,6 +95,8 @@ export async function GET(request: NextRequest) {
         subscriptionStatus: user.subscriptionStatus ?? "none",
         subscriptionPlan: user.subscriptionPlan ?? null,
         currentPeriodEnd,
+        puzzlesRemaining: quota.puzzlesRemaining,
+        nextQuotaRefillTime: quota.resetsAt,
       },
     });
   } catch (error) {

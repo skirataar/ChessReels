@@ -42,7 +42,9 @@ import { StreakFlameBadge } from "@/components/StreakFlameBadge";
 import { StreakCalendarDropdown } from "@/components/StreakCalendarDropdown";
 import { useTierQuota } from "@/lib/useTierQuota";
 import { clearGuestLocalSession, isGuestAccount, isGuestUserId } from "@/lib/guestAccount";
-import { RefreshCw, WifiOff, UserPlus, BarChart2, Trophy, Zap, Flame, Crown, Sparkles, User, Snowflake } from "lucide-react";
+import { RefreshCw, WifiOff, UserPlus, BarChart2, Trophy, Zap, Flame, Crown, Sparkles, User, Snowflake, Target, X, ChevronDown, ArrowRight } from "lucide-react";
+import { ReelAdCard } from "@/components/ReelAdCard";
+import { RewardedAdModal } from "@/components/RewardedAdModal";
 import { motion, AnimatePresence } from "framer-motion";
 
 const GUEST_ID_KEY = "chess_reel_guest_id";
@@ -168,54 +170,65 @@ function AnimatedEloCounter({ value, duration = 600 }: { value: number; duration
 }
 
 function ChargeBattery({ remaining, unlimited = false }: { remaining: number; unlimited?: boolean }) {
-  if (unlimited) {
-    return (
-      <svg width="34" height="16" viewBox="0 0 34 16" aria-hidden="true" className="shrink-0">
-        <rect x="1" y="1" width="28" height="14" rx="4" fill="rgba(194,155,120,0.08)" stroke="#c29b78" strokeWidth="1.5" />
-        <rect x="30.5" y="4.5" width="2.5" height="7" rx="1.25" fill="#c29b78" />
-        <path
-          d="M7 8 C9.3 4.2, 12.2 4.2, 15 8 C17.8 11.8, 20.7 11.8, 23 8 C20.7 4.2, 17.8 4.2, 15 8 C12.2 11.8, 9.3 11.8, 7 8"
-          fill="none"
-          stroke="#d5ae73"
-          strokeWidth="1.35"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    );
+  const isFull = unlimited || remaining >= 15;
+  const fillPercent = unlimited ? 100 : Math.max(0, Math.min(100, Math.round((remaining / 15) * 100)));
+
+  let fillBg = "bg-[#c29b78]";
+  if (!unlimited) {
+    if (remaining >= 10) {
+      fillBg = "bg-[#c29b78]";
+    } else if (remaining >= 4) {
+      fillBg = "bg-[#f59e0b]";
+    } else if (remaining >= 1) {
+      fillBg = "bg-[#f43f5e]";
+    } else {
+      fillBg = "transparent";
+    }
   }
 
-  const charge = Math.max(0, Math.min(4, remaining));
-  const color = charge === 4 ? "#22c55e" : charge >= 3 ? "#c29b78" : charge === 2 ? "#f59e0b" : "#f43f5e";
-  const barX = [4, 10, 16, 22];
+  const isZero = !unlimited && remaining <= 0;
 
   return (
-    <svg width="34" height="16" viewBox="0 0 34 16" aria-hidden="true" className="shrink-0">
-      <rect
-        x="1"
-        y="1"
-        width="28"
-        height="14"
-        rx="4"
-        fill="rgba(255,255,255,0.02)"
-        stroke={color}
-        strokeWidth="1.5"
-        className={charge === 0 ? "opacity-80 animate-pulse" : undefined}
-      />
-      <rect x="30.5" y="4.5" width="2.5" height="7" rx="1.25" fill={color} />
-      {barX.map((x, index) => (
-        <rect
-          key={x}
-          x={x}
-          y="4"
-          width="4.5"
-          height="8"
-          rx="1.4"
-          fill={index < charge ? color : "rgba(255,255,255,0.06)"}
-          className={index === charge && charge < 4 ? "battery-recharge-bar" : undefined}
+    <div className="flex items-center shrink-0" data-testid="charge-battery-capsule">
+      <div
+        className={`w-9 h-[18px] rounded-[5px] relative overflow-hidden bg-zinc-800/90 border flex items-center justify-center ${
+          isZero ? "border-rose-500/70 animate-pulse" : "border-white/15"
+        }`}
+      >
+        {/* Dynamic fill layer */}
+        <div
+          className={`absolute left-0 top-0 bottom-0 transition-all duration-300 ${fillBg}`}
+          style={{ width: `${fillPercent}%` }}
         />
-      ))}
-    </svg>
+        {/* Centered inner readout */}
+        {unlimited ? (
+          <svg
+            width="12"
+            height="6"
+            viewBox="0 0 12 6"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="text-[#0a0908] relative z-10"
+            aria-hidden="true"
+          >
+            <path d="M3 3 C1.8 1, 0.5 1, 0.5 3 C0.5 5, 1.8 5, 3 3 C4.2 1, 5.5 1, 5.5 3 C5.5 5, 4.2 5, 3 3 Z" />
+          </svg>
+        ) : (
+          <span className="mix-blend-difference text-white relative z-10 font-mono text-[11px] font-extrabold leading-none tracking-tighter">
+            {remaining}
+          </span>
+        )}
+      </div>
+      {/* Positive terminal nub */}
+      <div
+        className={`w-[2.5px] h-2 rounded-r-full transition-colors ${
+          isFull ? "bg-[#c29b78]" : "bg-zinc-500/80"
+        }`}
+      />
+    </div>
   );
 }
 
@@ -547,6 +560,7 @@ export function PlayView({
     isPro,
     canPlay,
     puzzlesRemaining,
+    applyBonusRecharge,
     windowLimit,
     windowHours,
     resetsInMs,
@@ -563,6 +577,11 @@ export function PlayView({
   const [isBatteryMenuOpen, setIsBatteryMenuOpen] = useState(false);
   const [batteryNow, setBatteryNow] = useState(0);
   const batteryMenuRef = useRef<HTMLDivElement>(null);
+
+  const [isRewardedAdOpen, setIsRewardedAdOpen] = useState(false);
+  const [puzzlesPlayedInSession, setPuzzlesPlayedInSession] = useState(0);
+  const [showReelAd, setShowReelAd] = useState(false);
+  const countedSessionPuzzlesRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!isBatteryMenuOpen) return;
@@ -745,18 +764,23 @@ export function PlayView({
     fetch(`/api/user/stats?userId=${encodeURIComponent(userAccount.id)}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (cancelled || !data?.stats) return;
-        const dbStats = data.stats;
-        setCurrentElo(dbStats.elo);
-        currentEloRef.current = dbStats.elo;
-        window.localStorage.setItem("chessreels_user_stats_v1", JSON.stringify(dbStats));
+        if (cancelled) return;
+        if (data?.stats) {
+          const dbStats = data.stats;
+          setCurrentElo(dbStats.elo);
+          currentEloRef.current = dbStats.elo;
+          window.localStorage.setItem("chessreels_user_stats_v1", JSON.stringify(dbStats));
+        }
+        if (data?.puzzlesRemaining !== undefined) {
+          applyBonusRecharge(data.puzzlesRemaining, data.nextQuotaRefillTime);
+        }
       })
       .catch(() => {});
 
     return () => {
       cancelled = true;
     };
-  }, [isHydrated, userAccount?.id]);
+  }, [isHydrated, userAccount?.id, applyBonusRecharge]);
 
   // Deep-link from other Pro CTAs (onboarding upsell, stats page) into checkout.
   useEffect(() => {
@@ -1056,6 +1080,12 @@ export function PlayView({
       const instanceKey = puzzle.instanceId || `${puzzle.id}_attempt_1`;
 
       if (status === "failed") {
+        const puzzleKey = puzzle.instanceId || puzzle.id;
+        if (!countedSessionPuzzlesRef.current.has(puzzleKey)) {
+          countedSessionPuzzlesRef.current.add(puzzleKey);
+          setPuzzlesPlayedInSession((prev) => prev + 1);
+        }
+
         const attemptKey = `${instanceKey}#${currentIndex}`;
         failedAttemptPuzzleIdsRef.current.add(instanceKey);
         failedAttemptPuzzleIdsRef.current.add(puzzle.id);
@@ -1065,6 +1095,12 @@ export function PlayView({
           scheduleFailedPuzzleReinsertion(puzzle, currentIndex);
         }
       } else if (status === "solved") {
+        const puzzleKey = puzzle.instanceId || puzzle.id;
+        if (!countedSessionPuzzlesRef.current.has(puzzleKey)) {
+          countedSessionPuzzlesRef.current.add(puzzleKey);
+          setPuzzlesPlayedInSession((prev) => prev + 1);
+        }
+
         const hasFailedOnThisAttempt =
           failedAttemptPuzzleIdsRef.current.has(instanceKey) ||
           failedAttemptPuzzleIdsRef.current.has(puzzle.id);
@@ -1103,7 +1139,13 @@ export function PlayView({
   );
 
   // Swipe Up / Next Puzzle navigation: strictly increment currentIndex to a new puzzle ID & deduplicate against solved
-  const goToNextPuzzle = useCallback(async () => {
+  const goToNextPuzzle = useCallback(async (bypassAd: boolean = false) => {
+    if (!bypassAd && !isPro && !isCalibrating && puzzlesPlayedInSession > 0 && puzzlesPlayedInSession % 3 === 0 && !showReelAd) {
+      setShowReelAd(true);
+      return;
+    }
+    setShowReelAd(false);
+
     if (!canPlay && !isPro && !isCalibrating) {
       if (!currentPuzzle) {
         const lastSolvedRaw =
@@ -1201,6 +1243,8 @@ export function PlayView({
     canPlay,
     isPro,
     isCalibrating,
+    puzzlesPlayedInSession,
+    showReelAd,
     currentPuzzle,
     currentIndex,
     queue,
@@ -1211,6 +1255,7 @@ export function PlayView({
 
   // Swipe Down / Previous Puzzle navigation
   const goToPrevPuzzle = useCallback(() => {
+    setShowReelAd(false);
     if (currentIndex > 0) {
       const prevIndex = currentIndex - 1;
       const prevPuzzle = queue[prevIndex];
@@ -1651,6 +1696,20 @@ export function PlayView({
     setCurrentIndex(0);
     initialFetchDoneRef.current = true;
 
+    fetch(`/api/user/stats?userId=${encodeURIComponent(user.id)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((statsData) => {
+        if (statsData?.puzzlesRemaining !== undefined) {
+          applyBonusRecharge(statsData.puzzlesRemaining, statsData.nextQuotaRefillTime);
+        }
+        if (statsData?.stats) {
+          setCurrentElo(statsData.stats.elo);
+          currentEloRef.current = statsData.stats.elo;
+          window.localStorage.setItem("chessreels_user_stats_v1", JSON.stringify(statsData.stats));
+        }
+      })
+      .catch(() => {});
+
     fetch(`/api/puzzle/random?elo=${user.elo || 800}&count=5&userId=${encodeURIComponent(user.id)}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
@@ -1714,10 +1773,10 @@ export function PlayView({
             </div>
             <button
               onClick={() => setOauthAlert(null)}
-              className="text-[#c29b78] hover:text-white shrink-0 font-bold text-sm px-1 cursor-pointer"
+              className="text-[#c29b78] hover:text-white shrink-0 font-bold text-sm px-1 cursor-pointer flex items-center justify-center"
               aria-label="Dismiss notification"
             >
-              ✕
+              <X className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -1744,7 +1803,7 @@ export function PlayView({
             )}
           </div>
 
-          {/* Flush HUD: Rating • Streak • Quota/Pro • Leaderboard (NO rounded pills) */}
+          {/* Flush HUD: Rating | Streak | Quota/Pro | Leaderboard (NO rounded pills) */}
           <div suppressHydrationWarning className="flex items-center gap-3 sm:gap-3.5 shrink-0">
             {/* Flush Rating */}
             <div
@@ -1835,9 +1894,10 @@ export function PlayView({
               // Static markup here matches SSR exactly, so no fake numbers flash.
               <span
                 aria-hidden="true"
+                data-testid="header-loading-quota"
                 className="flex items-center gap-1 text-[11px] font-bold invisible"
               >
-                <span className="text-amber-400">⚡</span>
+                <Zap className="w-3.5 h-3.5 text-amber-400" />
                 <span className="font-mono text-zinc-200">0/0</span>
               </span>
             ) : isHydrated && isPro === true ? (
@@ -1845,20 +1905,36 @@ export function PlayView({
                 <button
                   onClick={() => setIsBatteryMenuOpen((open) => !open)}
                   data-testid="header-pro-quota-btn"
-                  className="cursor-pointer transition-transform active:scale-95"
+                  className="cursor-pointer transition-transform active:scale-95 flex items-center"
                   aria-label="View unlimited Pro charge"
                   aria-expanded={isBatteryMenuOpen}
                   suppressHydrationWarning
                 >
-                  <ChargeBattery remaining={4} unlimited={isHydrated && isPro === true} />
+                  <ChargeBattery remaining={15} unlimited={true} />
                 </button>
                 {isBatteryMenuOpen && (
-                  <div className="absolute right-0 top-full mt-2 w-[272px] rounded-lg border border-white/[0.09] bg-[#12110f]/95 p-4 shadow-[0_18px_50px_rgba(0,0,0,.7)] backdrop-blur-xl">
-                    <div className="text-xs font-semibold tracking-[0.16em] text-[#c29b78] uppercase">
-                      PRO Account Unlimited Charge
+                  <div className="absolute right-0 top-full mt-2 w-64 rounded-xl border border-[#c29b78]/30 bg-[#0a0908] p-3.5 shadow-2xl z-50 backdrop-blur-xl">
+                    <div className="flex items-center gap-2">
+                      <svg
+                        width="16"
+                        height="8"
+                        viewBox="0 0 12 6"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="text-[#c29b78] shrink-0"
+                        aria-hidden="true"
+                      >
+                        <path d="M3 3 C1.8 1, 0.5 1, 0.5 3 C0.5 5, 1.8 5, 3 3 C4.2 1, 5.5 1, 5.5 3 C5.5 5, 4.2 5, 3 3 Z" />
+                      </svg>
+                      <div className="text-[11px] font-bold tracking-wider text-[#c29b78] uppercase">
+                        PRO ACCOUNT / UNLIMITED CHARGE
+                      </div>
                     </div>
-                    <div className="mt-2 text-[11px] leading-5 text-zinc-400">
-                      Your infinity charge never depletes.
+                    <div className="mt-1.5 text-[11px] leading-relaxed text-zinc-400">
+                      Never wait for puzzle recharges.
                     </div>
                   </div>
                 )}
@@ -1870,7 +1946,8 @@ export function PlayView({
                   title={`Placement Calibration: Puzzle ${currentCalibrationStep} of 6 (Quota starts after placement)`}
                   data-testid="header-calibration-badge"
                 >
-                  <span>🎯 {currentCalibrationStep}/6</span>
+                  <Target className="w-3.5 h-3.5 text-[#c29b78] stroke-[2]" />
+                  <span>{currentCalibrationStep}/6</span>
                 </div>
               ) : (
                 <div ref={batteryMenuRef} className="relative">
@@ -1889,68 +1966,61 @@ export function PlayView({
                     />
                   </button>
                   {isBatteryMenuOpen && (
-                    <div className="absolute right-0 top-full mt-2 w-[272px] z-50 overflow-hidden rounded-lg border border-white/[0.09] bg-[#12110f]/95 shadow-[0_18px_50px_rgba(0,0,0,.7)] backdrop-blur-xl">
+                    <div className="absolute right-0 top-full mt-2 w-64 rounded-xl border border-[#c29b78]/30 bg-[#0a0908] p-3.5 shadow-2xl z-50 backdrop-blur-xl">
                       {(() => {
                         const resetAt = resetsAt || batteryNow + resetsInMs;
                         const recharge = getRechargeParts(resetAt, batteryNow);
-                        return puzzlesRemaining === 0 ? (
-                          <>
-                            <div className="flex items-center gap-2 border-b border-white/[0.06] px-4 py-3">
-                              <span className="h-2 w-2 rounded-full bg-rose-400 shadow-[0_0_12px_rgba(251,113,133,.55)]" />
-                              <div>
-                                <div className="text-[10px] font-semibold tracking-[0.18em] text-rose-400 uppercase">Battery depleted</div>
-                                <div className="mt-0.5 text-[11px] text-zinc-500">Next charge is recharging</div>
+                        const isDepleted = puzzlesRemaining === 0;
+                        const isFull = puzzlesRemaining >= windowLimit;
+
+                        return (
+                          <div className="space-y-3">
+                            <div>
+                              {isDepleted ? (
+                                <div className="text-[11px] font-bold tracking-wide text-rose-400 uppercase">
+                                  BATTERY DEPLETED (0/{windowLimit})
+                                </div>
+                              ) : (
+                                <div className="text-xs font-semibold text-zinc-100">
+                                  {puzzlesRemaining} / {windowLimit} Puzzles Remaining
+                                </div>
+                              )}
+                              <div className="mt-1 text-[11px] font-mono text-zinc-400">
+                                {isFull ? (
+                                  `Battery full (${windowLimit}/${windowLimit})`
+                                ) : (
+                                  `Recharging in ${recharge.hours}h ${recharge.minutes}m ${recharge.seconds}s`
+                                )}
                               </div>
                             </div>
-                            <div className="px-4 py-3.5">
-                              <div className="font-mono text-[15px] tracking-tight text-zinc-100 tabular-nums">
-                                {recharge.hours}h {recharge.minutes}m {recharge.seconds}s
-                              </div>
-                              <div className="mt-0.5 text-[10px] tracking-wide text-zinc-500 uppercase">until fully charged</div>
+
+                            {puzzlesRemaining <= 12 && (
                               <button
                                 type="button"
                                 onClick={() => {
                                   setIsBatteryMenuOpen(false);
-                                  setPaywallReason("quota");
-                                  setIsQuotaModalOpen(true);
+                                  setIsRewardedAdOpen(true);
                                 }}
-                                className="mt-3.5 h-9 w-full cursor-pointer rounded-md bg-[#c29b78] text-xs font-bold text-[#0a0908] shadow-[0_6px_18px_rgba(194,155,120,.16)] transition-colors hover:bg-[#d2ae90]"
+                                className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-[#c29b78]/15 hover:bg-[#c29b78]/25 border border-[#c29b78]/40 text-[#c29b78] text-xs font-semibold transition-all cursor-pointer active:scale-95"
                               >
-                                Get Unlimited Charge <span className="opacity-70">• Pro</span>
+                                <Zap className="w-3.5 h-3.5 fill-[#c29b78]/20" />
+                                <span>Watch Ad (+3 Puzzles)</span>
                               </button>
-                            </div>
-                          </>
-                        ) : (
-                          <>
-                            <div className="border-b border-white/[0.06] px-4 py-3">
-                              <div className="flex items-center justify-between">
-                                <div className="text-xs font-medium text-zinc-200">
-                                  {puzzlesRemaining}/{windowLimit} charges remaining
-                                </div>
-                                {puzzlesRemaining === windowLimit && (
-                                  <span className="rounded-full bg-green-500/10 px-2 py-0.5 text-[9px] font-bold tracking-wider text-green-400 uppercase">Full</span>
-                                )}
-                              </div>
-                            </div>
-                            {puzzlesRemaining < windowLimit && (
-                              <div className="px-4 py-3.5">
-                                <div className="font-mono text-[13px] text-zinc-300 tabular-nums">
-                                  ~{recharge.hours}h {recharge.minutes}m to full charge
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setIsBatteryMenuOpen(false);
-                                    setPaywallReason("quota");
-                                    setIsQuotaModalOpen(true);
-                                  }}
-                                  className="mt-3 text-[11px] font-medium text-[#c29b78] cursor-pointer transition-colors hover:text-[#e0bd9d]"
-                                >
-                                  Upgrade to Pro for ∞ charge
-                                </button>
-                              </div>
                             )}
-                          </>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsBatteryMenuOpen(false);
+                                setPaywallReason("quota");
+                                setIsQuotaModalOpen(true);
+                              }}
+                              className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-gradient-to-r from-amber-400 to-[#c29b78] hover:from-amber-300 hover:to-[#dfba94] text-zinc-950 text-xs font-black uppercase tracking-wider shadow-sm transition-all cursor-pointer active:scale-95"
+                            >
+                              <Sparkles className="w-3.5 h-3.5" />
+                              <span>Get Unlimited Charge</span>
+                            </button>
+                          </div>
                         );
                       })()}
                     </div>
@@ -2006,7 +2076,7 @@ export function PlayView({
                 <div className="flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-[#c29b78] animate-ping" />
                   <span className="text-xs font-black text-[#c29b78] uppercase tracking-wider">
-                    Placement Test • Puzzle {currentCalibrationStep} of 6
+                    Placement Test | Puzzle {currentCalibrationStep} of 6
                   </span>
                 </div>
                 <span className="text-[10px] text-[#a3a3a3] font-mono">
@@ -2076,7 +2146,7 @@ export function PlayView({
                   className="p-2.5 rounded-xl bg-gradient-to-r from-[#22201e] via-[#2a241d] to-[#22201e] border border-amber-500/40 shadow-lg flex items-center justify-between gap-2 cursor-pointer hover:border-amber-500/70 transition-all active:scale-98"
                 >
                   <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-amber-400 text-sm shrink-0">⚡</span>
+                    <Zap className="w-4 h-4 text-amber-400 shrink-0 fill-amber-400/20" />
                     <div className="flex flex-col min-w-0">
                       <div className="flex items-center gap-1.5">
                         <span className="text-xs font-black text-white">Daily Limit Reached</span>
@@ -2085,7 +2155,7 @@ export function PlayView({
                         </span>
                       </div>
                       <span className="text-[10px] text-zinc-400 truncate font-mono">
-                        Refill in {Math.floor(resetsInMs / 3600000)}h {Math.floor((resetsInMs % 3600000) / 60000)}m • Solved puzzle shown
+                        Refill in {Math.floor(resetsInMs / 3600000)}h {Math.floor((resetsInMs % 3600000) / 60000)}m | Solved puzzle shown
                       </span>
                     </div>
                   </div>
@@ -2104,49 +2174,60 @@ export function PlayView({
                 </div>
               </div>
             )}
-            <PuzzleCard
-              key={`${currentPuzzle.instanceId || currentPuzzle.id}-${currentIndex}`}
-              puzzle={currentPuzzle}
-              instanceId={currentPuzzle.instanceId}
-              status={puzzleStatus}
-              savedState={currentPuzzle ? puzzleStates[currentPuzzle.instanceId || currentPuzzle.id] : undefined}
-              onSavePuzzleState={handleSavePuzzleState}
-              isAlreadyRated={currentPuzzle ? getIsPuzzleAlreadyRated(currentPuzzle) : false}
-              ratedPuzzleIds={ratedPuzzleIds}
-              puzzleRatingHistory={puzzleRatingHistory}
-              onMarkRated={markPuzzleRated}
-              currentElo={currentElo}
-              userId={userAccount?.id}
-              guestId={userAccount?.id || guestId}
-              streak={dailyStreak}
-              combo={combo}
-              canPlay={canPlay}
-              isPaywallOpen={isQuotaModalOpen}
-              lastEloChange={lastEloChange}
-              isCalibration={isCalibrating}
-              calibrationStep={currentCalibrationStep}
-              mode="ranked"
-              isPro={isPro}
-              canGoPrev={currentIndex > 0}
-              currentIndex={currentIndex}
-              slideDirection={slideDirection}
-              onModeChange={(m) => {
-                if (m === "practice") {
-                  if (!isPro) {
-                    setPaywallReason("practice");
-                    setIsQuotaModalOpen(true);
-                  } else {
-                    router.push("/practice");
+            {showReelAd && !isPro ? (
+              <ReelAdCard
+                isPro={isPro}
+                onContinue={() => goToNextPuzzle(true)}
+                onUpgradeToPro={() => {
+                  setPaywallReason("quota");
+                  setIsQuotaModalOpen(true);
+                }}
+              />
+            ) : (
+              <PuzzleCard
+                key={`${currentPuzzle.instanceId || currentPuzzle.id}-${currentIndex}`}
+                puzzle={currentPuzzle}
+                instanceId={currentPuzzle.instanceId}
+                status={puzzleStatus}
+                savedState={currentPuzzle ? puzzleStates[currentPuzzle.instanceId || currentPuzzle.id] : undefined}
+                onSavePuzzleState={handleSavePuzzleState}
+                isAlreadyRated={currentPuzzle ? getIsPuzzleAlreadyRated(currentPuzzle) : false}
+                ratedPuzzleIds={ratedPuzzleIds}
+                puzzleRatingHistory={puzzleRatingHistory}
+                onMarkRated={markPuzzleRated}
+                currentElo={currentElo}
+                userId={userAccount?.id}
+                guestId={userAccount?.id || guestId}
+                streak={dailyStreak}
+                combo={combo}
+                canPlay={canPlay}
+                isPaywallOpen={isQuotaModalOpen}
+                lastEloChange={lastEloChange}
+                isCalibration={isCalibrating}
+                calibrationStep={currentCalibrationStep}
+                mode="ranked"
+                isPro={isPro}
+                canGoPrev={currentIndex > 0}
+                currentIndex={currentIndex}
+                slideDirection={slideDirection}
+                onModeChange={(m) => {
+                  if (m === "practice") {
+                    if (!isPro) {
+                      setPaywallReason("practice");
+                      setIsQuotaModalOpen(true);
+                    } else {
+                      router.push("/practice");
+                    }
                   }
-                }
-              }}
-              onStatusChange={handleStatusChange}
-              onEloUpdate={handleEloUpdate}
-              onEloPayout={processEloResult}
-              onNextPuzzle={goToNextPuzzle}
-              onPrevPuzzle={goToPrevPuzzle}
-              onOpenStats={() => setIsStatsModalOpen(true)}
-            />
+                }}
+                onStatusChange={handleStatusChange}
+                onEloUpdate={handleEloUpdate}
+                onEloPayout={processEloResult}
+                onNextPuzzle={goToNextPuzzle}
+                onPrevPuzzle={goToPrevPuzzle}
+                onOpenStats={() => setIsStatsModalOpen(true)}
+              />
+            )}
           </div>
         )}
       </main>
@@ -2236,6 +2317,23 @@ export function PlayView({
           setPaywallReason("quota");
           setIsQuotaModalOpen(true);
         }}
+      />
+
+      {/* Rewarded Ad Modal (+3 puzzles) */}
+      <RewardedAdModal
+        isOpen={isRewardedAdOpen}
+        onClose={() => setIsRewardedAdOpen(false)}
+        onRewardEarned={(data) => {
+          applyBonusRecharge(data.puzzlesRemaining, data.nextQuotaRefillTime);
+          const existing = getStoredUserStats();
+          saveUserStatsSync({
+            ...existing,
+            puzzlesRemaining: data.puzzlesRemaining,
+            nextQuotaRefillTime: data.nextQuotaRefillTime || null,
+          });
+        }}
+        userId={userAccount?.id}
+        currentPuzzlesRemaining={puzzlesRemaining}
       />
 
       {/* 5. Free Tier Quota Paywall Modal (5 puzzles per 4h window) */}

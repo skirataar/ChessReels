@@ -424,10 +424,24 @@ export function useTierQuota(
     await syncWithServer();
   }, [userId, syncWithServer]);
 
+  const applyBonusRecharge = useCallback((newRemaining: number, newResetAt?: string | null) => {
+    setPuzzlesRemaining(newRemaining);
+    setCanPlay(newRemaining > 0);
+    if (newResetAt) {
+      const parsed = new Date(newResetAt).getTime();
+      if (Number.isFinite(parsed)) {
+        setResetsAt(parsed);
+        setResetsInMs(Math.max(0, parsed - Date.now()));
+      }
+    }
+  }, []);
+
   return {
     isPro,
     canPlay,
     puzzlesRemaining,
+    setPuzzlesRemaining,
+    applyBonusRecharge,
     windowLimit: config.freePuzzleLimit,
     windowHours: config.freeWindowHours,
     adFrequency: config.adFrequencyPuzzles,
