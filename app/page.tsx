@@ -904,8 +904,8 @@ export default function RootPage() {
   }
 
   return (
-    <div className="h-dvh w-screen overflow-hidden select-none bg-[#0a0908] text-[#f5f2eb] flex flex-col items-center justify-center p-3 sm:p-6 font-sans">
-      <div className="max-w-[390px] w-full h-full max-h-[720px] flex flex-col justify-between relative overflow-hidden">
+    <div className="min-h-screen w-full select-none bg-[#0a0908] text-[#f5f2eb] flex flex-col items-center justify-start p-3 sm:p-6 font-sans overflow-x-hidden overflow-y-auto">
+      <div className="max-w-[390px] w-full min-h-[640px] max-h-[760px] flex flex-col justify-between relative overflow-hidden shrink-0 my-auto">
         {/* --- Top Progress Bar & Back Navigation (Steps 1, 2, 3, and Auth) --- */}
         {step !== "gate" && (
           <div className="flex items-center gap-3 w-full pt-2 pb-4 shrink-0">
@@ -994,6 +994,23 @@ export default function RootPage() {
                     <LogIn className="w-4 h-4 stroke-[2]" />
                     <span>Sign In</span>
                   </button>
+
+                  {/* Public Legal Compliance Links */}
+                  <div className="pt-2 flex items-center justify-center gap-3 text-[10px] text-zinc-500 font-mono">
+                    <a
+                      href="/privacy"
+                      className="hover:text-[#c29b78] transition-colors underline underline-offset-2"
+                    >
+                      Privacy Policy
+                    </a>
+                    <span className="w-1 h-1 rounded-full bg-zinc-700 inline-block" aria-hidden="true" />
+                    <a
+                      href="/terms"
+                      className="hover:text-[#c29b78] transition-colors underline underline-offset-2"
+                    >
+                      Terms of Service
+                    </a>
+                  </div>
                 </div>
               </motion.div>
             )}
@@ -1623,6 +1640,47 @@ export default function RootPage() {
           </AnimatePresence>
         </div>
       </div>
+
+      {/* --- Semantic SEO & AdSense Crawler Content Block (350+ Words) --- */}
+      {step === "gate" && (
+        <section
+          aria-label="About DoomChess"
+          className="w-full max-w-xl mx-auto mt-10 pt-8 border-t border-white/[0.08] text-xs text-zinc-400 space-y-4 px-4 pb-12 leading-relaxed"
+        >
+          <h2 className="text-sm font-bold uppercase tracking-wider text-[#c29b78]">
+            About DoomChess — Tactical Chess Puzzle Reels &amp; Elo Mastery
+          </h2>
+          <p>
+            DoomChess is a web-based chess training platform engineered to convert passive screen time into sharp tactical pattern recognition. Rather than aimless scrolling, DoomChess presents short-form vertical chess puzzle reels tailored dynamically to your skill level. Every puzzle presents a real game position where a decisive combination, defensive save, or winning tactical maneuver must be identified and executed.
+          </p>
+          <h3 className="text-xs font-semibold text-zinc-200">Adaptive Elo Rating &amp; Calibration</h3>
+          <p>
+            Your tactical strength is measured through an adaptive rating algorithm. When you begin, an onboarding calibration sequence benchmarks your baseline Elo. As you solve or fail puzzles, your rating recalculates in real time based on puzzle difficulty, completion accuracy, and hint usage. Daily streaks track your training consistency, with Streak Freezes available to preserve your momentum during busy days.
+          </p>
+          <h3 className="text-xs font-semibold text-zinc-200">Tactical Themes &amp; Pattern Recognition</h3>
+          <p>
+            Master essential chess motifs through repetitive, curated exposure. DoomChess curates hundreds of thousands of authentic positions featuring forks, pins, skewers, discovered attacks, deflection, overloaded defenders, back-rank weaknesses, and smothered mates. Immediate visual board feedback reinforces correct moves and highlights tactical missteps, building instinctive board vision.
+          </p>
+          <h3 className="text-xs font-semibold text-zinc-200">Distraction-Free Dark Luxury Interface</h3>
+          <p>
+            Built for focused practice on mobile devices and desktop displays, DoomChess features high-contrast custom board themes, crisp vector chess pieces, and smooth gesture navigation. Swipe up to progress to the next puzzle reel, review move history with step controls, or challenge friends on the global leaderboard.
+          </p>
+          <footer className="pt-4 flex flex-wrap items-center justify-between gap-3 text-[11px] text-zinc-500 border-t border-white/[0.04]">
+            <span>2026 DoomChess. All rights reserved.</span>
+            <div className="flex items-center gap-3">
+              <a href="/privacy" className="hover:text-[#c29b78] transition-colors underline underline-offset-2">
+                Privacy Policy
+              </a>
+              <a href="/terms" className="hover:text-[#c29b78] transition-colors underline underline-offset-2">
+                Terms of Service
+              </a>
+              <a href="/play" className="hover:text-[#c29b78] transition-colors underline underline-offset-2">
+                Play Online
+              </a>
+            </div>
+          </footer>
+        </section>
+      )}
     </div>
   );
 }
