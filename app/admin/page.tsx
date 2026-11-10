@@ -93,7 +93,7 @@ export default function AdminPage() {
     proMonthlyPrice: number;
     annualDiscountPercent: number;
   }>({
-    freePuzzleLimit: 4,
+    freePuzzleLimit: 15,
     freeWindowHours: 4,
     adFrequencyPuzzles: 2,
     proMonthlyPrice: 200,

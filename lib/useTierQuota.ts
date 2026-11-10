@@ -69,6 +69,17 @@ function getInitialTierState(effectivePro: boolean, userId?: string) {
   }
   if (typeof window !== "undefined") {
     try {
+      let cachedPuzzlesRemaining: number | undefined;
+      try {
+        const rawStats = window.localStorage.getItem("chessreels_user_stats_v1");
+        if (rawStats) {
+          const parsedStats = JSON.parse(rawStats);
+          if (typeof parsedStats.puzzlesRemaining === "number") {
+            cachedPuzzlesRemaining = parsedStats.puzzlesRemaining;
+          }
+        }
+      } catch {}
+
       const storageKey = getTierStorageKey(userId);
       const raw = window.localStorage.getItem(storageKey) || window.localStorage.getItem("chess_reel_tier_session");
       if (raw) {
@@ -76,7 +87,10 @@ function getInitialTierState(effectivePro: boolean, userId?: string) {
         const now = Date.now();
         const windowMs = activeConfig.freeWindowHours * 3600 * 1000;
         const validTimestamps = (parsed.solveTimestamps || []).filter((t) => now - t < windowMs);
-        const remaining = Math.max(0, activeConfig.freePuzzleLimit - validTimestamps.length);
+        let remaining = Math.max(0, activeConfig.freePuzzleLimit - validTimestamps.length);
+        if (typeof cachedPuzzlesRemaining === "number") {
+          remaining = Math.min(activeConfig.freePuzzleLimit, Math.max(remaining, cachedPuzzlesRemaining));
+        }
         const canPlay = remaining > 0;
         let resetsInMs = 0;
         if (remaining === 0 && validTimestamps.length > 0) {
@@ -88,6 +102,13 @@ function getInitialTierState(effectivePro: boolean, userId?: string) {
           canPlay,
           resetsInMs,
           puzzlesSinceLastAd: parsed.puzzlesSinceLastAd || 0,
+        };
+      } else if (typeof cachedPuzzlesRemaining === "number") {
+        return {
+          puzzlesRemaining: cachedPuzzlesRemaining,
+          canPlay: cachedPuzzlesRemaining > 0,
+          resetsInMs: 0,
+          puzzlesSinceLastAd: 0,
         };
       }
     } catch {}
@@ -259,7 +280,10 @@ export function useTierQuota(
             ? Math.max(data.quota.usedInWindow || 0, localValidTimestamps.length)
             : (data.quota.usedInWindow !== undefined ? data.quota.usedInWindow : localValidTimestamps.length);
 
-          const remaining = Math.max(0, limit - used);
+          const remaining = typeof data.quota.puzzlesRemaining === "number"
+            ? data.quota.puzzlesRemaining
+            : Math.max(0, limit - used);
+
           const effectiveCanPlay = remaining > 0;
           const resets = data.quota.resetsInMs || 0;
           const serverResetAt = typeof data.quota.resetsAt === "string"
@@ -270,6 +294,19 @@ export function useTierQuota(
           setCanPlay(effectiveCanPlay);
           setResetsInMs(resets);
           setResetsAt(Number.isFinite(serverResetAt) ? serverResetAt : Date.now() + resets);
+
+          // Update local tier timestamps so they stay aligned with server remaining
+          try {
+            if (typeof window !== "undefined") {
+              const neededCount = Math.max(0, limit - remaining);
+              const trimmedTimestamps = localValidTimestamps.slice(-neededCount);
+              const sessionData: LocalTierSession = {
+                solveTimestamps: trimmedTimestamps,
+                puzzlesSinceLastAd: localValidTimestamps.length,
+              };
+              window.localStorage.setItem(storageKey, JSON.stringify(sessionData));
+            }
+          } catch {}
         }
       }
     } catch (e) {
@@ -425,7 +462,29 @@ export function useTierQuota(
         setResetsInMs(Math.max(0, parsed - Date.now()));
       }
     }
-  }, []);
+
+    // Keep local storage tier session timestamps in sync so refresh never reverts to 0
+    if (typeof window !== "undefined") {
+      try {
+        const storageKey = getTierStorageKey(userId);
+        const raw = window.localStorage.getItem(storageKey);
+        const parsed: LocalTierSession = raw ? JSON.parse(raw) : { solveTimestamps: [], puzzlesSinceLastAd: 0 };
+        const targetUsed = Math.max(0, config.freePuzzleLimit - newRemaining);
+        parsed.solveTimestamps = (parsed.solveTimestamps || []).slice(-targetUsed);
+        window.localStorage.setItem(storageKey, JSON.stringify(parsed));
+      } catch {}
+
+      try {
+        const rawStats = window.localStorage.getItem("chessreels_user_stats_v1");
+        if (rawStats) {
+          const parsed = JSON.parse(rawStats);
+          parsed.puzzlesRemaining = newRemaining;
+          if (newResetAt) parsed.nextQuotaRefillTime = newResetAt;
+          window.localStorage.setItem("chessreels_user_stats_v1", JSON.stringify(parsed));
+        }
+      } catch {}
+    }
+  }, [userId, config.freePuzzleLimit]);
 
   return {
     isPro,

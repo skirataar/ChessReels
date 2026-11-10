@@ -37,6 +37,7 @@ interface QuotaPaywallModalProps {
   limit?: number;
   windowHours?: number;
   reason?: "quota" | "practice";
+  onWatchAd?: () => void;
 }
 
 type PlanType = "monthly" | "yearly";
@@ -214,9 +215,10 @@ export function QuotaPaywallModal({
   onClose,
   onUpgradeComplete,
   resetsInMs,
-  limit = 4,
+  limit = 15,
   windowHours = 4,
   reason = "quota",
+  onWatchAd,
 }: QuotaPaywallModalProps) {
   const [msLeft, setMsLeft] = useState<number>(resetsInMs);
   const [selectedPlan, setSelectedPlan] = useState<PlanType>("yearly");
@@ -768,7 +770,7 @@ export function QuotaPaywallModal({
             {
               icon: InfinityIcon,
               title: "Unlimited Daily Tactical Reels",
-              text: "No 4-puzzle window cooldown",
+              text: "No 15-puzzle window cooldown",
             },
             {
               icon: Zap,
@@ -944,6 +946,21 @@ export function QuotaPaywallModal({
           >
             {reason === "practice" ? "Maybe later" : "Wait for free refill"}
           </button>
+
+          {reason === "quota" && onWatchAd && (
+            <button
+              data-testid="paywall-watch-ad-btn"
+              type="button"
+              onClick={() => {
+                onClose();
+                onWatchAd();
+              }}
+              className="w-full py-2.5 rounded-xl bg-[#c29b78]/15 hover:bg-[#c29b78]/25 border border-[#c29b78]/40 text-[#c29b78] font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.985]"
+            >
+              <Zap className="w-3.5 h-3.5 fill-[#c29b78]/20" />
+              <span>Watch Ad (+3 Puzzles)</span>
+            </button>
+          )}
 
           <div className="flex items-center justify-center gap-1.5 text-[9px] text-zinc-600 pt-0.5">
             <Lock className="w-2.5 h-2.5" />
