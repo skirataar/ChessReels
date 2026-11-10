@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import prisma from "./prisma";
+import prisma, { withDbRetry } from "./prisma";
 import { isActiveProAccount, SubscriptionFields } from "./tierTypes";
 
 export type BillingProvider = "razorpay" | "global";
@@ -68,10 +68,12 @@ export async function activateSubscription(input: {
   providerSubscriptionId?: string | null;
   currentPeriodEnd?: Date | null;
 }): Promise<SubscriptionSnapshot | null> {
-  const existing = await prisma.user.findUnique({
-    where: { id: input.userId },
-    select: { currentPeriodEnd: true },
-  });
+  const existing = await withDbRetry(() =>
+    prisma.user.findUnique({
+      where: { id: input.userId },
+      select: { currentPeriodEnd: true },
+    })
+  );
 
   if (!existing) return null;
 
@@ -85,20 +87,22 @@ export async function activateSubscription(input: {
       ? input.currentPeriodEnd
       : computePeriodEnd(input.plan, base);
 
-  const user = await prisma.user.update({
-    where: { id: input.userId },
-    data: {
-      isPro: true,
-      subscriptionStatus: "active",
-      subscriptionPlan: input.plan,
-      paymentProvider: input.provider,
-      providerSubscriptionId: input.providerSubscriptionId ?? undefined,
-      currentPeriodEnd: periodEnd,
-      // Keep the legacy field in sync for older UI that only knows "premium".
-      plan: "premium",
-    },
-    select: SUBSCRIPTION_SELECT,
-  });
+  const user = await withDbRetry(() =>
+    prisma.user.update({
+      where: { id: input.userId },
+      data: {
+        isPro: true,
+        subscriptionStatus: "active",
+        subscriptionPlan: input.plan,
+        paymentProvider: input.provider,
+        providerSubscriptionId: input.providerSubscriptionId ?? undefined,
+        currentPeriodEnd: periodEnd,
+        // Keep the legacy field in sync for older UI that only knows "premium".
+        plan: "premium",
+      },
+      select: SUBSCRIPTION_SELECT,
+    })
+  );
 
   return user as SubscriptionSnapshot;
 }
@@ -118,38 +122,44 @@ export async function cancelSubscription(input: {
   let targetUserId = input.userId || null;
 
   if (!targetUserId && input.providerSubscriptionId) {
-    const byProvider = await prisma.user.findFirst({
-      where: { providerSubscriptionId: input.providerSubscriptionId },
-      select: { id: true },
-    });
+    const byProvider = await withDbRetry(() =>
+      prisma.user.findFirst({
+        where: { providerSubscriptionId: input.providerSubscriptionId },
+        select: { id: true },
+      })
+    );
     targetUserId = byProvider?.id || null;
   }
 
   if (!targetUserId) return null;
 
-  const existing = await prisma.user.findUnique({
-    where: { id: targetUserId },
-    select: { currentPeriodEnd: true, providerSubscriptionId: true },
-  });
+  const existing = await withDbRetry(() =>
+    prisma.user.findUnique({
+      where: { id: targetUserId },
+      select: { currentPeriodEnd: true, providerSubscriptionId: true },
+    })
+  );
   if (!existing) return null;
 
   const periodEnd = input.currentPeriodEnd ?? existing.currentPeriodEnd ?? null;
   const periodEndMs = periodEnd ? new Date(periodEnd).getTime() : 0;
   const stillEntitled = !input.revokeImmediately && periodEndMs > Date.now();
 
-  const user = await prisma.user.update({
-    where: { id: targetUserId },
-    data: {
-      subscriptionStatus: input.status ?? "cancelled",
-      paymentProvider: input.provider,
-      providerSubscriptionId:
-        input.providerSubscriptionId ?? existing.providerSubscriptionId ?? undefined,
-      currentPeriodEnd: periodEnd,
-      isPro: stillEntitled,
-      plan: stillEntitled ? "premium" : "free",
-    },
-    select: SUBSCRIPTION_SELECT,
-  });
+  const user = await withDbRetry(() =>
+    prisma.user.update({
+      where: { id: targetUserId },
+      data: {
+        subscriptionStatus: input.status ?? "cancelled",
+        paymentProvider: input.provider,
+        providerSubscriptionId:
+          input.providerSubscriptionId ?? existing.providerSubscriptionId ?? undefined,
+        currentPeriodEnd: periodEnd,
+        isPro: stillEntitled,
+        plan: stillEntitled ? "premium" : "free",
+      },
+      select: SUBSCRIPTION_SELECT,
+    })
+  );
 
   return user as SubscriptionSnapshot;
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import prisma, { withDbRetry, sanitizeDbError } from "@/lib/prisma";
 import { hashPassword } from "@/lib/auth";
 import { isGuestUserId } from "@/lib/guestAccount";
 import { isActiveProAccount } from "@/lib/tierTypes";
@@ -209,7 +209,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Account creation failed:", error);
     return NextResponse.json(
-      { error: "Failed to create account. Please try again." },
+      { error: sanitizeDbError(error) || "Failed to create account. Please try again." },
       { status: 500 }
     );
   }
@@ -228,45 +228,47 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const user = await prisma.user.findFirst({
-      where: userId
-        ? { id: userId }
-        : { username: username?.trim().toLowerCase() },
-      select: {
-        id: true,
-        username: true,
-        displayName: true,
-        avatar: true,
-        elo: true,
-        peakElo: true,
-        targetElo: true,
-        streak: true,
-        bestStreak: true,
-        lastSolvedDate: true,
-        streakFreezes: true,
-        perfectWeekCounter: true,
-        isFrozenState: true,
-        solvedPuzzleIds: true,
-        savedPuzzleIds: true,
-        likedPuzzleIds: true,
-        autoAdvance: true,
-        soundEnabled: true,
-        showCoordinates: true,
-        isCalibrated: true,
-        calibrationStep: true,
-        plan: true,
-        isPro: true,
-        subscriptionStatus: true,
-        subscriptionPlan: true,
-        paymentProvider: true,
-        providerSubscriptionId: true,
-        currentPeriodEnd: true,
-        createdAt: true,
-        email: true,
-        googleId: true,
-        passwordHash: true,
-      },
-    });
+    const user = await withDbRetry(() =>
+      prisma.user.findFirst({
+        where: userId
+          ? { id: userId }
+          : { username: username?.trim().toLowerCase() },
+        select: {
+          id: true,
+          username: true,
+          displayName: true,
+          avatar: true,
+          elo: true,
+          peakElo: true,
+          targetElo: true,
+          streak: true,
+          bestStreak: true,
+          lastSolvedDate: true,
+          streakFreezes: true,
+          perfectWeekCounter: true,
+          isFrozenState: true,
+          solvedPuzzleIds: true,
+          savedPuzzleIds: true,
+          likedPuzzleIds: true,
+          autoAdvance: true,
+          soundEnabled: true,
+          showCoordinates: true,
+          isCalibrated: true,
+          calibrationStep: true,
+          plan: true,
+          isPro: true,
+          subscriptionStatus: true,
+          subscriptionPlan: true,
+          paymentProvider: true,
+          providerSubscriptionId: true,
+          currentPeriodEnd: true,
+          createdAt: true,
+          email: true,
+          googleId: true,
+          passwordHash: true,
+        },
+      })
+    );
 
     if (!user) {
       return NextResponse.json({ error: "User not found." }, { status: 404 });
@@ -311,7 +313,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("Failed to fetch user:", error);
     return NextResponse.json(
-      { error: "Internal server error." },
+      { error: sanitizeDbError(error) },
       { status: 500 }
     );
   }
@@ -444,7 +446,7 @@ export async function PATCH(request: NextRequest) {
   } catch (error) {
     console.error("Failed to update user profile:", error);
     return NextResponse.json(
-      { error: "Failed to update profile." },
+      { error: sanitizeDbError(error) || "Failed to update profile." },
       { status: 500 }
     );
   }

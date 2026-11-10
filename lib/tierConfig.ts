@@ -1,4 +1,4 @@
-import prisma from "./prisma";
+import prisma, { withDbRetry } from "./prisma";
 import {
   TierConfig,
   DEFAULT_TIER_CONFIG,
@@ -12,12 +12,15 @@ export { DEFAULT_TIER_CONFIG, isProPlan };
 let cachedConfig: TierConfig | null = null;
 let lastFetchTime = 0;
 const CACHE_TTL_MS = 15 * 1000; // 15 seconds cache
+let settingsTableEnsured = false;
 
 /**
  * Ensure the system_settings table exists in PostgreSQL.
  */
 export async function ensureSettingsTable(): Promise<void> {
+  if (settingsTableEnsured) return;
   try {
+    settingsTableEnsured = true;
     await prisma.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS "system_settings" (
         "key" VARCHAR(255) PRIMARY KEY,
@@ -207,18 +210,20 @@ export async function checkUserQuota(
 
   if (userId && !userId.startsWith("guest-")) {
     try {
-      const dbUser = await prisma.user.findUnique({
-        where: { id: userId },
-        select: {
-          plan: true,
-          bonusQuota: true,
-          isPro: true,
-          subscriptionStatus: true,
-          subscriptionPlan: true,
-          paymentProvider: true,
-          currentPeriodEnd: true,
-        },
-      });
+      const dbUser = await withDbRetry(() =>
+        prisma.user.findUnique({
+          where: { id: userId },
+          select: {
+            plan: true,
+            bonusQuota: true,
+            isPro: true,
+            subscriptionStatus: true,
+            subscriptionPlan: true,
+            paymentProvider: true,
+            currentPeriodEnd: true,
+          },
+        })
+      );
       effectivePro = isActiveProAccount(dbUser);
       subscriptionStatus = dbUser?.subscriptionStatus ?? "none";
       subscriptionPlan = dbUser?.subscriptionPlan ?? null;
@@ -256,15 +261,17 @@ export async function checkUserQuota(
 
   try {
     // Find all solves recorded in the active rolling window (only successful solves count towards quota)
-    const recentSolves = await prisma.puzzleHistory.findMany({
-      where: {
-        userId,
-        result: "win",
-        solvedAt: { gte: windowStart },
-      },
-      orderBy: { solvedAt: "asc" },
-      select: { solvedAt: true },
-    });
+    const recentSolves = await withDbRetry(() =>
+      prisma.puzzleHistory.findMany({
+        where: {
+          userId,
+          result: "win",
+          solvedAt: { gte: windowStart },
+        },
+        orderBy: { solvedAt: "asc" },
+        select: { solvedAt: true },
+      })
+    );
 
     const usedInWindow = recentSolves.length;
 

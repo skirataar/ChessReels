@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import prisma, { withDbRetry, sanitizeDbError } from "@/lib/prisma";
 import {
   isLemonSqueezyConfigured,
   isRazorpayConfigured,
@@ -159,10 +159,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { id: true, email: true, username: true },
-    });
+    const user = await withDbRetry(() =>
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, email: true, username: true },
+      })
+    );
 
     if (!user) {
       return NextResponse.json({ error: "User account not found." }, { status: 404 });
@@ -244,7 +246,7 @@ export async function POST(request: NextRequest) {
       {
         error:
           error instanceof Error
-            ? error.message
+            ? sanitizeDbError(error)
             : "Could not start checkout. Please try again.",
       },
       { status: 502 }

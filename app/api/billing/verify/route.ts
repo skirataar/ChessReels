@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import prisma, { withDbRetry, sanitizeDbError } from "@/lib/prisma";
 import {
   activateSubscription,
   computePeriodEnd,
@@ -280,16 +280,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        subscriptionPlan: true,
-        providerSubscriptionId: true,
-        isPro: true,
-        currentPeriodEnd: true,
-      },
-    });
+    const user = await withDbRetry(() =>
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          subscriptionPlan: true,
+          providerSubscriptionId: true,
+          isPro: true,
+          currentPeriodEnd: true,
+        },
+      })
+    );
 
     if (!user) {
       return NextResponse.json(
@@ -376,7 +378,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: "Could not verify the payment. Please try again.",
+        error: (error instanceof Error ? sanitizeDbError(error) : null) || "Could not verify the payment. Please try again.",
       },
       { status: 500 }
     );

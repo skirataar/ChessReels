@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import prisma, { withDbRetry, sanitizeDbError } from "@/lib/prisma";
 import { normalizePlan } from "@/lib/billing";
 import {
   createRazorpayOrder,
@@ -28,10 +28,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { id: true },
-    });
+    const user = await withDbRetry(() =>
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true },
+      })
+    );
     if (!user) {
       return NextResponse.json({ error: "User account not found." }, { status: 404 });
     }
@@ -112,7 +114,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { error: "Could not create the Razorpay order. Please try again." },
+      { error: (error instanceof Error ? sanitizeDbError(error) : null) || "Could not create the Razorpay order. Please try again." },
       { status: 500 }
     );
   }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import prisma, { withDbRetry, sanitizeDbError } from "@/lib/prisma";
 import { verifyPassword } from "@/lib/auth";
 import { isActiveProAccount } from "@/lib/tierTypes";
 
@@ -19,46 +19,48 @@ export async function POST(request: NextRequest) {
     const clean = rawIdentifier.trim();
 
     // Query user by username or email case-insensitively
-    const user = await prisma.user.findFirst({
-      where: {
-        OR: [
-          { email: { equals: clean, mode: "insensitive" } },
-          { username: { equals: clean, mode: "insensitive" } },
-        ],
-      },
-      select: {
-        id: true,
-        username: true,
-        displayName: true,
-        email: true,
-        avatar: true,
-        elo: true,
-        peakElo: true,
-        targetElo: true,
-        streak: true,
-        bestStreak: true,
-        lastSolvedDate: true,
-        streakFreezes: true,
-        perfectWeekCounter: true,
-        isFrozenState: true,
-        solvedPuzzleIds: true,
-        savedPuzzleIds: true,
-        likedPuzzleIds: true,
-        autoAdvance: true,
-        soundEnabled: true,
-        showCoordinates: true,
-        isCalibrated: true,
-        calibrationStep: true,
-        passwordHash: true,
-        googleId: true,
-        plan: true,
-        isPro: true,
-        subscriptionStatus: true,
-        subscriptionPlan: true,
-        paymentProvider: true,
-        currentPeriodEnd: true,
-      },
-    });
+    const user = await withDbRetry(() =>
+      prisma.user.findFirst({
+        where: {
+          OR: [
+            { email: { equals: clean, mode: "insensitive" } },
+            { username: { equals: clean, mode: "insensitive" } },
+          ],
+        },
+        select: {
+          id: true,
+          username: true,
+          displayName: true,
+          email: true,
+          avatar: true,
+          elo: true,
+          peakElo: true,
+          targetElo: true,
+          streak: true,
+          bestStreak: true,
+          lastSolvedDate: true,
+          streakFreezes: true,
+          perfectWeekCounter: true,
+          isFrozenState: true,
+          solvedPuzzleIds: true,
+          savedPuzzleIds: true,
+          likedPuzzleIds: true,
+          autoAdvance: true,
+          soundEnabled: true,
+          showCoordinates: true,
+          isCalibrated: true,
+          calibrationStep: true,
+          passwordHash: true,
+          googleId: true,
+          plan: true,
+          isPro: true,
+          subscriptionStatus: true,
+          subscriptionPlan: true,
+          paymentProvider: true,
+          currentPeriodEnd: true,
+        },
+      })
+    );
 
     if (!user) {
       return NextResponse.json(
@@ -104,10 +106,12 @@ export async function POST(request: NextRequest) {
       // Secure the account with the provided password
       const { hashPassword } = await import("@/lib/auth");
       const newHash = hashPassword(password);
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { passwordHash: newHash },
-      });
+      await withDbRetry(() =>
+        prisma.user.update({
+          where: { id: user.id },
+          data: { passwordHash: newHash },
+        })
+      );
     }
 
     // Clean user response object without secret fields
@@ -160,7 +164,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Login failed:", error);
     return NextResponse.json(
-      { error: "Failed to sign in. Please try again." },
+      { error: sanitizeDbError(error) || "Failed to sign in. Please try again." },
       { status: 500 }
     );
   }

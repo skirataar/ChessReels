@@ -70,6 +70,24 @@ interface PendingPayment {
 const FALLBACK_PRICING = getPricingForCountry("US");
 const PENDING_PAYMENT_KEY = "doomchess_pending_payment";
 
+function cleanModalErrorMessage(msg: string): string {
+  if (!msg) return "";
+  if (
+    msg.includes("max_client_conn") ||
+    msg.includes("08P01") ||
+    msg.includes("PrismaClient") ||
+    msg.includes("Can't reach database") ||
+    msg.includes("Connection pool") ||
+    msg.includes("connection pool") ||
+    msg.includes("connect ECONNREFUSED") ||
+    msg.includes("Raw query failed") ||
+    msg.includes("invocation:")
+  ) {
+    return "Server is busy. Please try again in a moment.";
+  }
+  return msg;
+}
+
 function loadRazorpayScript(): Promise<boolean> {
   return new Promise((resolve) => {
     if (typeof window === "undefined") return resolve(false);
@@ -258,7 +276,7 @@ export function QuotaPaywallModal({
     setErrorMessage("");
   }, [isOpen]);
 
-  // Resolve local pricing (edge geo header → timezone → USD default).
+  // Resolve local pricing (edge geo header -> timezone -> USD default).
   useEffect(() => {
     if (!isOpen) return;
 
@@ -694,7 +712,7 @@ export function QuotaPaywallModal({
       aria-label="Upgrade to DoomChess Pro"
       className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200"
     >
-      <div className="w-full max-w-[420px] max-h-[92dvh] overflow-y-auto flex flex-col rounded-[26px] bg-[#12100e] border border-[#c29b78]/30 shadow-[0_24px_80px_rgba(0,0,0,0.75)] text-[#f5f2eb] relative">
+      <div className="w-full max-w-[420px] max-h-[92dvh] overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] flex flex-col rounded-[26px] bg-[#12100e] border border-[#c29b78]/30 shadow-[0_24px_80px_rgba(0,0,0,0.75)] text-[#f5f2eb] relative">
         <div className="h-px w-full bg-gradient-to-r from-transparent via-[#c29b78]/70 to-transparent" />
 
         <button
@@ -706,7 +724,7 @@ export function QuotaPaywallModal({
         </button>
 
         {/* Header */}
-        <div className="px-6 pt-6 pb-4 bg-[radial-gradient(circle_at_top,rgba(194,155,120,0.16),transparent_62%)]">
+        <div className="px-5 pt-5 pb-3 bg-[radial-gradient(circle_at_top,rgba(194,155,120,0.16),transparent_62%)]">
           <div className="flex items-center gap-3">
             <div className="relative shrink-0">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#e2c3a4] via-[#c29b78] to-[#8a6849] flex items-center justify-center text-[#0a0908] shadow-lg shadow-[#c29b78]/20">
@@ -732,7 +750,7 @@ export function QuotaPaywallModal({
               <p className="text-[11px] text-zinc-400 leading-relaxed mt-0.5">
                 {reason === "practice"
                   ? "Custom tactical themes, unranked drills, and unlimited training."
-                  : `Free members get ${limit} puzzles every ${windowHours}h. Infinite Charge.`}
+                  : `Free members get ${limit} puzzles every ${windowHours}h. Upgrade for Infinite Charge.`}
               </p>
             </div>
           </div>
@@ -765,7 +783,7 @@ export function QuotaPaywallModal({
         </div>
 
         {/* Perks */}
-        <div className="px-6 pb-4 space-y-2.5">
+        <div className="px-5 pb-3 space-y-2">
           {[
             {
               icon: InfinityIcon,
@@ -805,7 +823,7 @@ export function QuotaPaywallModal({
         </div>
 
         {/* Plan toggle */}
-        <div className="px-6 pb-3">
+        <div className="px-5 pb-2.5">
           <div className="grid grid-cols-2 gap-1 p-1 rounded-2xl bg-[#0a0908] border border-white/[0.06]">
             <button
               type="button"
@@ -845,7 +863,7 @@ export function QuotaPaywallModal({
           </div>
 
           {/* Price */}
-          <div className="mt-3 rounded-2xl bg-[#0a0908]/80 border border-[#c29b78]/20 p-3.5">
+          <div className="mt-2.5 rounded-2xl bg-[#0a0908]/80 border border-[#c29b78]/20 p-3">
             <div className="flex items-end justify-between gap-2">
               <div>
                 <div className="flex items-baseline gap-1.5">
@@ -856,9 +874,11 @@ export function QuotaPaywallModal({
                     {selectedPlan === "yearly" ? "/year" : "/month"}
                   </span>
                 </div>
-                <div className="text-[10px] text-zinc-400 mt-0.5">
-                  {selectedPrice.subtext}
-                </div>
+                {selectedPlan === "yearly" && selectedPrice.subtext && (
+                  <div className="text-[10px] text-zinc-400 mt-0.5">
+                    {selectedPrice.subtext}
+                  </div>
+                )}
               </div>
 
               {selectedPlan === "yearly" && selectedPrice.monthlyEquivalent && (
@@ -881,13 +901,13 @@ export function QuotaPaywallModal({
         </div>
 
         {/* Actions */}
-        <div className="px-6 pb-5 pt-1 space-y-2">
+        <div className="px-5 pb-4 pt-1 space-y-2">
           {status === "error" && errorMessage && (
             <div
               role="alert"
               className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[11px] text-rose-300"
             >
-              {errorMessage}
+              {cleanModalErrorMessage(errorMessage)}
             </div>
           )}
 
@@ -908,6 +928,21 @@ export function QuotaPaywallModal({
             )}
             <span>{ctaLabel}</span>
           </button>
+
+          {reason === "quota" && onWatchAd && (
+            <button
+              data-testid="paywall-watch-ad-btn"
+              type="button"
+              onClick={() => {
+                onClose();
+                onWatchAd();
+              }}
+              className="w-full py-2.5 px-4 rounded-xl border border-[#c29b78]/40 bg-[#12100e] hover:bg-[#c29b78]/15 text-[#c29b78] font-semibold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-[0.985]"
+            >
+              <Zap className="w-3.5 h-3.5 fill-[#c29b78]/20" />
+              <span>Watch Ad (+3 Puzzles)</span>
+            </button>
+          )}
 
           <button
             data-testid="paywall-restore-purchase-btn"
@@ -946,21 +981,6 @@ export function QuotaPaywallModal({
           >
             {reason === "practice" ? "Maybe later" : "Wait for full charge"}
           </button>
-
-          {reason === "quota" && onWatchAd && (
-            <button
-              data-testid="paywall-watch-ad-btn"
-              type="button"
-              onClick={() => {
-                onClose();
-                onWatchAd();
-              }}
-              className="w-full py-2.5 rounded-xl bg-[#c29b78]/15 hover:bg-[#c29b78]/25 border border-[#c29b78]/40 text-[#c29b78] font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.985]"
-            >
-              <Zap className="w-3.5 h-3.5 fill-[#c29b78]/20" />
-              <span>Watch Ad (+3 Puzzles)</span>
-            </button>
-          )}
 
           <div className="flex items-center justify-center gap-1.5 text-[9px] text-zinc-600 pt-0.5">
             <Lock className="w-2.5 h-2.5" />

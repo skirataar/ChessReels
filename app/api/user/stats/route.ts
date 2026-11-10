@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import prisma, { withDbRetry, sanitizeDbError } from "@/lib/prisma";
 import { isGuestUserId } from "@/lib/guestAccount";
 import { isActiveProAccount } from "@/lib/tierTypes";
 import { checkUserQuota } from "@/lib/tierConfig";
@@ -44,28 +44,30 @@ export async function GET(request: NextRequest) {
       }, { headers: NO_CACHE_HEADERS });
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: targetUserId },
-      select: {
-        id: true,
-        elo: true,
-        peakElo: true,
-        streak: true,
-        bestStreak: true,
-        lastSolvedDate: true,
-        streakFreezes: true,
-        isFrozenState: true,
-        perfectWeekCounter: true,
-        isCalibrated: true,
-        calibrationStep: true,
-        plan: true,
-        isPro: true,
-        subscriptionStatus: true,
-        subscriptionPlan: true,
-        paymentProvider: true,
-        currentPeriodEnd: true,
-      },
-    });
+    const user = await withDbRetry(() =>
+      prisma.user.findUnique({
+        where: { id: targetUserId },
+        select: {
+          id: true,
+          elo: true,
+          peakElo: true,
+          streak: true,
+          bestStreak: true,
+          lastSolvedDate: true,
+          streakFreezes: true,
+          isFrozenState: true,
+          perfectWeekCounter: true,
+          isCalibrated: true,
+          calibrationStep: true,
+          plan: true,
+          isPro: true,
+          subscriptionStatus: true,
+          subscriptionPlan: true,
+          paymentProvider: true,
+          currentPeriodEnd: true,
+        },
+      })
+    );
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -107,7 +109,7 @@ export async function GET(request: NextRequest) {
     }, { headers: NO_CACHE_HEADERS });
   } catch (error) {
     console.error("[/api/user/stats GET] Error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json({ error: sanitizeDbError(error) }, { status: 500 });
   }
 }
 
@@ -121,9 +123,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, guest: true, saved: body });
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: targetUserId },
-    });
+    const user = await withDbRetry(() =>
+      prisma.user.findUnique({
+        where: { id: targetUserId },
+      })
+    );
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -156,30 +160,32 @@ export async function POST(request: NextRequest) {
     const nextIsFrozen =
       typeof body.isFrozenState === "boolean" ? body.isFrozenState : user.isFrozenState;
 
-    const updated = await prisma.user.update({
-      where: { id: targetUserId },
-      data: {
-        elo: nextElo,
-        peakElo: nextPeakElo,
-        streak: nextStreak,
-        bestStreak: nextBestStreak,
-        lastSolvedDate: nextLastSolvedDate,
-        streakFreezes: nextStreakFreezes,
-        perfectWeekCounter: nextPerfectWeek,
-        isFrozenState: nextIsFrozen,
-      },
-      select: {
-        id: true,
-        elo: true,
-        peakElo: true,
-        streak: true,
-        bestStreak: true,
-        lastSolvedDate: true,
-        streakFreezes: true,
-        isFrozenState: true,
-        perfectWeekCounter: true,
-      },
-    });
+    const updated = await withDbRetry(() =>
+      prisma.user.update({
+        where: { id: targetUserId },
+        data: {
+          elo: nextElo,
+          peakElo: nextPeakElo,
+          streak: nextStreak,
+          bestStreak: nextBestStreak,
+          lastSolvedDate: nextLastSolvedDate,
+          streakFreezes: nextStreakFreezes,
+          perfectWeekCounter: nextPerfectWeek,
+          isFrozenState: nextIsFrozen,
+        },
+        select: {
+          id: true,
+          elo: true,
+          peakElo: true,
+          streak: true,
+          bestStreak: true,
+          lastSolvedDate: true,
+          streakFreezes: true,
+          isFrozenState: true,
+          perfectWeekCounter: true,
+        },
+      })
+    );
 
     return NextResponse.json({
       success: true,
@@ -194,7 +200,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("[/api/user/stats POST] Error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json({ error: sanitizeDbError(error) }, { status: 500 });
   }
 }
 

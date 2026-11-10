@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import prisma, { withDbRetry, sanitizeDbError } from "@/lib/prisma";
 import {
   activateSubscription,
   computePeriodEnd,
@@ -433,18 +433,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        email: true,
-        subscriptionPlan: true,
-        providerSubscriptionId: true,
-        paymentProvider: true,
-        isPro: true,
-        currentPeriodEnd: true,
-      },
-    });
+    const user = await withDbRetry(() =>
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          email: true,
+          subscriptionPlan: true,
+          providerSubscriptionId: true,
+          paymentProvider: true,
+          isPro: true,
+          currentPeriodEnd: true,
+        },
+      })
+    );
 
     if (!user) {
       return NextResponse.json(
@@ -525,10 +527,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const updated = await prisma.user.findUnique({
-      where: { id: user.id },
-      select: USER_STATS_SELECT,
-    });
+    const updated = await withDbRetry(() =>
+      prisma.user.findUnique({
+        where: { id: user.id },
+        select: USER_STATS_SELECT,
+      })
+    );
 
     if (!updated) {
       return NextResponse.json(
@@ -578,7 +582,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: "Could not restore the purchase. Please try again.",
+        error: (error instanceof Error ? sanitizeDbError(error) : null) || "Could not restore the purchase. Please try again.",
       },
       { status: 500 }
     );
