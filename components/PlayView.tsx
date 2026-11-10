@@ -203,28 +203,34 @@ function ChargeBattery({ remaining, unlimited = false }: { remaining: number; un
         {/* Centered inner readout */}
         {unlimited ? (
           <svg
-            width="12"
-            height="6"
-            viewBox="0 0 12 6"
+            width="17"
+            height="8.5"
+            viewBox="1 5 22 14"
             fill="none"
             stroke="currentColor"
-            strokeWidth="1.2"
+            strokeWidth="2.6"
             strokeLinecap="round"
             strokeLinejoin="round"
-            className="text-[#0a0908] relative z-10"
+            className="text-[#0a0908] relative z-10 shrink-0"
             aria-hidden="true"
           >
-            <path d="M3 3 C1.8 1, 0.5 1, 0.5 3 C0.5 5, 1.8 5, 3 3 C4.2 1, 5.5 1, 5.5 3 C5.5 5, 4.2 5, 3 3 Z" />
+            <path d="M6 16c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" />
           </svg>
         ) : (
-          <span className="mix-blend-difference text-white relative z-10 font-mono text-[11px] font-extrabold leading-none tracking-tighter">
+          <span
+            className={`relative z-10 font-mono text-[11px] font-black leading-none tracking-tighter ${
+              remaining >= 10
+                ? "text-[#0a0908]"
+                : "text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]"
+            }`}
+          >
             {remaining}
           </span>
         )}
       </div>
       {/* Positive terminal nub */}
       <div
-        className={`w-[2.5px] h-2 rounded-r-full transition-colors ${
+        className={`w-[2.5px] h-[7.5px] rounded-r-[2px] transition-colors ${
           isFull ? "bg-[#c29b78]" : "bg-zinc-500/80"
         }`}
       />
@@ -1916,18 +1922,18 @@ export function PlayView({
                   <div className="absolute right-0 top-full mt-2 w-64 rounded-xl border border-[#c29b78]/30 bg-[#0a0908] p-3.5 shadow-2xl z-50 backdrop-blur-xl">
                     <div className="flex items-center gap-2">
                       <svg
-                        width="16"
-                        height="8"
-                        viewBox="0 0 12 6"
+                        width="18"
+                        height="9"
+                        viewBox="1 5 22 14"
                         fill="none"
                         stroke="currentColor"
-                        strokeWidth="1.5"
+                        strokeWidth="2.2"
                         strokeLinecap="round"
                         strokeLinejoin="round"
                         className="text-[#c29b78] shrink-0"
                         aria-hidden="true"
                       >
-                        <path d="M3 3 C1.8 1, 0.5 1, 0.5 3 C0.5 5, 1.8 5, 3 3 C4.2 1, 5.5 1, 5.5 3 C5.5 5, 4.2 5, 3 3 Z" />
+                        <path d="M6 16c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" />
                       </svg>
                       <div className="text-[11px] font-bold tracking-wider text-[#c29b78] uppercase">
                         PRO ACCOUNT / UNLIMITED CHARGE
