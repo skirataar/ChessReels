@@ -41,7 +41,7 @@ import { StreakFlameBadge } from "@/components/StreakFlameBadge";
 import { StreakCalendarDropdown } from "@/components/StreakCalendarDropdown";
 import { useTierQuota } from "@/lib/useTierQuota";
 import { clearGuestLocalSession, isGuestAccount, isGuestUserId } from "@/lib/guestAccount";
-import { RefreshCw, WifiOff, UserPlus, BarChart2, Trophy, Zap, Flame, Crown, Sparkles, User, Snowflake, Target, X, ChevronDown, ArrowRight } from "lucide-react";
+import { RefreshCw, WifiOff, UserPlus, BarChart2, Trophy, Zap, Flame, Crown, Sparkles, User, Snowflake, Target, X, ChevronDown, ArrowRight, Infinity as InfinityIcon } from "lucide-react";
 import { ReelAdCard } from "@/components/ReelAdCard";
 import { RewardedAdModal } from "@/components/RewardedAdModal";
 import { motion, AnimatePresence } from "framer-motion";
@@ -201,20 +201,11 @@ function ChargeBattery({ remaining, unlimited = false }: { remaining: number; un
         />
         {/* Centered inner readout */}
         {unlimited ? (
-          <svg
-            width="18"
-            height="9"
-            viewBox="0 0 32 16"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="text-[#0a0908] relative z-10 shrink-0"
+          <InfinityIcon
+            className="w-4 h-4 text-[#0a0908] relative z-10 shrink-0"
+            strokeWidth={2.5}
             aria-hidden="true"
-          >
-            <path d="M9 14 C4 14, 2 11.5, 2 8 C2 4.5, 4 2, 9 2 C14 2, 18 14, 23 14 C28 14, 30 11.5, 30 8 C30 4.5, 28 2, 23 2 C18 2, 14 14, 9 14 Z" />
-          </svg>
+          />
         ) : (
           <span
             className={`relative z-10 font-mono text-[11px] font-black leading-none tracking-tighter ${
@@ -1969,20 +1960,11 @@ export function PlayView({
                 {isBatteryMenuOpen && (
                   <div className="absolute right-0 top-full mt-2 w-64 rounded-xl border border-[#c29b78]/30 bg-[#0a0908] p-3.5 shadow-2xl z-50 backdrop-blur-xl">
                     <div className="flex items-center gap-2">
-                      <svg
-                        width="18"
-                        height="9"
-                        viewBox="0 0 32 16"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2.4"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        className="text-[#c29b78] shrink-0"
+                      <InfinityIcon
+                        className="w-4 h-4 text-[#c29b78] shrink-0"
+                        strokeWidth={2.2}
                         aria-hidden="true"
-                      >
-                        <path d="M9 14 C4 14, 2 11.5, 2 8 C2 4.5, 4 2, 9 2 C14 2, 18 14, 23 14 C28 14, 30 11.5, 30 8 C30 4.5, 28 2, 23 2 C18 2, 14 14, 9 14 Z" />
-                      </svg>
+                      />
                       <div className="text-[11px] font-bold tracking-wider text-[#c29b78] uppercase">
                         PRO ACCOUNT / UNLIMITED CHARGE
                       </div>

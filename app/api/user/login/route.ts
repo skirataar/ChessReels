@@ -6,23 +6,24 @@ import { isActiveProAccount } from "@/lib/tierTypes";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { username, password } = body;
+    const rawIdentifier = body.username ?? body.email ?? body.identifier;
+    const password = body.password;
 
-    if (!username || typeof username !== "string") {
+    if (!rawIdentifier || typeof rawIdentifier !== "string") {
       return NextResponse.json(
         { error: "Username or email is required." },
         { status: 400 }
       );
     }
 
-    const cleanUsername = username.trim().toLowerCase();
+    const clean = rawIdentifier.trim();
 
-    // Query user by username or email
+    // Query user by username or email case-insensitively
     const user = await prisma.user.findFirst({
       where: {
         OR: [
-          { username: cleanUsername },
-          { email: cleanUsername },
+          { email: { equals: clean, mode: "insensitive" } },
+          { username: { equals: clean, mode: "insensitive" } },
         ],
       },
       select: {
@@ -61,7 +62,7 @@ export async function POST(request: NextRequest) {
 
     if (!user) {
       return NextResponse.json(
-        { error: `Account "${cleanUsername}" does not exist. Please check your credentials.` },
+        { error: `Account "${clean}" does not exist. Please check your credentials.` },
         { status: 404 }
       );
     }
@@ -113,9 +114,9 @@ export async function POST(request: NextRequest) {
     const isPro = isActiveProAccount(user);
     const safeUser = {
       id: user.id,
-      username: user.username || cleanUsername,
+      username: user.username || clean,
       displayName: user.displayName || user.username,
-      avatar: user.avatar || "♟",
+      avatar: user.avatar || "P",
       elo: user.elo,
       peakElo: user.peakElo,
       targetElo: user.targetElo ?? 1500,
