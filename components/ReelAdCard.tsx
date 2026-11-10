@@ -14,15 +14,21 @@ export function ReelAdCard({
   onContinue,
   onUpgradeToPro,
 }: ReelAdCardProps) {
-  const [adSenseFailed, setAdSenseFailed] = useState(false);
-  const [isAdFilled, setIsAdFilled] = useState(false);
+  const [adStatus, setAdStatus] = useState<string>("uninitialized");
+  const [isAdTest, setIsAdTest] = useState<boolean>(false);
   const [adLockSeconds, setAdLockSeconds] = useState(3);
   const insRef = useRef<HTMLModElement | null>(null);
   const touchStartY = useRef<number | null>(null);
 
-  const clientId = process.env.NEXT_PUBLIC_ADSENSE_CLIENT_ID;
+  const clientId = process.env.NEXT_PUBLIC_ADSENSE_CLIENT_ID || "ca-pub-8026676969982075";
   const reelSlotId = process.env.NEXT_PUBLIC_ADSENSE_REEL_SLOT_ID;
-  const hasLiveAdSense = Boolean(clientId && reelSlotId && !adSenseFailed);
+
+  // Detect ?adtest=1 in URL
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setIsAdTest(window.location.search.includes("adtest=1"));
+    }
+  }, []);
 
   // 3-second mandatory countdown timer
   useEffect(() => {
@@ -33,53 +39,56 @@ export function ReelAdCard({
     return () => clearInterval(timer);
   }, [adLockSeconds]);
 
-  // Push AdSense unit if present
+  // Push AdSense unit once safely (guard against React StrictMode double push)
   useEffect(() => {
     if (isPro) return;
-    if (hasLiveAdSense) {
+    const el = insRef.current;
+    if (!el) return;
+
+    if (!el.getAttribute("data-adsbygoogle-status")) {
       try {
         const win = window as any;
         win.adsbygoogle = win.adsbygoogle || [];
         win.adsbygoogle.push({});
       } catch (err) {
         console.warn("Could not push AdSense unit:", err);
-        setAdSenseFailed(true);
+        setAdStatus("failed");
       }
     }
-  }, [hasLiveAdSense, isPro]);
+  }, [isPro]);
 
-  // Detect whether AdSense actually filled or if empty
+  // Detect live AdSense render / fill status
   useEffect(() => {
-    if (isPro || !hasLiveAdSense) return;
+    if (isPro) return;
 
-    const checkFill = () => {
+    const checkStatus = () => {
       const el = insRef.current;
       if (!el) return;
-      const status = el.getAttribute("data-ad-status");
-      if (status === "filled") {
-        setIsAdFilled(true);
-        return;
-      }
-      if (status === "unfilled") {
-        setIsAdFilled(false);
-        return;
-      }
-      // Check for filled iframe
+
+      const adSenseStatus = el.getAttribute("data-ad-status");
+      const googleStatus = el.getAttribute("data-adsbygoogle-status");
       const iframe = el.querySelector("iframe");
-      if (iframe && el.clientHeight > 50) {
-        setIsAdFilled(true);
+
+      if (adSenseStatus === "filled" || (iframe && el.clientHeight > 50)) {
+        setAdStatus("filled");
+      } else if (adSenseStatus === "unfilled") {
+        setAdStatus("unfilled");
+      } else if (googleStatus) {
+        setAdStatus(googleStatus);
+      } else if (iframe) {
+        setAdStatus("rendering");
       }
     };
 
-    checkFill();
-    const interval = setInterval(checkFill, 500);
+    checkStatus();
+    const interval = setInterval(checkStatus, 400);
 
     let observer: MutationObserver | null = null;
     if (insRef.current) {
-      observer = new MutationObserver(checkFill);
+      observer = new MutationObserver(checkStatus);
       observer.observe(insRef.current, {
         attributes: true,
-        attributeFilter: ["data-ad-status", "style", "class"],
+        attributeFilter: ["data-ad-status", "data-adsbygoogle-status", "style", "class"],
         childList: true,
         subtree: true,
       });
@@ -89,7 +98,7 @@ export function ReelAdCard({
       clearInterval(interval);
       if (observer) observer.disconnect();
     };
-  }, [hasLiveAdSense, isPro]);
+  }, [isPro]);
 
   // Window-level key event locking while countdown active; advance when unlocked
   useEffect(() => {
@@ -158,6 +167,8 @@ export function ReelAdCard({
     return null;
   }
 
+  const isFilled = adStatus === "filled";
+
   return (
     <div
       data-testid="between-reels-ad-card"
@@ -181,12 +192,39 @@ export function ReelAdCard({
           </span>
         </div>
 
-        {/* Ad Body (Native House Ad Base Layer + Optional Live AdSense Overlay) */}
+        {/* Ad Body */}
         <div className="p-6 flex flex-col items-center text-center">
+          {/* ?adtest=1 Diagnostic Overlay Bar */}
+          {isAdTest && (
+            <div
+              data-testid="adsense-test-overlay"
+              className="w-full mb-3 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-left font-mono text-[10px] text-amber-300 leading-snug space-y-0.5 select-all"
+            >
+              <div className="flex items-center gap-1.5 font-bold uppercase tracking-wider text-amber-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                <span>ADSENSE SLOT MOUNTED</span>
+              </div>
+              <div className="truncate text-[9.5px] text-zinc-300">
+                <span className="text-zinc-500">CLIENT:</span> {clientId}{" "}
+                <span className="text-zinc-500">| SLOT:</span> {reelSlotId || "MISSING"}{" "}
+                <span className="text-zinc-500">| STATUS:</span>{" "}
+                <span className={isFilled ? "text-emerald-400 font-bold" : "text-amber-300 font-bold"}>
+                  {adStatus}
+                </span>
+              </div>
+            </div>
+          )}
+
           <div className="w-full relative min-h-[250px] flex items-center justify-center">
-            {/* Native Pro House Ad: always visible unless AdSense has successfully filled */}
-            {!isAdFilled && (
-              <div className="my-2 space-y-4 max-w-sm w-full animate-in fade-in duration-200">
+            {/* Fallback House Ad (Hidden if in ?adtest=1 mode OR if AdSense status is filled) */}
+            {!isAdTest && (
+              <div
+                className={`my-2 space-y-4 max-w-sm w-full transition-opacity duration-200 ${
+                  isFilled
+                    ? "opacity-0 pointer-events-none absolute inset-0 z-0"
+                    : "relative z-0"
+                }`}
+              >
                 <div className="w-14 h-14 rounded-2xl bg-[#c29b78]/10 border border-[#c29b78]/25 flex items-center justify-center mx-auto text-[#c29b78] shadow-lg shadow-[#c29b78]/5">
                   <Sparkles className="w-7 h-7 stroke-[1.8]" />
                 </div>
@@ -211,26 +249,27 @@ export function ReelAdCard({
               </div>
             )}
 
-            {/* Live Google AdSense container */}
-            {hasLiveAdSense && (
-              <div
-                className={
-                  isAdFilled
-                    ? "w-full my-2 min-h-[250px] flex items-center justify-center"
-                    : "absolute inset-0 opacity-0 pointer-events-none"
-                }
-              >
-                <ins
-                  ref={insRef}
-                  className="adsbygoogle"
-                  style={{ display: "block", width: "100%", height: "250px" }}
-                  data-ad-client={clientId}
-                  data-ad-slot={reelSlotId}
-                  data-ad-format="auto"
-                  data-full-width-responsive="true"
-                />
-              </div>
-            )}
+            {/* Live Google AdSense container: Always rendered for non-Pro users with explicit block dimensions */}
+            <div
+              className={`w-full min-h-[250px] flex items-center justify-center ${
+                isAdTest
+                  ? "relative z-10 p-2 rounded-xl border border-dashed border-amber-500/40 bg-zinc-950/80"
+                  : isFilled
+                  ? "relative z-10"
+                  : "absolute inset-0 opacity-0 pointer-events-none"
+              }`}
+            >
+              <ins
+                ref={insRef}
+                className="adsbygoogle"
+                style={{ display: "block", width: "100%", minHeight: "250px" }}
+                data-ad-client={clientId}
+                data-ad-slot={reelSlotId}
+                data-ad-format="auto"
+                data-full-width-responsive="true"
+                {...(isAdTest ? { "data-adtest": "on" } : {})}
+              />
+            </div>
           </div>
 
           {/* Continue / Next Puzzle Button with 3-Second Mandatory Lock */}
