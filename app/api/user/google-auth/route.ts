@@ -25,6 +25,7 @@ export async function POST(request: NextRequest) {
       select: {
         id: true,
         email: true,
+        emailVerified: true,
         googleId: true,
         username: true,
         displayName: true,
@@ -58,13 +59,17 @@ export async function POST(request: NextRequest) {
 
     if (user) {
       // If user exists but googleId was not linked yet, link it
-      if (!user.googleId) {
+      if (!user.googleId || !user.emailVerified) {
         user = await prisma.user.update({
           where: { id: user.id },
-          data: { googleId: cleanGoogleId },
+          data: {
+            googleId: cleanGoogleId,
+            emailVerified: user.emailVerified || new Date(),
+          },
           select: {
             id: true,
             email: true,
+            emailVerified: true,
             googleId: true,
             username: true,
             displayName: true,
@@ -185,6 +190,8 @@ export async function POST(request: NextRequest) {
     const newUser = await prisma.user.create({
       data: {
         email: cleanEmail,
+        emailVerified: new Date(),
+        emailSubscribed: true,
         googleId: cleanGoogleId,
         username: finalUsername,
         displayName: name?.trim() || finalUsername,

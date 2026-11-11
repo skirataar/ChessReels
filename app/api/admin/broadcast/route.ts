@@ -26,8 +26,11 @@ export async function GET(request: NextRequest) {
       prisma.user.count({
         where: {
           email: { not: null },
-          emailVerified: { not: null },
           emailSubscribed: true,
+          OR: [
+            { emailVerified: { not: null } },
+            { googleId: { not: null } },
+          ],
         },
       })
     );
@@ -79,13 +82,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Fetch verified, subscribed users
+    // Fetch verified, subscribed users (including OAuth users)
     const recipients = await withDbRetry(() =>
       prisma.user.findMany({
         where: {
           email: { not: null },
-          emailVerified: { not: null },
           emailSubscribed: true,
+          OR: [
+            { emailVerified: { not: null } },
+            { googleId: { not: null } },
+          ],
         },
         select: {
           id: true,

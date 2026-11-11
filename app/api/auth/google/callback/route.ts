@@ -143,13 +143,14 @@ export async function GET(request: NextRequest) {
       }
 
       // Existing user in signin mode: Link googleId if missing
-      if (!user.googleId || !user.avatar || user.avatar === "♟") {
+      if (!user.googleId || !user.avatar || user.avatar === "♟" || !user.emailVerified) {
         user = await prisma.user.update({
           where: { id: user.id },
           data: {
             googleId: user.googleId || googleId,
             displayName: user.displayName || name,
             avatar: user.avatar && user.avatar !== "♟" ? user.avatar : avatar,
+            emailVerified: user.emailVerified || new Date(),
           },
         });
       }
@@ -216,6 +217,8 @@ export async function GET(request: NextRequest) {
       user = await prisma.user.create({
         data: {
           email,
+          emailVerified: new Date(),
+          emailSubscribed: true,
           googleId,
           username: uniqueUsername,
           displayName: name || uniqueUsername,
