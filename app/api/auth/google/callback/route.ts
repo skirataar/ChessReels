@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
       googleId = `mock_gid_${mockSuffix}`;
       email = `test_${mockSuffix}@gmail.com`;
       name = `Mock User ${mockSuffix}`;
-      avatar = "♟";
+      avatar = "P";
     } else {
       const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
       const clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
@@ -115,7 +115,7 @@ export async function GET(request: NextRequest) {
       googleId = userInfo.sub;
       email = userInfo.email?.toLowerCase().trim();
       name = userInfo.name?.trim() || "";
-      avatar = userInfo.picture?.trim() || "♟";
+      avatar = userInfo.picture?.trim() || "P";
     }
 
     if (!email) {

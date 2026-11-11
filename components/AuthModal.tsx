@@ -18,7 +18,8 @@ import {
   Zap,
   Trophy,
 } from "lucide-react";
-import { CURATED_AVATARS, compressImageFile } from "@/lib/avatarUpload";
+import { compressImageFile } from "@/lib/avatarUpload";
+import { UserAvatar } from "@/components/UserAvatar";
 import { OtpModal } from "@/components/OtpModal";
 import {
   getGuestSession,
@@ -62,7 +63,7 @@ export function AuthModal({
   const [confirmPassword, setConfirmPassword] = useState<string>("");
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [displayName, setDisplayName] = useState<string>("");
-  const [selectedAvatar, setSelectedAvatar] = useState<string>(CURATED_AVATARS[0].url);
+  const [selectedAvatar, setSelectedAvatar] = useState<string>("");
   const guestSession = getGuestSession();
   const calibratedElo = guestSession.calibratedElo || guestSession.estimatedElo || 1000;
   const isCalibrated = Boolean(guestSession.calibratedElo || guestSession.currentStep >= 6);
@@ -215,12 +216,20 @@ export function AuthModal({
 
     setIsLoading(true);
     try {
+      const currentGuest = getGuestSession();
+      const hasCompletedPlacement = Boolean(
+        currentGuest && (currentGuest.isComplete || currentGuest.calibratedElo)
+      );
+
       const res = await fetch("/api/user/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           username: cleanUser,
           password,
+          hasCompletedPlacement,
+          calibratedElo: currentGuest?.calibratedElo,
+          isCalibrated: hasCompletedPlacement,
         }),
       });
 
@@ -251,7 +260,18 @@ export function AuthModal({
         return;
       }
 
-      onAccountSuccess(data.user);
+      if (data.user) {
+        if (hasCompletedPlacement) {
+          data.user.isCalibrated = true;
+          data.user.calibrationStep = TOTAL_PLACEMENT_STEPS;
+          if (currentGuest?.calibratedElo) {
+            data.user.elo = currentGuest.calibratedElo;
+          }
+          await syncGuestSessionToAccount(data.user.id).catch(() => {});
+          clearGuestSession();
+        }
+        onAccountSuccess(data.user);
+      }
       onClose();
     } catch {
       setErrorMsg("Network error. Please try again.");
@@ -386,22 +406,11 @@ export function AuthModal({
                     </div>
                   </div>
 
-                  {/* Display Picture Selector */}
+                  {/* Display Picture Preview & Upload Trigger */}
                   <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-[11px] font-bold uppercase tracking-wider text-[#a3a3a3]">
-                        Display Picture
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="text-[10px] text-[#c29b78] hover:underline font-bold flex items-center gap-1 cursor-pointer"
-                      >
-                        <Camera className="w-3 h-3" />
-                        <span>{isUploadingPhoto ? "Processing..." : "Upload Photo"}</span>
-                      </button>
-                    </div>
-
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-[#a3a3a3] block mb-1.5">
+                      Display Picture
+                    </label>
                     <input
                       type="file"
                       ref={fileInputRef}
@@ -409,55 +418,37 @@ export function AuthModal({
                       onChange={handlePhotoUpload}
                       className="hidden"
                     />
-
-                    {/* Curated Modern Chess Photography Presets */}
-                    <div className="grid grid-cols-4 gap-2">
-                      {CURATED_AVATARS.map((item) => {
-                        const isSelected = selectedAvatar === item.url;
-                        return (
-                          <button
-                            key={item.id}
-                            type="button"
-                            onClick={() => setSelectedAvatar(item.url)}
-                            className={`relative aspect-square rounded-xl overflow-hidden border-2 transition-all cursor-pointer group ${
-                              isSelected
-                                ? "border-[#c29b78] ring-2 ring-[#c29b78]/40 scale-102"
-                                : "border-white/10 hover:border-[#c29b78]/50"
-                            }`}
-                            title={item.name}
-                          >
-                            <img
-                              src={item.url}
-                              alt={item.name}
-                              className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                            />
-                            {isSelected && (
-                              <div className="absolute top-1 right-1 w-4 h-4 rounded-full bg-[#c29b78] text-[#151413] flex items-center justify-center shadow-md">
-                                <Check className="w-2.5 h-2.5 stroke-[3]" />
-                              </div>
-                            )}
-                            <span className="absolute bottom-0 inset-x-0 bg-black/75 text-[8px] font-bold text-white py-0.5 truncate px-1 text-center">
-                              {item.name}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    {/* Custom uploaded photo preview */}
-                    {selectedAvatar.startsWith("data:image/") && (
-                      <div className="mt-2 p-2 rounded-xl bg-[#22201e] border border-[#c29b78]/40 flex items-center gap-2.5">
-                        <img
-                          src={selectedAvatar}
-                          alt="Custom Photo"
-                          className="w-8 h-8 rounded-lg object-cover border border-[#c29b78]"
+                    <div className="flex flex-col items-center justify-center p-3.5 bg-[#22201e] rounded-xl border border-white/10 gap-2.5">
+                      <div className="w-16 h-16 rounded-full overflow-hidden shadow-lg border-2 border-[#c29b78]/40 flex items-center justify-center">
+                        <UserAvatar
+                          avatar={selectedAvatar}
+                          username={username || "Player"}
+                          name={displayName}
+                          email={email}
+                          className="w-full h-full text-xl font-black"
                         />
-                        <span className="text-[11px] text-[#c29b78] font-bold flex items-center gap-1">
-                          <Check className="w-3.5 h-3.5" />
-                          Custom Photo Selected
-                        </span>
                       </div>
-                    )}
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          disabled={isUploadingPhoto}
+                          onClick={() => fileInputRef.current?.click()}
+                          className="py-1.5 px-3 rounded-lg bg-gradient-to-r from-[#c29b78] to-[#d4b08f] text-[#151413] font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-md active:scale-98"
+                        >
+                          <Camera className="w-3.5 h-3.5 stroke-[2.5]" />
+                          <span>{isUploadingPhoto ? "Processing..." : selectedAvatar ? "Change Photo" : "Upload Photo"}</span>
+                        </button>
+                        {selectedAvatar && (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedAvatar("")}
+                            className="py-1.5 px-2.5 rounded-lg bg-[#151413] hover:bg-[#2d2a28] text-zinc-400 hover:text-red-400 font-bold text-xs border border-white/10 transition-colors cursor-pointer"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
                   {/* Name (Display Name) Input */}

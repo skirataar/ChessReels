@@ -176,39 +176,67 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Sync guest placement results if completed during guest session
+    let finalUser = user;
+    const hasCompletedPlacement = Boolean(body.hasCompletedPlacement || body.calibratedElo);
+    const guestCalibratedElo =
+      typeof body.calibratedElo === "number"
+        ? Math.max(600, Math.min(2200, Math.round(body.calibratedElo)))
+        : null;
+
+    if (hasCompletedPlacement && (!user.isCalibrated || guestCalibratedElo)) {
+      const nextElo = guestCalibratedElo ?? user.elo;
+      const nextPeak = Math.max(user.peakElo, nextElo);
+      try {
+        finalUser = await withDbRetry(() =>
+          prisma.user.update({
+            where: { id: user.id },
+            data: {
+              isCalibrated: true,
+              calibrationStep: 6,
+              elo: nextElo,
+              peakElo: nextPeak,
+            },
+          })
+        );
+      } catch (err) {
+        console.error("Failed to sync placement elo on login:", err);
+      }
+    }
+
     // Clean user response object without secret fields
-    const isPro = isActiveProAccount(user);
+    const isPro = isActiveProAccount(finalUser);
     const safeUser = {
-      id: user.id,
-      username: user.username || clean,
-      displayName: user.displayName || user.username,
-      avatar: user.avatar || "P",
-      email: user.email,
-      emailVerified: user.emailVerified,
-      twoFactorEnabled: Boolean(user.twoFactorEnabled),
-      elo: user.elo,
-      peakElo: user.peakElo,
-      targetElo: user.targetElo ?? 1500,
-      streak: user.streak,
-      bestStreak: user.bestStreak,
-      lastSolvedDate: user.lastSolvedDate ?? null,
-      streakFreezes: user.streakFreezes ?? 0,
-      perfectWeekCounter: user.perfectWeekCounter ?? 0,
-      isFrozenState: user.isFrozenState ?? false,
-      solvedPuzzleIds: user.solvedPuzzleIds ?? [],
-      savedPuzzleIds: user.savedPuzzleIds ?? [],
-      likedPuzzleIds: user.likedPuzzleIds ?? [],
-      autoAdvance: user.autoAdvance ?? false,
-      soundEnabled: user.soundEnabled ?? true,
-      showCoordinates: user.showCoordinates ?? true,
-      isCalibrated: user.isCalibrated,
-      calibrationStep: user.calibrationStep,
+      id: finalUser.id,
+      username: finalUser.username || clean,
+      displayName: finalUser.displayName || finalUser.username,
+      avatar: finalUser.avatar || "P",
+      email: finalUser.email,
+      emailVerified: finalUser.emailVerified,
+      twoFactorEnabled: Boolean(finalUser.twoFactorEnabled),
+      elo: finalUser.elo,
+      peakElo: finalUser.peakElo,
+      targetElo: finalUser.targetElo ?? 1500,
+      streak: finalUser.streak,
+      bestStreak: finalUser.bestStreak,
+      lastSolvedDate: finalUser.lastSolvedDate ?? null,
+      streakFreezes: finalUser.streakFreezes ?? 0,
+      perfectWeekCounter: finalUser.perfectWeekCounter ?? 0,
+      isFrozenState: finalUser.isFrozenState ?? false,
+      solvedPuzzleIds: finalUser.solvedPuzzleIds ?? [],
+      savedPuzzleIds: finalUser.savedPuzzleIds ?? [],
+      likedPuzzleIds: finalUser.likedPuzzleIds ?? [],
+      autoAdvance: finalUser.autoAdvance ?? false,
+      soundEnabled: finalUser.soundEnabled ?? true,
+      showCoordinates: finalUser.showCoordinates ?? true,
+      isCalibrated: finalUser.isCalibrated,
+      calibrationStep: finalUser.calibrationStep,
       plan: isPro ? "premium" : "free",
       isPro,
-      subscriptionStatus: user.subscriptionStatus ?? "none",
-      subscriptionPlan: user.subscriptionPlan ?? null,
-      paymentProvider: user.paymentProvider ?? null,
-      currentPeriodEnd: user.currentPeriodEnd ?? null,
+      subscriptionStatus: finalUser.subscriptionStatus ?? "none",
+      subscriptionPlan: finalUser.subscriptionPlan ?? null,
+      paymentProvider: finalUser.paymentProvider ?? null,
+      currentPeriodEnd: finalUser.currentPeriodEnd ?? null,
     };
 
     const response = NextResponse.json({

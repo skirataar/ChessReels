@@ -202,7 +202,7 @@ export async function handleRegisterAccount(request: NextRequest) {
             username: cleanUsername,
             displayName: displayName?.trim() || cleanUsername,
             email: cleanEmail || undefined,
-            avatar: avatar || "♟",
+            avatar: avatar && avatar !== "♟" ? avatar : "P",
             skillTier: initialSkill,
             elo: baseElo,
             peakElo: Math.max(existingUser?.peakElo || baseElo, baseElo),
@@ -229,7 +229,7 @@ export async function handleRegisterAccount(request: NextRequest) {
             username: cleanUsername,
             displayName: displayName?.trim() || cleanUsername,
             email: cleanEmail || undefined,
-            avatar: avatar || "♟",
+            avatar: avatar && avatar !== "♟" ? avatar : "P",
             skillTier: initialSkill,
             elo: baseElo,
             peakElo: baseElo,
@@ -327,3 +327,4 @@ export async function handleRegisterAccount(request: NextRequest) {
     );
   }
 }
+

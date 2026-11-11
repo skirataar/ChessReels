@@ -49,6 +49,7 @@ import { trackEvent } from "@/lib/analytics";
 import {
   getGuestSession,
   saveGuestSession,
+  clearGuestSession,
   recordPlacementStep,
   calculateFinalPlacementElo,
   markGuestMode,
@@ -800,7 +801,12 @@ export function PlayView({
     !guestSessionState?.isComplete &&
     !guestSessionState?.calibratedElo &&
     (guestSessionState?.history?.length ?? 0) < TOTAL_PLACEMENT_STEPS;
-  const isUserCalibrating = Boolean(userAccount && !userAccount.isCalibrated);
+  const isUserCalibrating = Boolean(
+    userAccount &&
+    !userAccount.isCalibrated &&
+    !guestSessionState?.isComplete &&
+    !guestSessionState?.calibratedElo
+  );
   const isCalibrating = isUserCalibrating || isGuestCalibrating;
   const currentCalibrationStep = isUserCalibrating
     ? Math.min(TOTAL_PLACEMENT_STEPS, (userAccount?.calibrationStep ?? 0) + 1)
@@ -824,9 +830,20 @@ export function PlayView({
     // render, so React never sees a server/client text mismatch.
     if (typeof window !== "undefined") {
       try {
-        const cachedStats = getStoredUserStats();
-        if (cachedStats.elo > 0) {
-          setCurrentElo((prev) => (prev === cachedStats.elo ? prev : cachedStats.elo));
+        const gs = getGuestSession();
+        if (isCalibrating || (gs && !gs.isComplete && (gs.currentPuzzleElo || gs.history.length > 0))) {
+          const placementElo = gs?.currentPuzzleElo || INITIAL_PLACEMENT_ELO;
+          setCurrentElo(placementElo);
+          currentEloRef.current = placementElo;
+        } else if (gs?.calibratedElo) {
+          setCurrentElo(gs.calibratedElo);
+          currentEloRef.current = gs.calibratedElo;
+        } else {
+          const cachedStats = getStoredUserStats();
+          if (cachedStats.elo > 0) {
+            setCurrentElo((prev) => (prev === cachedStats.elo ? prev : cachedStats.elo));
+            currentEloRef.current = cachedStats.elo;
+          }
         }
       } catch {}
       window.dispatchEvent(new Event("tier-session-updated"));
@@ -1542,7 +1559,7 @@ export function PlayView({
         const isWin = result === "win";
         const currentPlacementState: PlacementState = {
           currentStep: guestSessionState?.currentStep ?? 1,
-          currentPuzzleElo: currentEloRef.current || INITIAL_PLACEMENT_ELO,
+          currentPuzzleElo: guestSessionState?.currentPuzzleElo || currentEloRef.current || INITIAL_PLACEMENT_ELO,
           history: guestSessionState?.history ?? [],
           calibratedElo: guestSessionState?.calibratedElo ?? null,
           isComplete: Boolean(guestSessionState?.isComplete),
@@ -1562,6 +1579,7 @@ export function PlayView({
         currentEloRef.current = targetElo;
         setLastEloChange(eloDelta);
         triggerEloDeltaBadge(eloDelta);
+        saveUserStatsSync({ elo: targetElo });
 
         // 2. Synchronize placement state to guest session
         const updatedSession = saveGuestSession({
@@ -1588,6 +1606,28 @@ export function PlayView({
         // 4. Handle completion
         if (nextPlacementState.isComplete && nextPlacementState.calibratedElo !== null) {
           setCalibratedFinalElo(nextPlacementState.calibratedElo);
+          if (userAccount) {
+            setUserAccount((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    isCalibrated: true,
+                    calibrationStep: TOTAL_PLACEMENT_STEPS,
+                    elo: nextPlacementState.calibratedElo!,
+                  }
+                : null
+            );
+            fetch("/api/user/account", {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                userId: userAccount.id,
+                elo: nextPlacementState.calibratedElo,
+                isCalibrated: true,
+                calibrationStep: TOTAL_PLACEMENT_STEPS,
+              }),
+            }).catch(() => {});
+          }
           setIsConversionModalOpen(true);
           trackEvent("placement_test_completed", {
             finalElo: nextPlacementState.calibratedElo,
@@ -1937,15 +1977,31 @@ export function PlayView({
     // Clear any previous user's cached puzzle queues and state
     clearAllUserAndPuzzleCache(userAccount?.id);
 
+    const gs = getGuestSession();
+    const hasCompletedPlacement = Boolean(gs && (gs.isComplete || gs.calibratedElo));
+
+    if (hasCompletedPlacement) {
+      user.isCalibrated = true;
+      user.calibrationStep = TOTAL_PLACEMENT_STEPS;
+      if (gs.calibratedElo) {
+        user.elo = gs.calibratedElo;
+      }
+      clearGuestSession();
+      setGuestSessionState(null);
+    }
+
     setUserAccount(user);
-    setCurrentElo(user.elo || 800);
+    const activeElo = user.elo || 1000;
+    setCurrentElo(activeElo);
+    currentEloRef.current = activeElo;
+    saveUserStatsSync({ elo: activeElo });
     hydrateUserSession(user);
 
     try {
       if (typeof window !== "undefined") {
         document.cookie = `chess_reel_session=${encodeURIComponent(user.id)}; path=/; max-age=${60 * 60 * 24 * 30}`;
         window.localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(user));
-        window.localStorage.setItem(ELO_STORAGE_KEY, (user.elo || 800).toString());
+        window.localStorage.setItem(ELO_STORAGE_KEY, activeElo.toString());
         if (user.plan) {
           window.localStorage.setItem("chess_reel_plan", user.plan);
           window.dispatchEvent(new Event("plan-updated"));

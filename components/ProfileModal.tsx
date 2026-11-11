@@ -38,7 +38,7 @@ import { OtpModal } from "@/components/OtpModal";
 import { sounds } from "@/lib/audio";
 import { getTier } from "./LeaderboardModal";
 import { UserAvatar } from "@/components/UserAvatar";
-import { CURATED_AVATARS, compressImageFile, persistAvatar } from "@/lib/avatarUpload";
+import { compressImageFile, persistAvatar } from "@/lib/avatarUpload";
 import { PuzzleCard, PuzzleData, PuzzleStatus } from "@/components/PuzzleCard";
 import { isGuestUserId } from "@/lib/guestAccount";
 import { formatTitle } from "@/lib/formatTitle";
@@ -339,13 +339,12 @@ export function ProfileModal({
     }
   };
 
-  const handleSelectPreset = async (url: string) => {
+  const handleRemoveAvatar = async () => {
     try {
-      setActiveAvatar(url);
-      await persistAvatar(url, userAccount?.id);
-      setIsDpPickerOpen(false);
+      setActiveAvatar("");
+      await persistAvatar("", userAccount?.id);
     } catch (err) {
-      console.error("Failed to set avatar preset:", err);
+      console.error("Failed to remove avatar photo:", err);
     }
   };
 
@@ -827,11 +826,13 @@ export function ProfileModal({
                       onClick={() => setIsDpPickerOpen(!isDpPickerOpen)}
                       title="Change display picture"
                     >
-                      <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-[#c29b78] to-[#e8d3b9] flex items-center justify-center text-[#151413] font-black text-xl shadow-md overflow-hidden shrink-0 group-hover:ring-2 group-hover:ring-[#c29b78] transition-all">
+                      <div className="w-12 h-12 rounded-full overflow-hidden shrink-0 group-hover:ring-2 group-hover:ring-[#c29b78] transition-all">
                         <UserAvatar
                           avatar={activeAvatar}
-                          fallback="♟"
-                          className="w-full h-full flex items-center justify-center text-xl font-black text-[#151413]"
+                          username={userAccount.username}
+                          name={userAccount.displayName}
+                          email={userAccount.email}
+                          className="w-full h-full text-xl font-black"
                         />
                       </div>
                       <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-[#c29b78] text-[#151413] flex items-center justify-center shadow-md">
@@ -889,46 +890,36 @@ export function ProfileModal({
                       </button>
                     </div>
 
-                    <button
-                      type="button"
-                      disabled={isUploadingDp}
-                      onClick={() => fileInputRef.current?.click()}
-                      className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-[#c29b78] to-[#d4b08f] text-[#151413] font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-md mb-2.5 active:scale-98"
-                    >
-                      <Upload className="w-3.5 h-3.5 stroke-[2.5]" />
-                      <span>{isUploadingDp ? "Compressing..." : "Upload Photo"}</span>
-                    </button>
-
-                    <div className="grid grid-cols-4 gap-2">
-                      {CURATED_AVATARS.map((preset) => {
-                        const isSelected = activeAvatar === preset.url;
-                        return (
+                    <div className="flex flex-col items-center justify-center p-4 bg-[#151413] rounded-xl border border-white/10 gap-3">
+                      <div className="w-20 h-20 rounded-full overflow-hidden shadow-lg border-2 border-[#c29b78]/40 flex items-center justify-center">
+                        <UserAvatar
+                          avatar={activeAvatar}
+                          username={userAccount.username}
+                          name={userAccount.displayName}
+                          email={userAccount.email}
+                          className="w-full h-full text-2xl font-black"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          disabled={isUploadingDp}
+                          onClick={() => fileInputRef.current?.click()}
+                          className="py-2 px-3.5 rounded-xl bg-gradient-to-r from-[#c29b78] to-[#d4b08f] text-[#151413] font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-md active:scale-98"
+                        >
+                          <Camera className="w-3.5 h-3.5 stroke-[2.5]" />
+                          <span>{isUploadingDp ? "Compressing..." : activeAvatar ? "Change Photo" : "Upload Photo"}</span>
+                        </button>
+                        {activeAvatar && (
                           <button
-                            key={preset.id}
                             type="button"
-                            onClick={() => handleSelectPreset(preset.url)}
-                            className={`relative aspect-square rounded-xl overflow-hidden border-2 transition-all cursor-pointer group ${
-                              isSelected
-                                ? "border-[#c29b78] ring-2 ring-[#c29b78]/40 scale-102"
-                                : "border-white/10 hover:border-[#c29b78]/50"
-                            }`}
+                            onClick={handleRemoveAvatar}
+                            className="py-2 px-3 rounded-xl bg-[#22201e] hover:bg-[#2d2a28] text-zinc-400 hover:text-red-400 font-bold text-xs border border-white/10 transition-colors cursor-pointer"
                           >
-                            <img
-                              src={preset.url}
-                              alt={preset.name}
-                              className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                            />
-                            {isSelected && (
-                              <div className="absolute top-1 right-1 w-3.5 h-3.5 rounded-full bg-[#c29b78] text-[#151413] flex items-center justify-center shadow-md">
-                                <Check className="w-2 h-2 stroke-[3]" />
-                              </div>
-                            )}
-                            <span className="absolute bottom-0 inset-x-0 bg-black/75 text-[8px] font-bold text-white py-0.5 truncate px-1 text-center">
-                              {preset.name}
-                            </span>
+                            Remove
                           </button>
-                        );
-                      })}
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}
@@ -937,8 +928,8 @@ export function ProfileModal({
               <div className="p-4 rounded-xl bg-gradient-to-br from-[#22201e] to-[#2d2a28] border border-[#c29b78]/30 space-y-3 shadow-md">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 rounded-full bg-[#c29b78]/15 border border-[#c29b78]/40 flex items-center justify-center text-[#c29b78] font-black text-lg">
-                      ♟
+                    <div className="w-11 h-11 rounded-full overflow-hidden shrink-0 flex items-center justify-center">
+                      <UserAvatar username="Guest" className="w-full h-full text-base font-black" />
                     </div>
                     <div>
                       <div className="text-sm font-bold text-white flex items-center gap-1.5">

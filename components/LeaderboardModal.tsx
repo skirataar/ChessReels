@@ -347,7 +347,7 @@ export function LeaderboardModal({
     id: effectiveUserId,
     username: userAccount?.username || "You",
     displayName: userAccount?.displayName || (userAccount ? userAccount.username : "You"),
-    avatar: userAccount?.avatar || "♟",
+    avatar: userAccount?.avatar || undefined,
     elo: currentElo,
     streak: streak,
     isSelf: true,
@@ -467,7 +467,11 @@ export function LeaderboardModal({
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2.5">
                     <div className="w-8 h-8 rounded-full bg-[#1b1816] border border-white/[0.08] flex items-center justify-center text-sm overflow-hidden shrink-0">
-                      <UserAvatar avatar={userAccount?.avatar} fallback="♟" />
+                      <UserAvatar
+                        avatar={userAccount?.avatar}
+                        username={userAccount?.username}
+                        name={userAccount?.displayName}
+                      />
                     </div>
                     <div>
                       <div className="flex items-center gap-1.5">
@@ -563,7 +567,11 @@ export function LeaderboardModal({
                         #{userRank}
                       </span>
                       <div className="w-7 h-7 rounded-full bg-[#1b1816] border border-[#c29b78]/30 flex items-center justify-center font-bold text-xs overflow-hidden shrink-0">
-                        <UserAvatar avatar={userAccount?.avatar} fallback="♟" />
+                        <UserAvatar
+                          avatar={userAccount?.avatar}
+                          username={userAccount?.username}
+                          name={userAccount?.displayName}
+                        />
                       </div>
                       <div>
                         <div className="flex items-center gap-1.5">
@@ -677,7 +685,11 @@ export function LeaderboardModal({
                       >
                         <div className="flex items-center gap-2">
                           <div className="w-6 h-6 rounded-full bg-[#1b1816] flex items-center justify-center text-xs overflow-hidden">
-                            <UserAvatar avatar={req.receiver?.avatar} fallback="♟" />
+                            <UserAvatar
+                              avatar={req.receiver?.avatar}
+                              username={req.receiver?.username}
+                              name={req.receiver?.displayName}
+                            />
                           </div>
                           <span className="text-[#f5f2eb] font-medium">
                             @{req.receiver?.username || "player"}
@@ -731,7 +743,11 @@ export function LeaderboardModal({
                           </span>
 
                           <div className="w-7 h-7 rounded-full bg-[#1b1816] border border-white/[0.08] flex items-center justify-center text-xs overflow-hidden shrink-0">
-                            <UserAvatar avatar={entry.avatar} fallback="♟" />
+                            <UserAvatar
+                              avatar={entry.avatar}
+                              username={entry.displayName || entry.username}
+                              name={entry.displayName}
+                            />
                           </div>
 
                           <div>
@@ -828,7 +844,11 @@ export function LeaderboardModal({
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
                           <div className="w-9 h-9 rounded-full bg-[#1b1816] border border-white/[0.08] flex items-center justify-center text-xs overflow-hidden shrink-0">
-                            <UserAvatar avatar={sender?.avatar} fallback="♟" />
+                            <UserAvatar
+                              avatar={sender?.avatar}
+                              username={sender?.displayName || sender?.username}
+                              name={sender?.displayName}
+                            />
                           </div>
                           <div className="min-w-0">
                             <div className="text-xs font-semibold text-[#f5f2eb] truncate">

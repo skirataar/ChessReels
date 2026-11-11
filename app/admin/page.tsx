@@ -34,6 +34,7 @@ import {
   Film,
 } from "lucide-react";
 import { formatTitle } from "@/lib/formatTitle";
+import { UserAvatar } from "@/components/UserAvatar";
 
 interface AdminMetrics {
   totalUsers: number;
@@ -939,12 +940,14 @@ export default function AdminPage() {
                             <span className="text-xs font-bold text-zinc-500 w-4">
                               #{idx + 1}
                             </span>
-                            <div className={`w-9 h-9 rounded-xl bg-gradient-to-br from-zinc-800 to-zinc-900 border ${rank.ring} flex items-center justify-center text-lg shrink-0 shadow-inner overflow-hidden`}>
-                              {user.avatar?.startsWith("http") ? (
-                                <img src={user.avatar} alt="Avatar" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                              ) : (
-                                user.avatar || "♟"
-                              )}
+                            <div className={`w-9 h-9 rounded-xl overflow-hidden shrink-0 shadow-inner border ${rank.ring}`}>
+                              <UserAvatar
+                                avatar={user.avatar}
+                                username={user.username}
+                                name={user.displayName}
+                                shape="rounded"
+                                className="w-full h-full text-sm font-bold"
+                              />
                             </div>
                             <div className="min-w-0">
                               <div className="flex items-center gap-1.5">
@@ -1148,12 +1151,14 @@ export default function AdminPage() {
                             {/* Member Profile */}
                             <td className="py-3 px-4">
                               <div className="flex items-center gap-3">
-                                <div className={`w-9 h-9 rounded-xl bg-gradient-to-br from-zinc-800 to-zinc-900 border ${rank.ring} flex items-center justify-center text-lg shrink-0 shadow-inner overflow-hidden`}>
-                                  {user.avatar?.startsWith("http") ? (
-                                    <img src={user.avatar} alt="Avatar" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                                  ) : (
-                                    user.avatar || "♟"
-                                  )}
+                                <div className={`w-9 h-9 rounded-xl overflow-hidden shrink-0 shadow-inner border ${rank.ring}`}>
+                                  <UserAvatar
+                                    avatar={user.avatar}
+                                    username={user.username}
+                                    name={user.displayName}
+                                    shape="rounded"
+                                    className="w-full h-full text-sm font-bold"
+                                  />
                                 </div>
                                 <div className="min-w-0">
                                   <div className="font-bold text-white text-xs flex items-center gap-1.5">

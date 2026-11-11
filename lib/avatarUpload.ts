@@ -1,9 +1,4 @@
-export const CURATED_AVATARS = [
-  { id: "grandmaster", name: "Grandmaster", url: "/avatars/grandmaster.jpg" },
-  { id: "knight", name: "Obsidian Knight", url: "/avatars/knight.jpg" },
-  { id: "queen", name: "Golden Queen", url: "/avatars/queen.jpg" },
-  { id: "cyber-king", name: "Cyber King", url: "/avatars/cyber-king.jpg" },
-];
+export { AVATAR_PALETTE, getAvatarColor, getAvatarInitial } from "@/components/UserAvatar";
 
 /**
  * Compresses any user image file (from camera or gallery) into a high-performance,

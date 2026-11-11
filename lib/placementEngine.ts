@@ -16,8 +16,8 @@ export interface PlacementState {
 
 export const INITIAL_PLACEMENT_ELO = 1000;
 export const TOTAL_PLACEMENT_STEPS = 6;
-export const ELO_STEP_UP = 200;
-export const ELO_STEP_DOWN = 150;
+export const ELO_STEP_UP = 150;
+export const ELO_STEP_DOWN = 100;
 export const MIN_CALIBRATED_ELO = 600;
 export const MAX_CALIBRATED_ELO = 2200;
 
@@ -57,6 +57,11 @@ export function processPlacementMove(
 ): PlacementState {
   if (state.isComplete) return state;
 
+  // Single transparent running rating: +150 on solve, -100 on fail
+  const nextElo = solved
+    ? Math.min(MAX_CALIBRATED_ELO, state.currentPuzzleElo + ELO_STEP_UP)
+    : Math.max(MIN_CALIBRATED_ELO, state.currentPuzzleElo - ELO_STEP_DOWN);
+
   const stepResult: PlacementStepResult = {
     puzzleId,
     puzzleElo: state.currentPuzzleElo,
@@ -67,33 +72,17 @@ export function processPlacementMove(
   const nextStep = state.currentStep + 1;
 
   if (nextStep > TOTAL_PLACEMENT_STEPS) {
-    // Calibration Complete: compute final rating
-    // Formula: Average attempted puzzle difficulty + net performance bonus
-    const totalAttemptedElo = newHistory.reduce((acc, h) => acc + h.puzzleElo, 0);
-    const avgDifficulty = totalAttemptedElo / TOTAL_PLACEMENT_STEPS;
-    const solves = newHistory.filter((h) => h.solved).length;
-    const fails = TOTAL_PLACEMENT_STEPS - solves;
-
-    // Performance delta: +50 per net solve
-    const rawElo = Math.round(avgDifficulty + (solves - fails) * 50);
-    // Snap to nearest 25 and clamp
-    const roundedElo = Math.round(rawElo / 25) * 25;
-    const finalElo = Math.max(MIN_CALIBRATED_ELO, Math.min(MAX_CALIBRATED_ELO, roundedElo));
-
+    // Calibration Complete: calibratedElo is exactly the final running currentElo reached after step 6!
     return {
       currentStep: TOTAL_PLACEMENT_STEPS,
-      currentPuzzleElo: state.currentPuzzleElo,
+      currentPuzzleElo: nextElo,
       history: newHistory,
-      calibratedElo: finalElo,
+      calibratedElo: nextElo,
       isComplete: true,
     };
   }
 
   // Next step puzzle target
-  const nextElo = solved
-    ? Math.min(MAX_CALIBRATED_ELO, state.currentPuzzleElo + ELO_STEP_UP)
-    : Math.max(MIN_CALIBRATED_ELO, state.currentPuzzleElo - ELO_STEP_DOWN);
-
   return {
     currentStep: nextStep,
     currentPuzzleElo: nextElo,
@@ -112,18 +101,14 @@ export function calculateFinalPlacementElo(
   history: { puzzleId?: string; elo?: number; puzzleElo?: number; passed?: boolean; solved?: boolean }[]
 ): number {
   if (!history || history.length === 0) return INITIAL_PLACEMENT_ELO;
-  const count = history.length;
-  const totalAttemptedElo = history.reduce(
-    (acc, h) =>
-      acc + (typeof h.puzzleElo === "number" ? h.puzzleElo : (typeof h.elo === "number" ? h.elo : INITIAL_PLACEMENT_ELO)),
-    0
-  );
-  const avgDifficulty = totalAttemptedElo / count;
-  const solves = history.filter((h) => (h.solved !== undefined ? h.solved : h.passed)).length;
-  const fails = count - solves;
-  const rawElo = Math.round(avgDifficulty + (solves - fails) * 50);
-  const roundedElo = Math.round(rawElo / 25) * 25;
-  return Math.max(MIN_CALIBRATED_ELO, Math.min(MAX_CALIBRATED_ELO, roundedElo));
+  let running = INITIAL_PLACEMENT_ELO;
+  for (const item of history) {
+    const passed = item.solved !== undefined ? item.solved : Boolean(item.passed);
+    running = passed
+      ? Math.min(MAX_CALIBRATED_ELO, running + ELO_STEP_UP)
+      : Math.max(MIN_CALIBRATED_ELO, running - ELO_STEP_DOWN);
+  }
+  return running;
 }
 
 export function getDefaultGuestSession(): GuestSession {

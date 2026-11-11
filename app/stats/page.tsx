@@ -50,7 +50,7 @@ import {
   Cell,
 } from "recharts";
 import { sounds } from "@/lib/audio";
-import { CURATED_AVATARS, compressImageFile, persistAvatar } from "@/lib/avatarUpload";
+import { compressImageFile, persistAvatar } from "@/lib/avatarUpload";
 import { clearGuestLocalSession, isGuestAccount } from "@/lib/guestAccount";
 import { clearAllUserAndPuzzleCache } from "@/lib/puzzleCache";
 
@@ -203,15 +203,14 @@ export default function ProfileStatsPage() {
     }
   };
 
-  const handleSelectPreset = async (url: string) => {
+  const handleRemoveAvatar = async () => {
     try {
-      setUserAvatar(url);
-      await persistAvatar(url, userAccount?.id);
-      setToastMessage("Display picture updated!");
+      setUserAvatar("");
+      await persistAvatar("", userAccount?.id);
+      setToastMessage("Display picture removed!");
       setTimeout(() => setToastMessage(null), 3000);
-      setIsDpPickerOpen(false);
     } catch (err) {
-      console.error("Failed to set avatar preset:", err);
+      console.error("Failed to remove avatar photo:", err);
     }
   };
 
@@ -336,7 +335,13 @@ export default function ProfileStatsPage() {
               data-testid="stats-avatar-container"
             >
               <div className="w-14 h-14 rounded-2xl bg-[#151413] border-2 border-[#c29b78]/40 group-hover:border-[#c29b78] flex items-center justify-center overflow-hidden shadow-inner shrink-0 transition-colors">
-                <UserAvatar avatar={userAvatar} fallback="♟" className="w-8 h-8 text-[#c29b78]" />
+                <UserAvatar
+                  avatar={userAvatar}
+                  username={userAccount?.username || "Player"}
+                  name={userAccount?.displayName}
+                  shape="rounded"
+                  className="w-full h-full text-xl font-black"
+                />
               </div>
               <div
                 data-testid="change-dp-badge"
@@ -393,7 +398,7 @@ export default function ProfileStatsPage() {
               <div className="flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-[#c29b78]" />
                 <span className="text-xs font-bold text-[#f5f5f5]">
-                  Select or Upload Display Picture
+                  Display Picture
                 </span>
               </div>
               <button
@@ -406,59 +411,42 @@ export default function ProfileStatsPage() {
               </button>
             </div>
 
-            {/* Custom File Upload Button */}
-            <button
-              type="button"
-              disabled={isUploadingDp}
-              onClick={() => fileInputRef.current?.click()}
-              data-testid="upload-custom-dp-btn"
-              className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-[#c29b78] to-[#d4b08f] hover:brightness-105 active:scale-98 text-[#151413] font-black text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md shadow-[#c29b78]/25 mb-3"
-            >
-              <Upload className="w-4 h-4 stroke-[2.5]" />
-              <span>
-                {isUploadingDp
-                  ? "Compressing & Uploading..."
-                  : "Upload Custom Photo from Phone / PC"}
-              </span>
-            </button>
-
-            {/* Curated Modern Chess Photography Presets */}
-            <div>
-              <span className="text-[10px] uppercase font-bold text-[#a3a3a3] tracking-wider block mb-2">
-                Or Select Premium Chess Photography
-              </span>
-              <div className="grid grid-cols-4 gap-2">
-                {CURATED_AVATARS.map((preset) => {
-                  const isSelected = userAvatar === preset.url;
-                  return (
-                    <button
-                      key={preset.id}
-                      type="button"
-                      data-testid={`avatar-preset-${preset.id}`}
-                      onClick={() => handleSelectPreset(preset.url)}
-                      className={`relative aspect-square rounded-xl overflow-hidden border-2 transition-all cursor-pointer group ${
-                        isSelected
-                          ? "border-[#c29b78] ring-2 ring-[#c29b78]/40 scale-102"
-                          : "border-white/10 hover:border-[#c29b78]/60"
-                      }`}
-                      title={preset.name}
-                    >
-                      <img
-                        src={preset.url}
-                        alt={preset.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                      />
-                      {isSelected && (
-                        <div className="absolute top-1 right-1 w-4 h-4 rounded-full bg-[#c29b78] text-[#151413] flex items-center justify-center shadow-md">
-                          <Check className="w-2.5 h-2.5 stroke-[3]" />
-                        </div>
-                      )}
-                      <span className="absolute bottom-0 inset-x-0 bg-black/75 text-[9px] font-bold text-white py-0.5 truncate px-1 text-center">
-                        {preset.name}
-                      </span>
-                    </button>
-                  );
-                })}
+            <div className="flex flex-col items-center justify-center p-4 bg-[#151413] rounded-2xl border border-white/10 gap-3">
+              <div className="w-20 h-20 rounded-2xl overflow-hidden shadow-lg border-2 border-[#c29b78]/40 flex items-center justify-center">
+                <UserAvatar
+                  avatar={userAvatar}
+                  username={userAccount?.username || "Player"}
+                  name={userAccount?.displayName}
+                  shape="rounded"
+                  className="w-full h-full text-2xl font-black"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isUploadingDp}
+                  onClick={() => fileInputRef.current?.click()}
+                  data-testid="upload-custom-dp-btn"
+                  className="py-2 px-3.5 rounded-xl bg-gradient-to-r from-[#c29b78] to-[#d4b08f] hover:brightness-105 active:scale-98 text-[#151413] font-black text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-md shadow-[#c29b78]/25"
+                >
+                  <Camera className="w-3.5 h-3.5 stroke-[2.5]" />
+                  <span>
+                    {isUploadingDp
+                      ? "Compressing..."
+                      : userAvatar
+                      ? "Change Photo"
+                      : "Upload Photo"}
+                  </span>
+                </button>
+                {userAvatar && (
+                  <button
+                    type="button"
+                    onClick={handleRemoveAvatar}
+                    className="py-2 px-3 rounded-xl bg-[#22201e] hover:bg-[#2d2a28] text-zinc-400 hover:text-red-400 font-bold text-xs border border-white/10 transition-colors cursor-pointer"
+                  >
+                    Remove
+                  </button>
+                )}
               </div>
             </div>
           </div>

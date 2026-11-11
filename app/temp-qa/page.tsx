@@ -899,7 +899,9 @@ export default function TempQAPage() {
       <header className="max-w-7xl mx-auto mb-8 pb-6 border-b border-white/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-3">
-            <span className="text-2xl text-[#c29b78]">♟</span>
+            <div className="w-8 h-8 rounded-lg bg-[#c29b78]/15 border border-[#c29b78]/30 flex items-center justify-center text-[#c29b78]">
+              <Sparkles className="w-4 h-4" />
+            </div>
             <h1 className="text-xl sm:text-2xl font-black tracking-tight text-[#f5f5f5]">
               Doom<span className="text-[#c29b78]">Chess</span> QA Test Harness
             </h1>
