@@ -4,3 +4,4 @@ export const SUPPORT_EMAIL =
 export const SUPPORT_MAILTO = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(
   "DoomChess Support & Feedback"
 )}`;
+
