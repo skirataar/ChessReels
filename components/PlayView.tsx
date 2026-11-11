@@ -2384,56 +2384,6 @@ export function PlayView({
         )}
       </main>
 
-      {/* Floating Placement Test HUD Bar Docked Cleanly Above Bottom Nav */}
-      {isHydrated && isCalibrating && activeTab === "reels" && (
-        <aside
-          role="status"
-          aria-label="Placement Test"
-          data-testid="placement-test-hud"
-          className="fixed bottom-20 left-1/2 -translate-x-1/2 z-30 w-full max-w-[480px] px-3 animate-in fade-in slide-in-from-bottom-2 duration-200 pointer-events-auto"
-        >
-          <div className="h-11 rounded-none bg-[#12100e]/95 backdrop-blur-md border border-[#c29b78]/25 px-3 flex items-center justify-between gap-3 shadow-[0_-8px_24px_rgba(0,0,0,0.6)]">
-            {/* Left Section (Progress & Puzzle Step) */}
-            <div className="flex items-center gap-1.5 shrink-0">
-              <Target className="w-3.5 h-3.5 stroke-[#c29b78] stroke-[2] shrink-0" />
-              <span className="text-[11px] font-semibold text-zinc-100 uppercase tracking-wider">
-                Placement Test
-              </span>
-              <span className="text-[11px] font-mono text-[#c29b78] flex items-center gap-1">
-                <span className="w-1 h-1 rounded-full bg-[#c29b78]/60 inline-block" aria-hidden="true" />
-                <span>Puzzle {currentCalibrationStep} of 6</span>
-              </span>
-            </div>
-
-            {/* Center Segmented Progress */}
-            <div className="flex items-center gap-1 flex-1 max-w-[100px] mx-1">
-              {Array.from({ length: 6 }).map((_, idx) => {
-                const completedCount = isUserCalibrating
-                  ? (userAccount?.calibrationStep ?? 0)
-                  : (guestSessionState?.currentStep ?? 0);
-                return (
-                  <div
-                    key={idx}
-                    className={`h-1 rounded-sm flex-1 transition-all duration-300 ${
-                      idx < completedCount
-                        ? "bg-[#c29b78]"
-                        : "bg-white/10"
-                    }`}
-                  />
-                );
-              })}
-            </div>
-
-            {/* Right Section (Estimated Rating) */}
-            <div className="shrink-0">
-              <span className="text-[10px] font-mono text-zinc-400">
-                Est. Elo: <strong className="text-zinc-200">{currentElo}</strong>
-              </span>
-            </div>
-          </div>
-        </aside>
-      )}
-
       {/* Floating Out of Energy HUD Bar Docked Cleanly Above Bottom Nav */}
       {isHydrated && puzzlesRemaining <= 0 && !isPro && !isCalibrating && activeTab === "reels" && (
         <aside
@@ -2509,55 +2459,117 @@ export function PlayView({
         </aside>
       )}
 
-      {/* Floating Guest Mode HUD Pill Docked Cleanly Above Bottom Nav */}
+      {/* Floating Single Placement / Guest Mode HUD Bar Docked Cleanly with iOS Safe-Area Padding */}
       {isHydrated && !userAccount && activeTab === "reels" && (
         <aside
           role="status"
-          aria-label="Guest Mode"
+          aria-label={isGuestCalibrating ? `Placement Test • Puzzle ${currentCalibrationStep} of 6` : "Guest Mode"}
           data-testid="guest-mode-hud"
-          className="fixed bottom-20 left-1/2 -translate-x-1/2 z-30 w-full max-w-[480px] px-3 animate-in fade-in slide-in-from-bottom-2 duration-200 pointer-events-auto"
+          data-placement-hud="true"
+          className="fixed bottom-[calc(env(safe-area-inset-bottom)+1.25rem)] left-1/2 -translate-x-1/2 z-30 w-[calc(100%-1.5rem)] max-w-[440px] animate-in fade-in slide-in-from-bottom-2 duration-200 pointer-events-auto"
         >
-          <div
-            onClick={() => {
-              setAuthModalTab("register");
-              setIsAuthModalOpen(true);
-            }}
-            className="h-11 rounded-none bg-[#12100e]/95 backdrop-blur-md border border-[#c29b78]/25 px-3 flex items-center justify-between gap-3 shadow-[0_-8px_24px_rgba(0,0,0,0.6)] cursor-pointer hover:border-[#c29b78]/50 transition-colors"
-          >
-            <div className="flex items-center gap-1.5 shrink-0">
-              <svg
-                viewBox="0 0 24 24"
-                className="w-3.5 h-3.5 stroke-[#c29b78] stroke-[2] fill-none shrink-0"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
-                <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
-                <path d="M4 22h16" />
-                <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
-                <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
-                <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
-              </svg>
-              <span className="text-[11px] font-semibold text-zinc-100 uppercase tracking-wider">
-                Guest Mode
+          <div className="h-10 rounded-lg bg-[#12100e]/95 backdrop-blur-md border border-[#c29b78]/30 pl-2.5 pr-2 flex items-center justify-between gap-2 shadow-[0_8px_30px_rgba(0,0,0,0.8)]">
+            {/* Left Section (Status) */}
+            <div className="flex items-center gap-1.5 shrink-0 min-w-0">
+              <Trophy className="w-3 h-3 stroke-current text-[#c29b78] shrink-0" aria-hidden="true" />
+              <span className="text-[10px] font-bold text-zinc-100 uppercase tracking-wider whitespace-nowrap">
+                {isGuestCalibrating ? (
+                  <>
+                    <span>PLACEMENT TEST</span>
+                    <span className="text-[#c29b78] font-mono font-semibold ml-1">
+                      • Puzzle {currentCalibrationStep} of 6
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span>GUEST MODE</span>
+                    <span className="text-zinc-400 font-normal ml-1 hidden xs:inline">
+                      • Rating Calibrated
+                    </span>
+                  </>
+                )}
               </span>
-              <span className="text-[11px] font-mono text-[#c29b78] flex items-center gap-1">
-                <span className="w-1 h-1 rounded-full bg-[#c29b78]/60 inline-block" aria-hidden="true" />
-                <span>
-                  {(guestSessionState?.solvedCount ?? 0) >= 3
-                    ? "Rating Calibrated"
-                    : `Puzzle ${(guestSessionState?.solvedCount ?? 0) + 1} of 3`}
+            </div>
+
+            {/* Center (6 Segmented Progress Dashes) */}
+            <div
+              className="flex items-center gap-0.5 max-w-[48px] w-full shrink-0"
+              aria-label={`Placement progress: ${
+                isGuestCalibrating ? (guestSessionState?.currentStep ?? 0) : 6
+              } of 6`}
+            >
+              {Array.from({ length: 6 }).map((_, idx) => {
+                const completedCount = isGuestCalibrating
+                  ? (guestSessionState?.currentStep ?? 0)
+                  : 6;
+                return (
+                  <div
+                    key={idx}
+                    className={`h-1 flex-1 rounded-sm transition-all duration-300 ${
+                      idx < completedCount ? "bg-[#c29b78]" : "bg-white/10"
+                    }`}
+                  />
+                );
+              })}
+            </div>
+
+            {/* Right Section (Stats & Call to Action) */}
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-[10px] font-mono text-zinc-300 font-bold whitespace-nowrap">
+                Est. {currentElo}
+              </span>
+              <button
+                type="button"
+                data-testid="hud-save-rating-btn"
+                onClick={() => {
+                  setAuthModalTab("register");
+                  setIsAuthModalOpen(true);
+                }}
+                className="bg-[#c29b78] hover:bg-[#c29b78]/90 text-[#0a0908] font-extrabold text-[9px] uppercase tracking-wider px-2 py-1 rounded transition-colors shrink-0 cursor-pointer"
+              >
+                SAVE RATING
+              </button>
+            </div>
+          </div>
+        </aside>
+      )}
+
+      {/* Floating Placement Test Bar for Registered Uncalibrated User Docked Cleanly Above Bottom Nav */}
+      {isHydrated && isUserCalibrating && activeTab === "reels" && (
+        <aside
+          role="status"
+          aria-label={`Placement Test • Puzzle ${currentCalibrationStep} of 6`}
+          data-testid="user-placement-test-hud"
+          className="fixed bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] md:bottom-24 left-1/2 -translate-x-1/2 z-30 w-[calc(100%-1.5rem)] max-w-[440px] animate-in fade-in slide-in-from-bottom-2 duration-200 pointer-events-auto"
+        >
+          <div className="h-10 rounded-lg bg-[#12100e]/95 backdrop-blur-md border border-[#c29b78]/30 pl-2.5 pr-2 flex items-center justify-between gap-2 shadow-[0_8px_30px_rgba(0,0,0,0.8)]">
+            <div className="flex items-center gap-1.5 shrink-0 min-w-0">
+              <Trophy className="w-3 h-3 stroke-current text-[#c29b78] shrink-0" aria-hidden="true" />
+              <span className="text-[10px] font-bold text-zinc-100 uppercase tracking-wider whitespace-nowrap">
+                <span>PLACEMENT TEST</span>
+                <span className="text-[#c29b78] font-mono font-semibold ml-1">
+                  • Puzzle {currentCalibrationStep} of 6
                 </span>
               </span>
             </div>
 
-            <div className="shrink-0 flex items-center gap-2">
-              <span className="text-[10px] font-mono text-zinc-400">
-                Est. <strong className="text-zinc-200">{currentElo}</strong>
-              </span>
-              <span className="text-[10px] font-bold text-[#c29b78] uppercase tracking-wider">
-                Save Rating
+            <div
+              className="flex items-center gap-0.5 max-w-[48px] w-full shrink-0"
+              aria-label={`Placement progress: ${userAccount?.calibrationStep ?? 0} of 6`}
+            >
+              {Array.from({ length: 6 }).map((_, idx) => (
+                <div
+                  key={idx}
+                  className={`h-1 flex-1 rounded-sm transition-all duration-300 ${
+                    idx < (userAccount?.calibrationStep ?? 0) ? "bg-[#c29b78]" : "bg-white/10"
+                  }`}
+                />
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-[10px] font-mono text-zinc-300 font-bold whitespace-nowrap">
+                Est. {currentElo}
               </span>
             </div>
           </div>
