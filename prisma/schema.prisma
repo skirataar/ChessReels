@@ -39,6 +39,7 @@ model User {
   twoFactorEnabled Boolean   @default(false)
   twoFactorCode    String?
   twoFactorExpires DateTime?
+  emailSubscribed  Boolean   @default(true)
   plan            String?      @default("free")
   bonusQuota      Int          @default(0)
   puzzlesRemaining Int?        @default(15)

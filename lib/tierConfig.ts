@@ -39,6 +39,7 @@ export async function ensureSettingsTable(): Promise<void> {
       ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "twoFactorEnabled" BOOLEAN DEFAULT false;
       ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "twoFactorCode" TEXT;
       ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "twoFactorExpires" TIMESTAMP WITH TIME ZONE;
+      ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "emailSubscribed" BOOLEAN DEFAULT true;
     `);
   } catch (err) {
     console.warn("Could not ensure system_settings table or bonusQuota column:", err);

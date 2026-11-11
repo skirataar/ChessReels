@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import {
   Shield,
   Key,
@@ -8,6 +9,7 @@ import {
   Database,
   Crown,
   Activity,
+  Radio,
   Search,
   Trash2,
   Edit3,
@@ -782,6 +784,14 @@ export default function AdminPage() {
             <Terminal className="w-3.5 h-3.5" />
             <span>Audit Logs ({sessionLogs.length})</span>
           </button>
+
+          <Link
+            href="/admin/broadcast"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all bg-zinc-900/60 text-zinc-400 hover:text-white hover:bg-zinc-800/60"
+          >
+            <Radio className="w-3.5 h-3.5 text-[#c29b78]" />
+            <span>Broadcasts</span>
+          </Link>
         </div>
 
         {/* ================= TAB 1: EXECUTIVE OVERVIEW ================= */}

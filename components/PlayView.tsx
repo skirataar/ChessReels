@@ -2167,48 +2167,6 @@ export function PlayView({
 
       {/* 2. Main Gameplay Canvas */}
       <main className="flex-1 flex flex-col relative w-full pt-14 pb-16 bg-[#151413] overflow-hidden overscroll-none touch-none select-none justify-between items-center">
-        {/* Placement Calibration Banner */}
-        {isHydrated && isCalibrating && (
-          <div
-            className="w-full mx-auto px-3 mt-2 mb-1 animate-in fade-in duration-200"
-            style={{
-              width: "min(calc(100vw - 24px), calc(100dvh - 230px), 520px)",
-              maxWidth: "min(calc(100vw - 24px), calc(100dvh - 230px), 520px)",
-            }}
-          >
-            <div className="p-3 rounded-xl bg-gradient-to-r from-[#22201e] to-[#2d2a28] border border-[#c29b78]/40 shadow-lg flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-[#c29b78] animate-ping" />
-                  <span className="text-xs font-black text-[#c29b78] uppercase tracking-wider">
-                    Placement Test | Puzzle {currentCalibrationStep} of 6
-                  </span>
-                </div>
-                <span className="text-[10px] text-[#a3a3a3] font-mono">
-                  Est: {currentElo} Elo
-                </span>
-              </div>
-              <div className="w-full h-1.5 rounded-full bg-[#151413] overflow-hidden flex gap-1">
-                {Array.from({ length: 6 }).map((_, idx) => (
-                  <div
-                    key={idx}
-                    className={`h-full flex-1 rounded-full transition-all duration-300 ${
-                      idx < (userAccount?.calibrationStep ?? 0)
-                        ? "bg-[#c29b78]"
-                        : idx === (userAccount?.calibrationStep ?? 0)
-                        ? "bg-[#c29b78]/50 animate-pulse"
-                        : "bg-white/10"
-                    }`}
-                  />
-                ))}
-              </div>
-              <p className="text-[10px] text-[#a3a3a3]">
-                Solve accurately to balance tactical puzzle difficulty to your skill baseline.
-              </p>
-            </div>
-          </div>
-        )}
-
         {!currentPuzzle ? (
           <div
             className="w-full flex-1 flex flex-col justify-between items-center px-4 py-3 mx-auto"
@@ -2290,6 +2248,63 @@ export function PlayView({
           </div>
         )}
       </main>
+
+      {/* Floating Placement Test HUD Bar Docked Cleanly Above Bottom Nav */}
+      {isHydrated && isCalibrating && activeTab === "reels" && (
+        <aside
+          role="status"
+          aria-label="Placement Test"
+          data-testid="placement-test-hud"
+          className="fixed bottom-20 left-1/2 -translate-x-1/2 z-30 w-full max-w-[480px] px-3 animate-in fade-in slide-in-from-bottom-2 duration-200 pointer-events-auto"
+        >
+          <div className="h-11 rounded-none bg-[#12100e]/95 backdrop-blur-md border border-[#c29b78]/25 px-3 flex items-center justify-between gap-3 shadow-[0_-8px_24px_rgba(0,0,0,0.6)]">
+            {/* Left Section (Progress & Puzzle Step) */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              <svg
+                viewBox="0 0 24 24"
+                className="w-3.5 h-3.5 stroke-[#c29b78] stroke-[2] fill-none shrink-0"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <circle cx="12" cy="12" r="6" />
+                <circle cx="12" cy="12" r="2" />
+              </svg>
+              <span className="text-[11px] font-semibold text-zinc-100 uppercase tracking-wider">
+                Placement Test
+              </span>
+              <span className="text-[11px] font-mono text-[#c29b78] flex items-center gap-1">
+                <span className="w-1 h-1 rounded-full bg-[#c29b78]/60 inline-block" aria-hidden="true" />
+                <span>Puzzle {currentCalibrationStep} of 6</span>
+              </span>
+            </div>
+
+            {/* Center Segmented Progress */}
+            <div className="flex items-center gap-1 flex-1 max-w-[100px] mx-1">
+              {Array.from({ length: 6 }).map((_, idx) => (
+                <div
+                  key={idx}
+                  className={`h-1 rounded-sm flex-1 transition-all duration-300 ${
+                    idx < (userAccount?.calibrationStep ?? 0)
+                      ? "bg-[#c29b78]"
+                      : idx === (userAccount?.calibrationStep ?? 0)
+                      ? "bg-[#c29b78]/50 animate-pulse"
+                      : "bg-white/10"
+                  }`}
+                />
+              ))}
+            </div>
+
+            {/* Right Section (Estimated Rating) */}
+            <div className="shrink-0">
+              <span className="text-[10px] font-mono text-zinc-400">
+                Est. <strong className="text-zinc-200">{currentElo}</strong>
+              </span>
+            </div>
+          </div>
+        </aside>
+      )}
 
       {/* Floating Out of Energy HUD Bar Docked Cleanly Above Bottom Nav */}
       {isHydrated && puzzlesRemaining <= 0 && !isPro && !isCalibrating && activeTab === "reels" && (
