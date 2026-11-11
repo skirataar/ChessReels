@@ -20,7 +20,12 @@ import {
 } from "lucide-react";
 import { CURATED_AVATARS, compressImageFile } from "@/lib/avatarUpload";
 import { OtpModal } from "@/components/OtpModal";
-import { getGuestSession, syncGuestSessionToAccount } from "@/lib/placementEngine";
+import {
+  getGuestSession,
+  syncGuestSessionToAccount,
+  clearGuestSession,
+  TOTAL_PLACEMENT_STEPS,
+} from "@/lib/placementEngine";
 
 export interface AuthModalProps {
   isOpen: boolean;
@@ -64,9 +69,6 @@ export function AuthModal({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState<boolean>(false);
-  const [showGooglePrompt, setShowGooglePrompt] = useState<boolean>(initialShowGoogle);
-  const [googleEmail, setGoogleEmail] = useState<string>("tactics.player@gmail.com");
-  const [googleName, setGoogleName] = useState<string>("Tactics Master");
   const [otpState, setOtpState] = useState<{
     isOpen: boolean;
     email: string;
@@ -130,6 +132,15 @@ export function AuthModal({
       return;
     }
 
+    const currentGuest = getGuestSession();
+    const hasCompletedPlacement = Boolean(
+      currentGuest.isComplete ||
+      currentGuest.calibratedElo ||
+      (currentGuest.history && currentGuest.history.length >= TOTAL_PLACEMENT_STEPS)
+    );
+    const effectiveCalibratedElo = currentGuest.calibratedElo ?? calibratedElo;
+    const effectiveIsCalibrated = hasCompletedPlacement || isCalibrated;
+
     setIsLoading(true);
     try {
       const res = await fetch("/api/user/account", {
@@ -142,8 +153,13 @@ export function AuthModal({
           password,
           displayName: displayName.trim() || undefined,
           avatar: selectedAvatar,
-          elo: calibratedElo,
-          startingElo: calibratedElo,
+          elo: effectiveCalibratedElo,
+          startingElo: effectiveCalibratedElo,
+          calibratedElo: effectiveCalibratedElo,
+          isCalibrated: effectiveIsCalibrated,
+          hasCompletedPlacement,
+          calibrationStep: hasCompletedPlacement ? 6 : currentGuest.currentStep,
+          puzzleHistory: currentGuest.history,
         }),
       });
 
@@ -165,9 +181,15 @@ export function AuthModal({
       }
 
       if (data.user?.id) {
-        syncGuestSessionToAccount(data.user.id).catch(() => {});
+        await syncGuestSessionToAccount(data.user.id).catch(() => {});
+        clearGuestSession();
       }
-      onAccountSuccess(data.user);
+      const safeUser = {
+        ...data.user,
+        isCalibrated: effectiveIsCalibrated || Boolean(data.user?.isCalibrated),
+        elo: effectiveCalibratedElo || data.user?.elo,
+      };
+      onAccountSuccess(safeUser);
       onClose();
     } catch {
       setErrorMsg("Network error. Please try again.");
@@ -247,42 +269,6 @@ export function AuthModal({
     window.location.href = `/api/auth/google?startingElo=${calibratedElo}&guestId=${encodeURIComponent(guestId)}&returnUrl=${returnUrl}`;
   };
 
-  const handleGoogleAuth = async (emailToUse: string, nameToUse: string) => {
-    setIsLoading(true);
-    setErrorMsg(null);
-    try {
-      const res = await fetch("/api/user/google-auth", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: emailToUse,
-          name: nameToUse,
-          elo: calibratedElo,
-          startingElo: calibratedElo,
-          avatar: selectedAvatar,
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        setErrorMsg(data.error || "Google authentication failed.");
-        setIsLoading(false);
-        return;
-      }
-
-      if (data.user?.id) {
-        syncGuestSessionToAccount(data.user.id).catch(() => {});
-      }
-      onAccountSuccess(data.user);
-      setShowGooglePrompt(false);
-      onClose();
-    } catch {
-      setErrorMsg("Network error. Please try again.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
       <div
@@ -317,126 +303,7 @@ export function AuthModal({
           </button>
         </div>
 
-        {/* Google Authentication Dialog Prompt */}
-        {showGooglePrompt ? (
-          <div className="p-5 space-y-4 bg-[#151413] overflow-y-auto">
-            <div className="flex items-center gap-3 p-3.5 rounded-2xl bg-[#22201e] border border-white/10 shadow-sm">
-              <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
-                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
-                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
-              </svg>
-              <div>
-                <p className="text-xs font-bold text-[#f5f5f5]">Sign in with Google</p>
-                <p className="text-[11px] text-[#a3a3a3]">Save your rating, streaks, and progress securely</p>
-              </div>
-            </div>
-
-            {/* Locked Verified Placement Rating Badge */}
-            <div className="p-3.5 rounded-xl bg-[#22201e]/60 border border-[#c29b78]/30 flex items-center justify-between shadow-sm">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-[#c29b78]/10 border border-[#c29b78]/30 flex items-center justify-center text-[#c29b78] shrink-0">
-                  <ShieldCheck className="w-4 h-4 stroke-[2]" />
-                </div>
-                <div>
-                  <div className="text-[10px] uppercase font-bold text-[#a3a3a3] tracking-wider">
-                    Placement Baseline
-                  </div>
-                  <div className="text-xs font-semibold text-[#f5f5f5]">
-                    {isCalibrated ? "Verified Placement Rating" : "Adaptive Baseline"}
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-baseline gap-1 font-mono">
-                <span className="text-base font-bold text-[#c29b78]">{calibratedElo}</span>
-                <span className="text-[10px] text-[#a3a3a3]">ELO</span>
-              </div>
-            </div>
-
-            {/* Primary Google Button */}
-            <button
-              type="button"
-              disabled={isLoading}
-              onClick={handleGoogleOAuthRedirect}
-              className="w-full py-3 rounded-xl bg-white hover:bg-neutral-100 text-neutral-900 text-xs font-bold transition-all shadow-md cursor-pointer flex items-center justify-center gap-2.5 active:scale-98"
-            >
-              <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
-                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
-              </svg>
-              <span>{isLoading ? "Redirecting..." : "Continue with Google"}</span>
-              <ArrowRight className="w-4 h-4 text-neutral-700" />
-            </button>
-
-            {/* Quick Test Sign-In */}
-            <div className="pt-3 border-t border-white/10 space-y-2.5">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] uppercase font-bold text-[#a3a3a3] tracking-wider">
-                  Quick Direct Sign-In
-                </span>
-                <span className="text-[10px] text-[#c29b78]">Instant Sync</span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-[#a3a3a3] block mb-1">
-                    Google Email
-                  </label>
-                  <input
-                    type="email"
-                    value={googleEmail}
-                    onChange={(e) => setGoogleEmail(e.target.value)}
-                    placeholder="you@gmail.com"
-                    className="w-full px-3 py-2 rounded-xl bg-[#22201e] border border-white/10 text-white text-xs focus:outline-none focus:border-[#c29b78]"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-[#a3a3a3] block mb-1">
-                    Display Name
-                  </label>
-                  <input
-                    type="text"
-                    value={googleName}
-                    onChange={(e) => setGoogleName(e.target.value)}
-                    placeholder="Tactics Master"
-                    className="w-full px-3 py-2 rounded-xl bg-[#22201e] border border-white/10 text-white text-xs focus:outline-none focus:border-[#c29b78]"
-                    required
-                  />
-                </div>
-              </div>
-
-              {errorMsg && (
-                <div className="p-2.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-semibold">
-                  {errorMsg}
-                </div>
-              )}
-
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowGooglePrompt(false)}
-                  className="flex-1 py-2.5 rounded-xl bg-[#22201e] hover:bg-[#2d2a28] text-[#a3a3a3] hover:text-white text-xs font-bold transition-all cursor-pointer"
-                >
-                  Back
-                </button>
-                <button
-                  type="button"
-                  disabled={isLoading}
-                  onClick={() => handleGoogleAuth(googleEmail, googleName)}
-                  className="flex-[2] py-2.5 rounded-xl bg-[#c29b78] hover:bg-[#d4b08f] text-[#151413] text-xs font-black uppercase tracking-wider transition-all cursor-pointer shadow-md flex items-center justify-center gap-1.5"
-                >
-                  <span>{isLoading ? "Signing in..." : "Confirm & Continue"}</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto">
             {/* Tab Switcher */}
             <div className="flex border-b border-white/10 bg-[#22201e]/40 p-1.5 gap-1.5">
               <button
@@ -812,19 +679,8 @@ export function AuthModal({
                   </button>
                 </form>
               )}
-              {/* Developer / Offline Quick Test Sign-In Option */}
-              <div className="pt-1 text-center">
-                <button
-                  type="button"
-                  onClick={() => setShowGooglePrompt(true)}
-                  className="text-[10px] text-[#737373] hover:text-[#c29b78] transition-colors cursor-pointer"
-                >
-                  Quick Test Sign-In (without Google)
-                </button>
-              </div>
             </div>
           </div>
-        )}
       </div>
 
       {otpState.isOpen && (
@@ -833,9 +689,20 @@ export function AuthModal({
           onClose={() => setOtpState((prev) => ({ ...prev, isOpen: false }))}
           email={otpState.email}
           type={otpState.type}
-          onSuccess={(user) => {
+          onEditDetails={() => setOtpState((prev) => ({ ...prev, isOpen: false }))}
+          onSuccess={async (user) => {
             setOtpState((prev) => ({ ...prev, isOpen: false }));
-            onAccountSuccess(user);
+            if (user?.id) {
+              await syncGuestSessionToAccount(user.id).catch(() => {});
+              clearGuestSession();
+            }
+            const currentGuest = getGuestSession();
+            const safeUser = {
+              ...user,
+              isCalibrated: Boolean(user?.isCalibrated || currentGuest.isComplete || currentGuest.calibratedElo),
+              elo: user?.elo || currentGuest.calibratedElo || calibratedElo,
+            };
+            onAccountSuccess(safeUser);
             onClose();
           }}
         />

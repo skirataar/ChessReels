@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { X, ShieldCheck, AlertCircle, Loader2, RotateCcw, Check } from "lucide-react";
+import { X, ShieldCheck, AlertCircle, Loader2, RotateCcw, Check, Pencil } from "lucide-react";
 
 export interface OtpModalProps {
   isOpen: boolean;
@@ -10,6 +10,7 @@ export interface OtpModalProps {
   type: "VERIFY_EMAIL" | "2FA";
   isActivation?: boolean;
   onSuccess: (user: any) => void;
+  onEditDetails?: () => void;
 }
 
 export function OtpModal({
@@ -19,6 +20,7 @@ export function OtpModal({
   type,
   isActivation = false,
   onSuccess,
+  onEditDetails,
 }: OtpModalProps) {
   const [digits, setDigits] = useState<string[]>(["", "", "", "", "", ""]);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -306,6 +308,20 @@ export function OtpModal({
             <span>Verify & Continue</span>
           )}
         </button>
+
+        {/* Edit Details Action (e.g. wrong email typo) */}
+        {onEditDetails && (
+          <div className="mt-3 text-center">
+            <button
+              type="button"
+              onClick={onEditDetails}
+              className="text-xs text-[#c29b78] hover:text-[#d4b08f] transition-colors font-medium flex items-center justify-center gap-1.5 mx-auto cursor-pointer"
+            >
+              <Pencil className="w-3.5 h-3.5 stroke-[2]" />
+              <span>Wrong email? Edit details</span>
+            </button>
+          </div>
+        )}
 
         {/* Resend Footer */}
         <div className="mt-4 pt-3 border-t border-white/[0.06] text-xs text-zinc-500">

@@ -1004,7 +1004,7 @@ export function PlayView({
         const oauthInfo = searchParams.get("oauth_info");
         const oauthError = searchParams.get("oauth_error");
         if (oauthInfo === "google_credentials_required") {
-          setOauthAlert("Google OAuth: Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env to connect live accounts. Quick Test Sign-In is ready.");
+          setOauthAlert("Google OAuth is currently unavailable. Please sign in with email and password.");
           window.history.replaceState({}, document.title, window.location.pathname);
         } else if (oauthError) {
           setOauthAlert(`Google OAuth notification: ${oauthError.replace(/_/g, " ")}`);

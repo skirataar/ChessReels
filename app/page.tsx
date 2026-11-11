@@ -10,7 +10,11 @@ import { prefetchPuzzles, clearAllUserAndPuzzleCache } from "@/lib/puzzleCache";
 import { hydrateUserSession } from "@/lib/sessionHydration";
 import { OtpModal } from "@/components/OtpModal";
 import { trackEvent } from "@/lib/analytics";
-import { syncGuestSessionToAccount, getGuestSession } from "@/lib/placementEngine";
+import {
+  syncGuestSessionToAccount,
+  getGuestSession,
+  clearGuestSession,
+} from "@/lib/placementEngine";
 
 // --- Types ---
 type FlowStep = "gate" | "step-elo" | "step-goal" | "step-board" | "auth" | "pro-upsell";
@@ -796,6 +800,15 @@ export default function RootPage() {
         return;
       }
 
+      const guestSession = getGuestSession();
+      const hasCompletedPlacement = Boolean(
+        guestSession.isComplete ||
+        guestSession.calibratedElo ||
+        (guestSession.history && guestSession.history.length >= 6)
+      );
+      const effectiveCalibratedElo = guestSession.calibratedElo ?? startingElo;
+      const effectiveIsCalibrated = hasCompletedPlacement || startingElo > 0;
+
       setIsSubmitting(true);
       saveCalibrationToStorage();
 
@@ -809,8 +822,13 @@ export default function RootPage() {
             username: cleanUser,
             password,
             skillLevel: skill.skillLevel,
-            startingElo,
-            elo: startingElo,
+            startingElo: effectiveCalibratedElo,
+            elo: effectiveCalibratedElo,
+            calibratedElo: effectiveCalibratedElo,
+            isCalibrated: effectiveIsCalibrated,
+            hasCompletedPlacement,
+            calibrationStep: hasCompletedPlacement ? 6 : (guestSession.currentStep || 6),
+            puzzleHistory: guestSession.history,
           }),
         });
         const data = await res.json();
@@ -832,12 +850,17 @@ export default function RootPage() {
         }
 
         if (data.user) {
-          syncGuestSessionToAccount(data.user.id).catch(() => {});
+          await syncGuestSessionToAccount(data.user.id).catch(() => {});
+          clearGuestSession();
           clearAllUserAndPuzzleCache();
-          syncGuestSessionToAccount(data.user.id).catch(() => {});
-          hydrateUserSession(data.user);
-          prefetchPuzzles(data.user.elo || 800, 5, data.user.id).catch(() => {});
-          document.cookie = `chess_reel_session=${encodeURIComponent(data.user.id)}; path=/; max-age=${60 * 60 * 24 * 30}`;
+          const userWithCal = {
+            ...data.user,
+            isCalibrated: true,
+            elo: effectiveCalibratedElo || data.user.elo,
+          };
+          hydrateUserSession(userWithCal);
+          prefetchPuzzles(userWithCal.elo || 800, 5, userWithCal.id).catch(() => {});
+          document.cookie = `chess_reel_session=${encodeURIComponent(userWithCal.id)}; path=/; max-age=${60 * 60 * 24 * 30}`;
           setStep("pro-upsell");
         }
       } catch {
@@ -1795,7 +1818,8 @@ export default function RootPage() {
           onClose={() => setOtpState((prev) => ({ ...prev, isOpen: false }))}
           email={otpState.email}
           type={otpState.type}
-          onSuccess={(user) => {
+          onEditDetails={() => setOtpState((prev) => ({ ...prev, isOpen: false }))}
+          onSuccess={async (user) => {
             setOtpState((prev) => ({ ...prev, isOpen: false }));
             clearAllUserAndPuzzleCache();
             if (typeof window !== "undefined") {
@@ -1804,10 +1828,18 @@ export default function RootPage() {
                 window.localStorage.removeItem("quota_last_check");
               } catch {}
             }
-            syncGuestSessionToAccount(user.id).catch(() => {});
-            hydrateUserSession(user);
-            prefetchPuzzles(user.elo || 800, 5, user.id).catch(() => {});
-            document.cookie = `chess_reel_session=${encodeURIComponent(user.id)}; path=/; max-age=${60 * 60 * 24 * 30}`;
+            if (user?.id) {
+              await syncGuestSessionToAccount(user.id).catch(() => {});
+              clearGuestSession();
+            }
+            const userWithCal = {
+              ...user,
+              isCalibrated: true,
+              elo: user.elo || startingElo,
+            };
+            hydrateUserSession(userWithCal);
+            prefetchPuzzles(userWithCal.elo || 800, 5, userWithCal.id).catch(() => {});
+            document.cookie = `chess_reel_session=${encodeURIComponent(userWithCal.id)}; path=/; max-age=${60 * 60 * 24 * 30}`;
             if (otpState.isLogin) {
               if (typeof window !== "undefined") {
                 window.location.href = "/play";
