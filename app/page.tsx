@@ -3,14 +3,14 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ArrowRight, Check, LogIn, Sparkles, ChevronDown, Eye, EyeOff, User } from "lucide-react";
+import { ChevronLeft, ArrowRight, Check, LogIn, Sparkles, ChevronDown, Eye, EyeOff, User, ShieldCheck, Lock } from "lucide-react";
 import { BOARD_THEMES, BoardTheme, setStoredBoardTheme, getStoredBoardTheme } from "@/lib/boardThemes";
 import { clearGuestLocalSession, isGuestAccount } from "@/lib/guestAccount";
 import { prefetchPuzzles, clearAllUserAndPuzzleCache } from "@/lib/puzzleCache";
 import { hydrateUserSession } from "@/lib/sessionHydration";
 import { OtpModal } from "@/components/OtpModal";
 import { trackEvent } from "@/lib/analytics";
-import { syncGuestSessionToAccount } from "@/lib/guestSession";
+import { syncGuestSessionToAccount, getGuestSession } from "@/lib/placementEngine";
 
 // --- Types ---
 type FlowStep = "gate" | "step-elo" | "step-goal" | "step-board" | "auth" | "pro-upsell";
@@ -485,9 +485,21 @@ export default function RootPage() {
   const [direction, setDirection] = useState<number>(1);
 
   // User calibration choices
-  const [startingElo, setStartingElo] = useState<number>(1000);
+  const [startingElo, setStartingElo] = useState<number>(() => {
+    if (typeof window !== "undefined") {
+      const gs = getGuestSession();
+      if (gs && (gs.calibratedElo || gs.estimatedElo)) {
+        return gs.calibratedElo || gs.estimatedElo || 1000;
+      }
+    }
+    return 1000;
+  });
   const [targetElo, setTargetElo] = useState<number>(1400);
   const [selectedTheme, setSelectedTheme] = useState<BoardTheme>(() => getStoredBoardTheme());
+  const [selectedPieceSet, setSelectedPieceSet] = useState<string>(() => {
+    if (typeof window === "undefined") return "standard";
+    return window.localStorage.getItem("chess_reel_piece_set") || "standard";
+  });
 
   // Auth form state
   const [authMode, setAuthMode] = useState<"signup" | "signin">("signup");
@@ -1165,20 +1177,18 @@ export default function RootPage() {
                     </div>
                   )}
                   <h2 className="text-xl font-semibold tracking-tight text-[#f5f2eb]">
-                    Where are you starting from?
+                    Tactical Baseline Verified
                   </h2>
                   <p className="text-xs text-[#78716c] mt-1">
-                    Calibrate your initial tactical puzzle feed.
+                    Your starting rating calibrated from 6 placement positions.
                   </p>
 
-                  {/* Dynamic Rating Card */}
-                  <div className="p-6 mb-6 rounded-2xl bg-[#12100e] border border-white/10 relative overflow-hidden">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-4xl font-mono font-bold text-[#f5f2eb]">
-                          {startingElo}
-                        </span>
-                        <span className="text-xs font-mono uppercase text-[#78716c]">Elo</span>
+                  {/* Locked & Verified Rating Hero Card */}
+                  <div className="p-6 my-6 rounded-2xl bg-[#12100e] border border-[#c29b78]/30 relative overflow-hidden shadow-2xl">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-[#c29b78]/10 border border-[#c29b78]/30 text-[#c29b78] text-xs font-semibold">
+                        <ShieldCheck className="w-3.5 h-3.5 stroke-[2]" />
+                        <span>Verified Placement Rating</span>
                       </div>
                       <span
                         className={`px-3 py-1 rounded-full text-xs font-semibold ${skill.bg} ${skill.color} border ${skill.border} tracking-wide`}
@@ -1186,65 +1196,18 @@ export default function RootPage() {
                         {skill.tier}
                       </span>
                     </div>
-                    <p className="text-xs text-[#78716c] mt-2.5">
-                      {skill.desc}
-                    </p>
-                  </div>
 
-                  {/* Interactive Slider */}
-                  <div className="mb-6 px-1">
-                    <div className="relative flex items-center">
-                      <input
-                        type="range"
-                        min={400}
-                        max={2200}
-                        step={25}
-                        value={startingElo}
-                        onChange={(e) => setStartingElo(Number(e.target.value))}
-                        className="w-full h-2 rounded-lg appearance-none cursor-pointer bg-white/[0.08] accent-[#c29b78]
-                          [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:h-6 
-                          [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[#c29b78] 
-                          [&::-webkit-slider-thumb]:shadow-[0_0_12px_rgba(194,155,120,0.6)] [&::-webkit-slider-thumb]:border-2 
-                          [&::-webkit-slider-thumb]:border-[#0a0908] [&::-webkit-slider-thumb]:cursor-pointer
-                          [&::-moz-range-thumb]:w-6 [&::-moz-range-thumb]:h-6 [&::-moz-range-thumb]:rounded-full 
-                          [&::-moz-range-thumb]:bg-[#c29b78] [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-[#0a0908]
-                          [&::-moz-range-thumb]:cursor-pointer"
-                        style={{
-                          background: `linear-gradient(to right, #c29b78 0%, #c29b78 ${((startingElo - 400) / (2200 - 400)) * 100}%, rgba(255,255,255,0.08) ${((startingElo - 400) / (2200 - 400)) * 100}%, rgba(255,255,255,0.08) 100%)`,
-                        }}
-                      />
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-5xl font-mono font-bold text-[#f5f2eb] tracking-tight">
+                        {startingElo}
+                      </span>
+                      <span className="text-xs font-mono uppercase text-[#c29b78] font-bold">Elo Verified</span>
                     </div>
 
-                    <div className="flex justify-between items-center text-[11px] font-mono text-[#78716c] mt-3">
-                      <span>400</span>
-                      <span className="text-[#a8a29e]">1,200</span>
-                      <span>2,200+</span>
+                    <div className="mt-4 pt-4 border-t border-white/[0.06] flex items-center gap-2 text-xs text-[#a8a29e]">
+                      <Lock className="w-3.5 h-3.5 text-[#c29b78] shrink-0" />
+                      <span>Rating locked &amp; calibrated. Personalized tactical puzzles scale to match this benchmark.</span>
                     </div>
-                  </div>
-
-                  {/* Quick-snap tier buttons (32px / mb-8 before Continue CTA) */}
-                  <div className="grid grid-cols-3 gap-2.5 mb-8">
-                    {[
-                      { label: "Beginner", elo: 700 },
-                      { label: "Intermediate", elo: 1200 },
-                      { label: "Advanced", elo: 1700 },
-                    ].map((tier) => {
-                      const isActive = skill.tier === tier.label;
-                      return (
-                        <button
-                          key={tier.label}
-                          onClick={() => setStartingElo(tier.elo)}
-                          type="button"
-                          className={`py-2 px-1 rounded-xl text-xs font-medium border text-center transition-all cursor-pointer ${
-                            isActive
-                              ? "bg-[#c29b78]/[0.12] border-[#c29b78] text-[#c29b78]"
-                              : "bg-[#12100e] border-white/[0.06] text-[#78716c] hover:border-white/20 hover:text-[#f5f2eb]"
-                          }`}
-                        >
-                          {tier.label}
-                        </button>
-                      );
-                    })}
                   </div>
                 </div>
 
@@ -1349,15 +1312,18 @@ export default function RootPage() {
                     </div>
                   </div>
 
-                  {/* Quick Delta Chips */}
-                  <div className="grid grid-cols-4 gap-2 mt-5">
-                    {[200, 400, 600, 800].map((delta) => {
-                      const value = Math.min(2600, startingElo + delta);
-                      const isSelected = targetElo === value;
+                  {/* Quick Goal Targets (+200, +400, Grandmaster 2200+) */}
+                  <div className="grid grid-cols-3 gap-2 mt-5">
+                    {[
+                      { label: "+200", value: Math.min(2600, startingElo + 200) },
+                      { label: "+400", value: Math.min(2600, startingElo + 400) },
+                      { label: "Grandmaster 2200+", value: Math.max(2200, Math.min(2600, startingElo + 500)) },
+                    ].map((item) => {
+                      const isSelected = targetElo === item.value;
                       return (
                         <button
-                          key={delta}
-                          onClick={() => setTargetElo(value)}
+                          key={item.label}
+                          onClick={() => setTargetElo(item.value)}
                           type="button"
                           className={`py-2 px-1 rounded-xl text-xs font-mono font-medium border text-center transition-all cursor-pointer ${
                             isSelected
@@ -1365,7 +1331,7 @@ export default function RootPage() {
                               : "bg-[#12100e] border-white/[0.06] text-[#78716c] hover:border-white/20 hover:text-[#f5f2eb]"
                           }`}
                         >
-                          +{delta}
+                          {item.label}
                         </button>
                       );
                     })}
@@ -1460,6 +1426,41 @@ export default function RootPage() {
                         </button>
                       );
                     })}
+                  </div>
+
+                  {/* Piece Set Style Picker */}
+                  <div className="mt-3.5">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#a3a3a3] block mb-1.5">
+                      Piece Set Style
+                    </span>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { id: "standard", name: "Staunton" },
+                        { id: "neo", name: "Neo Modern" },
+                        { id: "wood", name: "Wood Carved" },
+                      ].map((piece) => {
+                        const isSelected = selectedPieceSet === piece.id;
+                        return (
+                          <button
+                            key={piece.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedPieceSet(piece.id);
+                              if (typeof window !== "undefined") {
+                                window.localStorage.setItem("chess_reel_piece_set", piece.id);
+                              }
+                            }}
+                            className={`py-2 px-2 rounded-xl border text-center transition-all cursor-pointer ${
+                              isSelected
+                                ? "bg-[#c29b78]/[0.12] border-[#c29b78] text-[#c29b78] ring-1 ring-[#c29b78]"
+                                : "bg-[#12100e] border-white/[0.06] text-[#78716c] hover:border-white/20 hover:text-[#f5f2eb]"
+                            }`}
+                          >
+                            <span className="text-xs font-semibold block">{piece.name}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
 

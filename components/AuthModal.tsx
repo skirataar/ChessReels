@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { CURATED_AVATARS, compressImageFile } from "@/lib/avatarUpload";
 import { OtpModal } from "@/components/OtpModal";
+import { getGuestSession, syncGuestSessionToAccount } from "@/lib/placementEngine";
 
 export interface AuthModalProps {
   isOpen: boolean;
@@ -41,36 +42,6 @@ export interface AuthModalProps {
 
 export type SkillLevel = "beginner" | "intermediate" | "advanced";
 
-const SKILL_OPTIONS: {
-  id: SkillLevel;
-  title: string;
-  ratingLabel: string;
-  baseElo: number;
-  description: string;
-}[] = [
-  {
-    id: "beginner",
-    title: "Beginner",
-    ratingLabel: "< 1000 Elo",
-    baseElo: 600,
-    description: "New to tactics, learning basic forks & pins",
-  },
-  {
-    id: "intermediate",
-    title: "Intermediate",
-    ratingLabel: "1000 – 1500 Elo",
-    baseElo: 1200,
-    description: "Solid tactical foundations & discoveries",
-  },
-  {
-    id: "advanced",
-    title: "Advanced",
-    ratingLabel: "1500+ Elo",
-    baseElo: 1600,
-    description: "Sharp calculation & deep combinations",
-  },
-];
-
 export function AuthModal({
   isOpen,
   onClose,
@@ -87,7 +58,9 @@ export function AuthModal({
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [displayName, setDisplayName] = useState<string>("");
   const [selectedAvatar, setSelectedAvatar] = useState<string>(CURATED_AVATARS[0].url);
-  const [selectedSkill, setSelectedSkill] = useState<SkillLevel>("intermediate");
+  const guestSession = getGuestSession();
+  const calibratedElo = guestSession.calibratedElo || guestSession.estimatedElo || 1000;
+  const isCalibrated = Boolean(guestSession.calibratedElo || guestSession.currentStep >= 6);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState<boolean>(false);
@@ -169,7 +142,8 @@ export function AuthModal({
           password,
           displayName: displayName.trim() || undefined,
           avatar: selectedAvatar,
-          skillLevel: selectedSkill,
+          elo: calibratedElo,
+          startingElo: calibratedElo,
         }),
       });
 
@@ -190,6 +164,9 @@ export function AuthModal({
         return;
       }
 
+      if (data.user?.id) {
+        syncGuestSessionToAccount(data.user.id).catch(() => {});
+      }
       onAccountSuccess(data.user);
       onClose();
     } catch {
@@ -264,10 +241,10 @@ export function AuthModal({
   const handleGoogleOAuthRedirect = () => {
     setIsLoading(true);
     const returnUrl = encodeURIComponent(
-      typeof window !== "undefined" ? window.location.pathname : "/"
+      typeof window !== "undefined" ? window.location.pathname : "/play"
     );
     // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-    window.location.href = `/api/auth/google?skillLevel=${selectedSkill}&guestId=${encodeURIComponent(guestId)}&returnUrl=${returnUrl}`;
+    window.location.href = `/api/auth/google?startingElo=${calibratedElo}&guestId=${encodeURIComponent(guestId)}&returnUrl=${returnUrl}`;
   };
 
   const handleGoogleAuth = async (emailToUse: string, nameToUse: string) => {
@@ -280,7 +257,8 @@ export function AuthModal({
         body: JSON.stringify({
           email: emailToUse,
           name: nameToUse,
-          skillLevel: selectedSkill,
+          elo: calibratedElo,
+          startingElo: calibratedElo,
           avatar: selectedAvatar,
         }),
       });
@@ -292,6 +270,9 @@ export function AuthModal({
         return;
       }
 
+      if (data.user?.id) {
+        syncGuestSessionToAccount(data.user.id).catch(() => {});
+      }
       onAccountSuccess(data.user);
       setShowGooglePrompt(false);
       onClose();
@@ -352,30 +333,24 @@ export function AuthModal({
               </div>
             </div>
 
-            {/* Skill Baseline for New Google Users */}
-            <div>
-              <label className="text-[10px] font-bold uppercase tracking-wider text-[#a3a3a3] block mb-1.5">
-                Select Your Skill Baseline
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                {SKILL_OPTIONS.map((opt) => {
-                  const isSelected = selectedSkill === opt.id;
-                  return (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => setSelectedSkill(opt.id)}
-                      className={`p-3 rounded-xl text-center border transition-all cursor-pointer ${
-                        isSelected
-                          ? "bg-[#282420] border-[#c29b78] shadow-sm shadow-[#c29b78]/25 ring-1 ring-[#c29b78]/40"
-                          : "bg-[#22201e]/60 border-white/5 hover:border-white/20"
-                      }`}
-                    >
-                      <div className="text-xs font-bold text-[#f5f5f5] mb-0.5">{opt.title}</div>
-                      <div className="text-[11px] text-[#c29b78] font-mono font-semibold">{opt.baseElo} Elo</div>
-                    </button>
-                  );
-                })}
+            {/* Locked Verified Placement Rating Badge */}
+            <div className="p-3.5 rounded-xl bg-[#22201e]/60 border border-[#c29b78]/30 flex items-center justify-between shadow-sm">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-[#c29b78]/10 border border-[#c29b78]/30 flex items-center justify-center text-[#c29b78] shrink-0">
+                  <ShieldCheck className="w-4 h-4 stroke-[2]" />
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase font-bold text-[#a3a3a3] tracking-wider">
+                    Placement Baseline
+                  </div>
+                  <div className="text-xs font-semibold text-[#f5f5f5]">
+                    {isCalibrated ? "Verified Placement Rating" : "Adaptive Baseline"}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-baseline gap-1 font-mono">
+                <span className="text-base font-bold text-[#c29b78]">{calibratedElo}</span>
+                <span className="text-[10px] text-[#a3a3a3]">ELO</span>
               </div>
             </div>
 
@@ -523,55 +498,24 @@ export function AuthModal({
 
               {tab === "register" ? (
                 <form onSubmit={handleRegister} className="space-y-3.5">
-                  {/* Skill Baseline Selection */}
-                  <div>
-                    <label className="text-[11px] font-bold uppercase tracking-wider text-[#a3a3a3] block mb-1.5">
-                      Choose Your Skill Level
-                    </label>
-                    <div className="space-y-1.5">
-                      {SKILL_OPTIONS.map((opt) => {
-                        const isSelected = selectedSkill === opt.id;
-                        return (
-                          <button
-                            key={opt.id}
-                            type="button"
-                            onClick={() => setSelectedSkill(opt.id)}
-                            className={`w-full p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center gap-3 ${
-                              isSelected
-                                ? "bg-[#22201e] border-[#c29b78] ring-1 ring-[#c29b78]/40 shadow-md"
-                                : "bg-[#22201e]/60 border-white/5 hover:border-white/20"
-                            }`}
-                          >
-                            <div className="w-8 h-8 rounded-lg bg-[#151413] border border-white/5 flex items-center justify-center shrink-0">
-                              {opt.id === "beginner" ? (
-                                <Target className="w-4 h-4 text-[#a3a3a3]" />
-                              ) : opt.id === "intermediate" ? (
-                                <Zap className="w-4 h-4 text-[#c29b78]" />
-                              ) : (
-                                <Trophy className="w-4 h-4 text-[#e5ba82]" />
-                              )}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between">
-                                <span className="text-xs font-bold text-[#f5f5f5]">
-                                  {opt.title}
-                                </span>
-                                <span className="text-[11px] font-mono font-bold px-1.5 py-0.5 rounded bg-white/5 text-[#c29b78]">
-                                  {opt.ratingLabel}
-                                </span>
-                              </div>
-                              <p className="text-[10px] text-[#a3a3a3] line-clamp-1">
-                                {opt.description}
-                              </p>
-                            </div>
-                            {isSelected && (
-                              <div className="w-4 h-4 rounded-full bg-[#c29b78] flex items-center justify-center text-[#151413] shrink-0">
-                                <Check className="w-3 h-3 stroke-[3]" />
-                              </div>
-                            )}
-                          </button>
-                        );
-                      })}
+                  {/* Locked Verified Placement Rating Badge */}
+                  <div className="p-3.5 rounded-xl bg-[#22201e]/60 border border-[#c29b78]/30 flex items-center justify-between shadow-sm">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-[#c29b78]/10 border border-[#c29b78]/30 flex items-center justify-center text-[#c29b78] shrink-0">
+                        <ShieldCheck className="w-4 h-4 stroke-[2]" />
+                      </div>
+                      <div>
+                        <div className="text-[10px] uppercase font-bold text-[#a3a3a3] tracking-wider">
+                          Placement Baseline
+                        </div>
+                        <div className="text-xs font-semibold text-[#f5f5f5]">
+                          {isCalibrated ? "Verified Placement Rating" : "Adaptive Baseline"}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-baseline gap-1 font-mono">
+                      <span className="text-base font-bold text-[#c29b78]">{calibratedElo}</span>
+                      <span className="text-[10px] text-[#a3a3a3]">ELO</span>
                     </div>
                   </div>
 

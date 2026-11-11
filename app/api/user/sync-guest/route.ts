@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { estimatedElo, solvedCount, streak, solvedPuzzleIds } = body;
+    const { estimatedElo, calibratedElo, isCalibrated, calibrationStep: stepParam, solvedCount, streak, solvedPuzzleIds, puzzleHistory } = body;
 
     const user = await withDbRetry(() =>
       prisma.user.findUnique({
@@ -30,10 +30,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const targetElo = typeof estimatedElo === "number" && estimatedElo > 0
-      ? Math.round(estimatedElo)
+    const effectiveElo = typeof calibratedElo === "number" && calibratedElo > 0
+      ? calibratedElo
+      : typeof estimatedElo === "number" && estimatedElo > 0
+      ? estimatedElo
       : user.elo;
 
+    const targetElo = Math.round(effectiveElo);
     const newPeakElo = Math.max(user.peakElo, user.elo, targetElo);
     const newStreak = Math.max(user.streak, typeof streak === "number" ? streak : 0);
     const newBestStreak = Math.max(user.bestStreak, user.streak, newStreak);
@@ -49,12 +52,21 @@ export async function POST(request: NextRequest) {
     }
     const mergedSolvedIds = Array.from(existingSet);
 
-    // If solvedCount >= 3, consider baseline calibration completed
-    const shouldMarkCalibrated = (typeof solvedCount === "number" && solvedCount >= 3) || user.isCalibrated;
-    const calibrationStep = Math.max(
-      user.calibrationStep,
-      typeof solvedCount === "number" ? Math.min(6, solvedCount) : 0
-    );
+    // Baseline calibration completion check
+    const shouldMarkCalibrated =
+      Boolean(isCalibrated) ||
+      typeof calibratedElo === "number" ||
+      (typeof stepParam === "number" && stepParam >= 6) ||
+      (Array.isArray(puzzleHistory) && puzzleHistory.length >= 6) ||
+      (typeof solvedCount === "number" && solvedCount >= 6) ||
+      user.isCalibrated;
+
+    const calibrationStep = shouldMarkCalibrated
+      ? 6
+      : Math.max(
+          user.calibrationStep,
+          typeof stepParam === "number" ? stepParam : typeof solvedCount === "number" ? Math.min(6, solvedCount) : 0
+        );
 
     const updatedUser = await withDbRetry(() =>
       prisma.user.update({
@@ -89,9 +101,35 @@ export async function POST(request: NextRequest) {
       })
     );
 
-    // Persist puzzle history for newly transferred solved puzzles if any
-    if (Array.isArray(solvedPuzzleIds) && solvedPuzzleIds.length > 0) {
-      try {
+    // Persist puzzle history for newly transferred solved puzzles or detailed placement history
+    try {
+      if (Array.isArray(puzzleHistory) && puzzleHistory.length > 0) {
+        await Promise.allSettled(
+          puzzleHistory.map((item: any) => {
+            const pid = String(item.puzzleId || "").trim();
+            if (!pid) return Promise.resolve();
+            const result = item.passed ? "win" : "loss";
+            return prisma.puzzleHistory.upsert({
+              where: {
+                userId_puzzleId: {
+                  userId,
+                  puzzleId: pid,
+                },
+              },
+              update: {
+                result,
+                solvedAt: new Date(),
+              },
+              create: {
+                userId,
+                puzzleId: pid,
+                result,
+                solvedAt: new Date(),
+              },
+            });
+          })
+        );
+      } else if (Array.isArray(solvedPuzzleIds) && solvedPuzzleIds.length > 0) {
         await Promise.allSettled(
           solvedPuzzleIds.map((pid: string) =>
             prisma.puzzleHistory.upsert({
@@ -114,9 +152,9 @@ export async function POST(request: NextRequest) {
             })
           )
         );
-      } catch (err) {
-        console.warn("[/api/user/sync-guest] Non-blocking puzzleHistory sync notice:", err);
       }
+    } catch (err) {
+      console.warn("[/api/user/sync-guest] Non-blocking puzzleHistory sync notice:", err);
     }
 
     return NextResponse.json({

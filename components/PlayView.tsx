@@ -49,10 +49,14 @@ import { trackEvent } from "@/lib/analytics";
 import {
   getGuestSession,
   saveGuestSession,
-  recordGuestSolve,
+  recordPlacementStep,
+  calculateFinalPlacementElo,
+  markGuestMode,
   syncGuestSessionToAccount,
   GuestSession,
-} from "@/lib/guestSession";
+  PLACEMENT_START_ELO,
+  PLACEMENT_TOTAL_STEPS,
+} from "@/lib/placementEngine";
 import { GuestConversionModal } from "@/components/GuestConversionModal";
 
 const GUEST_ID_KEY = "chess_reel_guest_id";
@@ -258,6 +262,12 @@ export function PlayView({
   const router = useRouter();
   const [guestId, setGuestId] = useState<string>("");
   const [currentElo, setCurrentElo] = useState<number>(() => {
+    if (typeof window !== "undefined") {
+      const gs = getGuestSession();
+      if (gs && (gs.calibratedElo || gs.estimatedElo)) {
+        return gs.calibratedElo || gs.estimatedElo || 1000;
+      }
+    }
     return getStoredUserStats().elo;
   });
   const [lastEloChange, setLastEloChange] = useState<number | null>(null);
@@ -526,7 +536,11 @@ export function PlayView({
   const [incomingFriendRequestsCount, setIncomingFriendRequestsCount] = useState<number>(0);
   const [isConversionModalOpen, setIsConversionModalOpen] = useState<boolean>(false);
   const [guestSessionState, setGuestSessionState] = useState<GuestSession | null>(() => getGuestSession());
-  const [isGuestModePillVisible, setIsGuestModePillVisible] = useState<boolean>(false);
+  const [isGuestModePillVisible, setIsGuestModePillVisible] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    const gs = getGuestSession();
+    return Boolean(gs?.isGuestMode);
+  });
 
   // Fetch pending incoming friend requests count for header badge
   useEffect(() => {
@@ -774,10 +788,14 @@ export function PlayView({
     }
   }, [setIsQuotaModalOpen]);
 
-  // Calibration placement status
-  const isCalibrating = Boolean(userAccount && !userAccount.isCalibrated);
-  const currentCalibrationStep = isCalibrating
-    ? Math.min(6, (userAccount?.calibrationStep ?? 0) + 1)
+  // Calibration placement status (covers registered accounts and unauthenticated guest test sessions)
+  const isGuestCalibrating = !userAccount && (!guestSessionState?.calibratedElo && (guestSessionState?.currentStep ?? 0) < PLACEMENT_TOTAL_STEPS);
+  const isUserCalibrating = Boolean(userAccount && !userAccount.isCalibrated);
+  const isCalibrating = isUserCalibrating || isGuestCalibrating;
+  const currentCalibrationStep = isUserCalibrating
+    ? Math.min(PLACEMENT_TOTAL_STEPS, (userAccount?.calibrationStep ?? 0) + 1)
+    : isGuestCalibrating
+    ? Math.min(PLACEMENT_TOTAL_STEPS, (guestSessionState?.currentStep ?? 0) + 1)
     : 0;
 
   // Subscription to online status
@@ -1019,19 +1037,21 @@ export function PlayView({
               .catch(() => {});
           } else {
             setUserAccount(null);
-            const gs = getGuestSession() || { solvedCount: 0, estimatedElo: 1000, streak: 0 };
+            const gs = getGuestSession();
+            const elo = gs.calibratedElo || gs.estimatedElo || 1000;
             saveGuestSession(gs);
             setGuestSessionState(gs);
-            setCurrentElo(gs.estimatedElo);
-            currentEloRef.current = gs.estimatedElo;
+            setCurrentElo(elo);
+            currentEloRef.current = elo;
           }
         } catch {
           setUserAccount(null);
-          const gs = getGuestSession() || { solvedCount: 0, estimatedElo: 1000, streak: 0 };
+          const gs = getGuestSession();
+          const elo = gs.calibratedElo || gs.estimatedElo || 1000;
           saveGuestSession(gs);
           setGuestSessionState(gs);
-          setCurrentElo(gs.estimatedElo);
-          currentEloRef.current = gs.estimatedElo;
+          setCurrentElo(elo);
+          currentEloRef.current = elo;
         }
       } else {
         // Check if valid session cookie exists
@@ -1062,28 +1082,31 @@ export function PlayView({
                 }
               } else {
                 setUserAccount(null);
-                const gs = getGuestSession() || { solvedCount: 0, estimatedElo: 1000, streak: 0 };
+                const gs = getGuestSession();
+                const elo = gs.calibratedElo || gs.estimatedElo || 1000;
                 saveGuestSession(gs);
                 setGuestSessionState(gs);
-                setCurrentElo(gs.estimatedElo);
-                currentEloRef.current = gs.estimatedElo;
+                setCurrentElo(elo);
+                currentEloRef.current = elo;
               }
             })
             .catch(() => {
               setUserAccount(null);
-              const gs = getGuestSession() || { solvedCount: 0, estimatedElo: 1000, streak: 0 };
+              const gs = getGuestSession();
+              const elo = gs.calibratedElo || gs.estimatedElo || 1000;
               saveGuestSession(gs);
               setGuestSessionState(gs);
-              setCurrentElo(gs.estimatedElo);
-              currentEloRef.current = gs.estimatedElo;
+              setCurrentElo(elo);
+              currentEloRef.current = elo;
             });
         } else {
           setUserAccount(null);
-          const gs = getGuestSession() || { solvedCount: 0, estimatedElo: 1000, streak: 0 };
+          const gs = getGuestSession();
+          const elo = gs.calibratedElo || gs.estimatedElo || 1000;
           saveGuestSession(gs);
           setGuestSessionState(gs);
-          setCurrentElo(gs.estimatedElo);
-          currentEloRef.current = gs.estimatedElo;
+          setCurrentElo(elo);
+          currentEloRef.current = elo;
         }
       }
     } catch (e) {
@@ -1318,6 +1341,32 @@ export function PlayView({
       return;
     }
 
+    // In calibration mode, fetch fresh puzzle matching the adaptive rating
+    if (isCalibrating) {
+      setPuzzleStatus("loading");
+      try {
+        const userParam = targetUserId ? `&userId=${encodeURIComponent(targetUserId)}` : "";
+        const res = await fetch(`/api/puzzle/random?elo=${elo}&count=3${userParam}`);
+        if (res.ok) {
+          const data = await res.json();
+          const arr: PuzzleData[] = Array.isArray(data) ? data : [data];
+          const validBatch = arr
+            .filter((p) => p && p.id !== currentId && !currentSolved.has(p.id) && !ratedPuzzleIdsRef.current.has(p.id))
+            .map(ensurePuzzleInstanceId);
+
+          if (validBatch.length > 0) {
+            const chosen = validBatch[0];
+            setQueue((prev) => [...prev.slice(0, currentIndex + 1), chosen]);
+            setCurrentIndex(currentIndex + 1);
+            setPuzzleStatus("playing");
+            return;
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load adaptive placement puzzle:", e);
+      }
+    }
+
     // 2. No upcoming puzzle in active queue; pop from local cache or fetch fresh
     let nextPuzzle: PuzzleData | null = null;
     while (true) {
@@ -1481,30 +1530,40 @@ export function PlayView({
       const stats = getStoredUserStats();
       const userElo = stats.elo;
       const puzzleRating = puzzle.rating || 1200;
-      const K = isCalibrating ? 64 : 32;
-
-      const expectedScore = 1 / (1 + Math.pow(10, (puzzleRating - userElo) / 400));
 
       let eloDelta: number;
-      if (result === "win") {
-        const rawGain = Math.max(5, Math.round(K * (1 - expectedScore)));
-        const isRequeued = Boolean(puzzle.isRequeued);
-        const hasUsedHint = Boolean(puzzle.hintUsed);
+      let nextElo: number;
 
-        if (isRequeued && hasUsedHint) {
-          // Both requeued and hint used: 25% gain (50% * 50%), min +1
-          eloDelta = Math.max(1, Math.round(rawGain * 0.25));
-        } else if (isRequeued || hasUsedHint) {
-          // Either requeued or hint used: 50% gain, min +2
-          eloDelta = Math.max(2, Math.round(rawGain * 0.5));
+      if (isCalibrating) {
+        if (result === "win") {
+          eloDelta = 200;
+          nextElo = Math.min(2200, userElo + 200);
         } else {
-          eloDelta = rawGain;
+          eloDelta = -150;
+          nextElo = Math.max(600, userElo - 150);
         }
       } else {
-        eloDelta = -Math.max(5, Math.round(K * expectedScore));
-      }
+        const K = 32;
+        const expectedScore = 1 / (1 + Math.pow(10, (puzzleRating - userElo) / 400));
+        if (result === "win") {
+          const rawGain = Math.max(5, Math.round(K * (1 - expectedScore)));
+          const isRequeued = Boolean(puzzle.isRequeued);
+          const hasUsedHint = Boolean(puzzle.hintUsed);
 
-      const nextElo = Math.max(100, userElo + eloDelta);
+          if (isRequeued && hasUsedHint) {
+            // Both requeued and hint used: 25% gain (50% * 50%), min +1
+            eloDelta = Math.max(1, Math.round(rawGain * 0.25));
+          } else if (isRequeued || hasUsedHint) {
+            // Either requeued or hint used: 50% gain, min +2
+            eloDelta = Math.max(2, Math.round(rawGain * 0.5));
+          } else {
+            eloDelta = rawGain;
+          }
+        } else {
+          eloDelta = -Math.max(5, Math.round(K * expectedScore));
+        }
+        nextElo = Math.max(100, userElo + eloDelta);
+      }
 
       // Streak update
       const today = getTodayDateString();
@@ -1567,17 +1626,34 @@ export function PlayView({
             );
           }
         } catch {}
+      }
 
-        // TASK 2: Guest Solve Tracking & Soft Conversion Modal
-        if (!userAccount) {
-          const { session, justHitFirst, justHitThird } = recordGuestSolve(nextElo, puzzle.id);
-          setGuestSessionState(session);
+      // Guest Placement Test & Practice Session Tracking
+      if (!userAccount) {
+        const { session, isComplete, finalElo, nextElo: placementNextElo } = recordPlacementStep(
+          puzzle.id,
+          puzzleRating || userElo,
+          result === "win"
+        );
+        setGuestSessionState(session);
 
-          if (justHitFirst) {
-            trackEvent("puzzle_1_solved", { elo: nextElo });
-          } else if (justHitThird) {
-            trackEvent("puzzle_3_solved", { elo: nextElo });
+        if (isCalibrating) {
+          if (isComplete && finalElo !== null) {
+            nextElo = finalElo;
+            setCurrentElo(finalElo);
+            currentEloRef.current = finalElo;
+            setCalibratedFinalElo(finalElo);
             setIsConversionModalOpen(true);
+            trackEvent("placement_test_completed", { finalElo, totalPuzzles: 6 });
+          } else {
+            nextElo = placementNextElo;
+            setCurrentElo(placementNextElo);
+            currentEloRef.current = placementNextElo;
+            trackEvent(`placement_step_${session.currentStep}_completed`, {
+              step: session.currentStep,
+              elo: placementNextElo,
+              passed: result === "win",
+            });
           }
         }
       }
@@ -2319,17 +2395,7 @@ export function PlayView({
           <div className="h-11 rounded-none bg-[#12100e]/95 backdrop-blur-md border border-[#c29b78]/25 px-3 flex items-center justify-between gap-3 shadow-[0_-8px_24px_rgba(0,0,0,0.6)]">
             {/* Left Section (Progress & Puzzle Step) */}
             <div className="flex items-center gap-1.5 shrink-0">
-              <svg
-                viewBox="0 0 24 24"
-                className="w-3.5 h-3.5 stroke-[#c29b78] stroke-[2] fill-none shrink-0"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <circle cx="12" cy="12" r="10" />
-                <circle cx="12" cy="12" r="6" />
-                <circle cx="12" cy="12" r="2" />
-              </svg>
+              <Target className="w-3.5 h-3.5 stroke-[#c29b78] stroke-[2] shrink-0" />
               <span className="text-[11px] font-semibold text-zinc-100 uppercase tracking-wider">
                 Placement Test
               </span>
@@ -2341,24 +2407,27 @@ export function PlayView({
 
             {/* Center Segmented Progress */}
             <div className="flex items-center gap-1 flex-1 max-w-[100px] mx-1">
-              {Array.from({ length: 6 }).map((_, idx) => (
-                <div
-                  key={idx}
-                  className={`h-1 rounded-sm flex-1 transition-all duration-300 ${
-                    idx < (userAccount?.calibrationStep ?? 0)
-                      ? "bg-[#c29b78]"
-                      : idx === (userAccount?.calibrationStep ?? 0)
-                      ? "bg-[#c29b78]/50 animate-pulse"
-                      : "bg-white/10"
-                  }`}
-                />
-              ))}
+              {Array.from({ length: 6 }).map((_, idx) => {
+                const completedCount = isUserCalibrating
+                  ? (userAccount?.calibrationStep ?? 0)
+                  : (guestSessionState?.currentStep ?? 0);
+                return (
+                  <div
+                    key={idx}
+                    className={`h-1 rounded-sm flex-1 transition-all duration-300 ${
+                      idx < completedCount
+                        ? "bg-[#c29b78]"
+                        : "bg-white/10"
+                    }`}
+                  />
+                );
+              })}
             </div>
 
             {/* Right Section (Estimated Rating) */}
             <div className="shrink-0">
               <span className="text-[10px] font-mono text-zinc-400">
-                Est. <strong className="text-zinc-200">{currentElo}</strong>
+                Est. Elo: <strong className="text-zinc-200">{currentElo}</strong>
               </span>
             </div>
           </div>
@@ -2553,8 +2622,8 @@ export function PlayView({
 
       <GuestConversionModal
         isOpen={isConversionModalOpen}
-        guestElo={currentElo}
-        onSaveProgress={() => {
+        calibratedElo={calibratedFinalElo || currentElo}
+        onSaveRating={() => {
           setIsConversionModalOpen(false);
           setAuthModalTab("register");
           setIsAuthModalOpen(true);
