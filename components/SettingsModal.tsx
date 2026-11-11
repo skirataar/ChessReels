@@ -26,6 +26,7 @@ import { sounds } from "@/lib/audio";
 import { UserAvatar } from "@/components/UserAvatar";
 import { isGuestUserId } from "@/lib/guestAccount";
 import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/support";
+import { OtpModal } from "@/components/OtpModal";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -37,6 +38,8 @@ interface SettingsModalProps {
     avatar?: string;
     plan?: string;
     elo?: number;
+    email?: string;
+    twoFactorEnabled?: boolean;
   } | null;
   guestId?: string;
   onSignOut?: () => void;
@@ -62,6 +65,12 @@ export function SettingsModal({
   // Audio & Haptic state
   const [isSfxEnabled, setIsSfxEnabled] = useState<boolean>(true);
   const [isHapticsEnabled, setIsHapticsEnabled] = useState<boolean>(true);
+
+  // 2FA state
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState<boolean>(Boolean(userAccount?.twoFactorEnabled));
+  const [isToggling2FA, setIsToggling2FA] = useState<boolean>(false);
+  const [twoFactorMsg, setTwoFactorMsg] = useState<{ type: "error" | "success"; text: string } | null>(null);
+  const [is2faOtpOpen, setIs2faOtpOpen] = useState<boolean>(false);
 
   // Gameplay state
   const [autoAdvance, setAutoAdvance] = useState<boolean>(false);
@@ -112,8 +121,92 @@ export function SettingsModal({
       setDisplayNameInput(userAccount.displayName || "");
     }
 
+    // 2FA sync
+    if (userAccount?.twoFactorEnabled !== undefined) {
+      setTwoFactorEnabled(Boolean(userAccount.twoFactorEnabled));
+    } else {
+      const stored = window.localStorage.getItem("chess_reel_account");
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          setTwoFactorEnabled(Boolean(parsed.twoFactorEnabled));
+        } catch {}
+      }
+    }
+
     return () => window.removeEventListener("auto-advance-updated", handleAutoAdvanceEvent);
   }, [isOpen, userAccount]);
+
+  // Toggle 2FA
+  const handleToggle2FA = async () => {
+    setTwoFactorMsg(null);
+    let emailToUse = userAccount?.email;
+    if (!emailToUse && typeof window !== "undefined") {
+      try {
+        const stored = window.localStorage.getItem("chess_reel_account");
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          emailToUse = parsed.email;
+        }
+      } catch {}
+    }
+
+    if (!emailToUse) {
+      setTwoFactorMsg({
+        type: "error",
+        text: "An email address must be associated with your account to enable 2FA.",
+      });
+      return;
+    }
+
+    setIsToggling2FA(true);
+
+    try {
+      if (!twoFactorEnabled) {
+        // Request OTP code to enable 2FA
+        const res = await fetch("/api/auth/2fa/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: emailToUse }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setTwoFactorMsg({ type: "error", text: data.error || "Failed to send 2FA code." });
+          setIsToggling2FA(false);
+          return;
+        }
+
+        setIs2faOtpOpen(true);
+      } else {
+        // Disable 2FA
+        const res = await fetch("/api/auth/2fa/disable", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: emailToUse }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setTwoFactorMsg({ type: "error", text: data.error || "Failed to disable 2FA." });
+          setIsToggling2FA(false);
+          return;
+        }
+
+        setTwoFactorEnabled(false);
+        if (typeof window !== "undefined") {
+          const stored = window.localStorage.getItem("chess_reel_account");
+          const existing = stored ? JSON.parse(stored) : {};
+          window.localStorage.setItem("chess_reel_account", JSON.stringify({ ...existing, twoFactorEnabled: false }));
+          window.dispatchEvent(new Event("account-updated"));
+        }
+        setTwoFactorMsg({ type: "success", text: "Two-factor authentication disabled." });
+        setTimeout(() => setTwoFactorMsg(null), 3000);
+      }
+    } catch {
+      setTwoFactorMsg({ type: "error", text: "Network error. Please try again." });
+    } finally {
+      setIsToggling2FA(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -453,6 +546,56 @@ export function SettingsModal({
           <div className="h-px bg-white/[0.06]" />
 
           {/* ======================================================== */}
+          {/* ACCOUNT SECURITY & TWO-FACTOR AUTHENTICATION             */}
+          {/* ======================================================== */}
+          <div>
+            <div className="flex items-center gap-2 mb-1.5">
+              <ShieldCheck className="w-4 h-4 text-[#c29b78]" />
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-[#c29b78]">
+                Account Security
+              </h3>
+            </div>
+            <p className="text-xs text-[#a8a29e] mb-3">
+              Safeguard your rating, stats, and saved puzzles with 2FA.
+            </p>
+
+            <div className="flex items-center justify-between p-3 rounded-2xl bg-[#141210] border border-white/[0.08]">
+              <div className="pr-2">
+                <span className="text-xs font-medium text-[#f5f2eb] block">Two-Factor Authentication (Email)</span>
+                <span className="text-[10px] text-[#78716c]">
+                  {userAccount?.email
+                    ? "Require a 6-digit email OTP whenever signing in."
+                    : "Requires an email address linked to your account."}
+                </span>
+              </div>
+
+              <button
+                type="button"
+                disabled={isToggling2FA || (!userAccount?.email && !twoFactorEnabled)}
+                onClick={handleToggle2FA}
+                aria-label="Toggle two-factor authentication"
+                className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer disabled:opacity-40 shrink-0 ${
+                  twoFactorEnabled ? "bg-[#c29b78]" : "bg-white/[0.1]"
+                }`}
+              >
+                <div
+                  className={`w-4 h-4 rounded-full bg-[#0a0908] transition-transform duration-200 absolute top-1 left-1 ${
+                    twoFactorEnabled ? "translate-x-5 bg-[#0a0908]" : "translate-x-0 bg-white"
+                  }`}
+                />
+              </button>
+            </div>
+
+            {twoFactorMsg && (
+              <p className={`text-[11px] mt-2 px-1 ${twoFactorMsg.type === "error" ? "text-rose-400" : "text-emerald-400"}`}>
+                {twoFactorMsg.text}
+              </p>
+            )}
+          </div>
+
+          <div className="h-px bg-white/[0.06]" />
+
+          {/* ======================================================== */}
           {/* 3. AUDIO & HAPTICS                                       */}
           {/* ======================================================== */}
           <div>
@@ -666,6 +809,33 @@ export function SettingsModal({
           </button>
         </div>
       </div>
+
+      {is2faOtpOpen && (
+        <OtpModal
+          isOpen={is2faOtpOpen}
+          onClose={() => setIs2faOtpOpen(false)}
+          email={
+            userAccount?.email ||
+            (typeof window !== "undefined"
+              ? JSON.parse(window.localStorage.getItem("chess_reel_account") || "{}").email || ""
+              : "")
+          }
+          type="2FA"
+          isActivation={true}
+          onSuccess={() => {
+            setIs2faOtpOpen(false);
+            setTwoFactorEnabled(true);
+            if (typeof window !== "undefined") {
+              const stored = window.localStorage.getItem("chess_reel_account");
+              const existing = stored ? JSON.parse(stored) : {};
+              window.localStorage.setItem("chess_reel_account", JSON.stringify({ ...existing, twoFactorEnabled: true }));
+              window.dispatchEvent(new Event("account-updated"));
+            }
+            setTwoFactorMsg({ type: "success", text: "Two-factor authentication successfully enabled!" });
+            setTimeout(() => setTwoFactorMsg(null), 3500);
+          }}
+        />
+      )}
     </div>
   );
 }

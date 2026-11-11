@@ -8,6 +8,7 @@ import { BOARD_THEMES, BoardTheme, setStoredBoardTheme, getStoredBoardTheme } fr
 import { clearGuestLocalSession, isGuestAccount } from "@/lib/guestAccount";
 import { prefetchPuzzles, clearAllUserAndPuzzleCache } from "@/lib/puzzleCache";
 import { hydrateUserSession } from "@/lib/sessionHydration";
+import { OtpModal } from "@/components/OtpModal";
 
 // --- Types ---
 type FlowStep = "gate" | "step-elo" | "step-goal" | "step-board" | "auth" | "pro-upsell";
@@ -517,6 +518,19 @@ export default function RootPage() {
     avatar: string;
   } | null>(null);
 
+  // OTP Verification state for email confirmation or 2FA
+  const [otpState, setOtpState] = useState<{
+    isOpen: boolean;
+    email: string;
+    type: "VERIFY_EMAIL" | "2FA";
+    isLogin?: boolean;
+  }>({
+    isOpen: false,
+    email: "",
+    type: "VERIFY_EMAIL",
+    isLogin: false,
+  });
+
   // Auto-redirect if already signed in, and inspect URL params for OAuth redirects
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -799,6 +813,17 @@ export default function RootPage() {
           return;
         }
 
+        if (data.requiresEmailVerification && data.email) {
+          setOtpState({
+            isOpen: true,
+            email: data.email,
+            type: "VERIFY_EMAIL",
+            isLogin: false,
+          });
+          setIsSubmitting(false);
+          return;
+        }
+
         if (data.user) {
           clearAllUserAndPuzzleCache();
           hydrateUserSession(data.user);
@@ -837,6 +862,28 @@ export default function RootPage() {
         const data = await res.json();
         if (!res.ok) {
           setAuthError(data.error || "Could not sign in.");
+          setIsSubmitting(false);
+          return;
+        }
+
+        if (data.requiresEmailVerification && data.email) {
+          setOtpState({
+            isOpen: true,
+            email: data.email,
+            type: "VERIFY_EMAIL",
+            isLogin: true,
+          });
+          setIsSubmitting(false);
+          return;
+        }
+
+        if (data.requires2FA && data.email) {
+          setOtpState({
+            isOpen: true,
+            email: data.email,
+            type: "2FA",
+            isLogin: true,
+          });
           setIsSubmitting(false);
           return;
         }
@@ -1730,6 +1777,37 @@ export default function RootPage() {
           </AnimatePresence>
         </div>
       </div>
+
+      {otpState.isOpen && (
+        <OtpModal
+          isOpen={otpState.isOpen}
+          onClose={() => setOtpState((prev) => ({ ...prev, isOpen: false }))}
+          email={otpState.email}
+          type={otpState.type}
+          onSuccess={(user) => {
+            setOtpState((prev) => ({ ...prev, isOpen: false }));
+            clearAllUserAndPuzzleCache();
+            if (typeof window !== "undefined") {
+              try {
+                window.localStorage.removeItem("chessreels_user_stats_v1");
+                window.localStorage.removeItem("quota_last_check");
+              } catch {}
+            }
+            hydrateUserSession(user);
+            prefetchPuzzles(user.elo || 800, 5, user.id).catch(() => {});
+            document.cookie = `chess_reel_session=${encodeURIComponent(user.id)}; path=/; max-age=${60 * 60 * 24 * 30}`;
+            if (otpState.isLogin) {
+              if (typeof window !== "undefined") {
+                window.location.href = "/play";
+              } else {
+                router.replace("/play");
+              }
+            } else {
+              setStep("pro-upsell");
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

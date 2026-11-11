@@ -32,7 +32,9 @@ import {
   Snowflake,
   Info,
   Headphones,
+  Loader2,
 } from "lucide-react";
+import { OtpModal } from "@/components/OtpModal";
 import { sounds } from "@/lib/audio";
 import { getTier } from "./LeaderboardModal";
 import { UserAvatar } from "@/components/UserAvatar";
@@ -62,6 +64,8 @@ export interface ProfileModalProps {
     peakElo?: number;
     streak?: number;
     bestStreak?: number;
+    email?: string;
+    twoFactorEnabled?: boolean;
   } | null;
   onOpenAuth?: () => void;
   onOpenLanding?: () => void;
@@ -113,6 +117,13 @@ export function ProfileModal({
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
   const [isPasswordSubmitting, setIsPasswordSubmitting] = useState<boolean>(false);
+
+  // 2FA state
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState<boolean>(Boolean(userAccount?.twoFactorEnabled));
+  const [isToggling2FA, setIsToggling2FA] = useState<boolean>(false);
+  const [is2faOtpOpen, setIs2faOtpOpen] = useState<boolean>(false);
+  const [twoFactorMsg, setTwoFactorMsg] = useState<{ type: "error" | "success"; text: string } | null>(null);
+  const [show2faCard, setShow2faCard] = useState<boolean>(true);
 
   // Helper: scoped bookmark storage key per account to prevent bleeding
   const getBookmarkStorageKey = () => {
@@ -191,6 +202,22 @@ export function ProfileModal({
       // Auto advance state (defaults to false)
       const autoRaw = window.localStorage.getItem("chess_reel_auto_advance");
       setAutoAdvance(autoRaw === "1" || autoRaw === "true");
+
+      // 2FA state sync
+      const dismissed = window.localStorage.getItem("doomchess_2fa_prompt_dismissed");
+      setShow2faCard(!dismissed);
+
+      if (userAccount?.twoFactorEnabled !== undefined) {
+        setTwoFactorEnabled(Boolean(userAccount.twoFactorEnabled));
+      } else {
+        const stored = window.localStorage.getItem("chess_reel_account");
+        if (stored) {
+          try {
+            const parsed = JSON.parse(stored);
+            setTwoFactorEnabled(Boolean(parsed.twoFactorEnabled));
+          } catch {}
+        }
+      }
     } catch (e) {
       console.warn("Error accessing profile data:", e);
     }
@@ -453,6 +480,102 @@ export function ProfileModal({
       setPasswordError("Network error. Please try again.");
     } finally {
       setIsPasswordSubmitting(false);
+    }
+  };
+
+  const handleDismiss2faPrompt = () => {
+    setShow2faCard(false);
+    try {
+      window.localStorage.setItem("doomchess_2fa_prompt_dismissed", Date.now().toString());
+    } catch {}
+  };
+
+  const handleStart2faSetup = async () => {
+    setTwoFactorMsg(null);
+    let emailToUse = userAccount?.email;
+    if (!emailToUse && typeof window !== "undefined") {
+      try {
+        const stored = window.localStorage.getItem("chess_reel_account");
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          emailToUse = parsed.email;
+        }
+      } catch {}
+    }
+
+    if (!emailToUse) {
+      setTwoFactorMsg({
+        type: "error",
+        text: "Please add or link an email to your account to enable 2FA.",
+      });
+      return;
+    }
+
+    setIsToggling2FA(true);
+    try {
+      const res = await fetch("/api/auth/2fa/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: emailToUse }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setTwoFactorMsg({ type: "error", text: data.error || "Failed to dispatch 2FA code." });
+        setIsToggling2FA(false);
+        return;
+      }
+      setIs2faOtpOpen(true);
+    } catch {
+      setTwoFactorMsg({ type: "error", text: "Network error. Please try again." });
+    } finally {
+      setIsToggling2FA(false);
+    }
+  };
+
+  const handleToggle2FA = async () => {
+    if (!twoFactorEnabled) {
+      handleStart2faSetup();
+    } else {
+      let emailToUse = userAccount?.email;
+      if (!emailToUse && typeof window !== "undefined") {
+        try {
+          const stored = window.localStorage.getItem("chess_reel_account");
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            emailToUse = parsed.email;
+          }
+        } catch {}
+      }
+
+      setIsToggling2FA(true);
+      setTwoFactorMsg(null);
+      try {
+        const res = await fetch("/api/auth/2fa/disable", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: emailToUse, userId: userAccount?.id }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setTwoFactorMsg({ type: "error", text: data.error || "Failed to disable 2FA." });
+          setIsToggling2FA(false);
+          return;
+        }
+
+        setTwoFactorEnabled(false);
+        if (typeof window !== "undefined") {
+          const stored = window.localStorage.getItem("chess_reel_account");
+          const existing = stored ? JSON.parse(stored) : {};
+          window.localStorage.setItem("chess_reel_account", JSON.stringify({ ...existing, twoFactorEnabled: false }));
+          window.dispatchEvent(new Event("account-updated"));
+        }
+        setTwoFactorMsg({ type: "success", text: "Two-factor authentication disabled." });
+        setTimeout(() => setTwoFactorMsg(null), 3000);
+      } catch {
+        setTwoFactorMsg({ type: "error", text: "Network error. Please try again." });
+      } finally {
+        setIsToggling2FA(false);
+      }
     }
   };
 
@@ -1100,6 +1223,80 @@ export function ProfileModal({
                     </form>
                   )}
                 </div>
+
+                {/* 2FA Non-blocking Recommendation Card */}
+                {show2faCard && userAccount?.email && !twoFactorEnabled && (
+                  <div className="p-3.5 rounded-xl bg-[#c29b78]/10 border border-[#c29b78]/30 shadow-sm space-y-2.5">
+                    <div className="flex items-start gap-2.5">
+                      <div className="p-1.5 rounded-lg bg-[#c29b78]/20 text-[#c29b78] shrink-0 mt-0.5">
+                        <ShieldCheck className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-zinc-100">Enhance Account Security</div>
+                        <p className="text-[11px] text-zinc-400 mt-0.5 leading-relaxed">
+                          Protect your rating and stats with 2FA email verification.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={handleStart2faSetup}
+                        disabled={isToggling2FA}
+                        className="px-3 py-1.5 rounded-lg bg-[#c29b78] hover:bg-[#d4b08f] text-[#0a0908] font-bold text-xs transition-all cursor-pointer shadow-sm shadow-[#c29b78]/20 flex items-center gap-1.5"
+                      >
+                        {isToggling2FA ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                        <span>Set Up 2FA</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDismiss2faPrompt}
+                        className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-zinc-200 text-xs font-medium transition-colors cursor-pointer"
+                      >
+                        Maybe Later
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Two-Factor Authentication (Email) Toggle */}
+                <div className="p-3.5 rounded-xl bg-[#22201e] border border-white/10 shadow-sm space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-[#c29b78]" />
+                      <div>
+                        <div className="text-xs font-bold text-white">Two-Factor Authentication (Email)</div>
+                        <div className="text-[10px] text-[#a3a3a3]">
+                          {userAccount?.email
+                            ? "Require a 6-digit email OTP on login"
+                            : "Requires an email linked to your account"}
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={isToggling2FA || (!userAccount?.email && !twoFactorEnabled)}
+                      onClick={handleToggle2FA}
+                      aria-label="Toggle two-factor authentication"
+                      className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer disabled:opacity-40 shrink-0 ${
+                        twoFactorEnabled ? "bg-[#c29b78]" : "bg-white/[0.1]"
+                      }`}
+                    >
+                      <div
+                        className={`w-4 h-4 rounded-full bg-[#0a0908] transition-transform duration-200 absolute top-1 left-1 ${
+                          twoFactorEnabled ? "translate-x-5 bg-[#0a0908]" : "translate-x-0 bg-white"
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {twoFactorMsg && (
+                    <div className={`text-[11px] px-1 ${twoFactorMsg.type === "error" ? "text-rose-400" : "text-emerald-400"}`}>
+                      {twoFactorMsg.text}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
@@ -1281,6 +1478,34 @@ export function ProfileModal({
         isPro={isUpgraded}
         onOpenUpgrade={handleUpgradeSubscription}
       />
+
+      {is2faOtpOpen && (
+        <OtpModal
+          isOpen={is2faOtpOpen}
+          onClose={() => setIs2faOtpOpen(false)}
+          email={
+            userAccount?.email ||
+            (typeof window !== "undefined"
+              ? JSON.parse(window.localStorage.getItem("chess_reel_account") || "{}").email || ""
+              : "")
+          }
+          type="2FA"
+          isActivation={true}
+          onSuccess={() => {
+            setIs2faOtpOpen(false);
+            setTwoFactorEnabled(true);
+            setShow2faCard(false);
+            if (typeof window !== "undefined") {
+              const stored = window.localStorage.getItem("chess_reel_account");
+              const existing = stored ? JSON.parse(stored) : {};
+              window.localStorage.setItem("chess_reel_account", JSON.stringify({ ...existing, twoFactorEnabled: true }));
+              window.dispatchEvent(new Event("account-updated"));
+            }
+            setTwoFactorMsg({ type: "success", text: "Two-factor authentication enabled successfully!" });
+            setTimeout(() => setTwoFactorMsg(null), 3500);
+          }}
+        />
+      )}
     </div>
   );
 }

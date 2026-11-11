@@ -19,6 +19,7 @@ import {
   Trophy,
 } from "lucide-react";
 import { CURATED_AVATARS, compressImageFile } from "@/lib/avatarUpload";
+import { OtpModal } from "@/components/OtpModal";
 
 export interface AuthModalProps {
   isOpen: boolean;
@@ -93,6 +94,15 @@ export function AuthModal({
   const [showGooglePrompt, setShowGooglePrompt] = useState<boolean>(initialShowGoogle);
   const [googleEmail, setGoogleEmail] = useState<string>("tactics.player@gmail.com");
   const [googleName, setGoogleName] = useState<string>("Tactics Master");
+  const [otpState, setOtpState] = useState<{
+    isOpen: boolean;
+    email: string;
+    type: "VERIFY_EMAIL" | "2FA";
+  }>({
+    isOpen: false,
+    email: "",
+    type: "VERIFY_EMAIL",
+  });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -170,6 +180,16 @@ export function AuthModal({
         return;
       }
 
+      if (data.requiresEmailVerification && data.email) {
+        setOtpState({
+          isOpen: true,
+          email: data.email,
+          type: "VERIFY_EMAIL",
+        });
+        setIsLoading(false);
+        return;
+      }
+
       onAccountSuccess(data.user);
       onClose();
     } catch {
@@ -208,6 +228,26 @@ export function AuthModal({
       const data = await res.json();
       if (!res.ok) {
         setErrorMsg(data.error || "Could not sign in.");
+        setIsLoading(false);
+        return;
+      }
+
+      if (data.requiresEmailVerification && data.email) {
+        setOtpState({
+          isOpen: true,
+          email: data.email,
+          type: "VERIFY_EMAIL",
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      if (data.requires2FA && data.email) {
+        setOtpState({
+          isOpen: true,
+          email: data.email,
+          type: "2FA",
+        });
         setIsLoading(false);
         return;
       }
@@ -842,6 +882,20 @@ export function AuthModal({
           </div>
         )}
       </div>
+
+      {otpState.isOpen && (
+        <OtpModal
+          isOpen={otpState.isOpen}
+          onClose={() => setOtpState((prev) => ({ ...prev, isOpen: false }))}
+          email={otpState.email}
+          type={otpState.type}
+          onSuccess={(user) => {
+            setOtpState((prev) => ({ ...prev, isOpen: false }));
+            onAccountSuccess(user);
+            onClose();
+          }}
+        />
+      )}
     </div>
   );
 }

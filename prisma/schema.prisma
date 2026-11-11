@@ -33,6 +33,12 @@ model User {
   isCalibrated    Boolean      @default(false)
   calibrationStep Int          @default(0)
   passwordHash    String?
+  emailVerified    DateTime?
+  verificationCode String?
+  verificationExp  DateTime?
+  twoFactorEnabled Boolean   @default(false)
+  twoFactorCode    String?
+  twoFactorExpires DateTime?
   plan            String?      @default("free")
   bonusQuota      Int          @default(0)
   puzzlesRemaining Int?        @default(15)

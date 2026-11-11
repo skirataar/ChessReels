@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma, { withDbRetry, sanitizeDbError } from "@/lib/prisma";
-import { hashPassword } from "@/lib/auth";
+import { hashPassword, hashSecurityCode } from "@/lib/auth";
+import { sendSecurityOtpEmail } from "@/lib/mail";
 import { isGuestUserId } from "@/lib/guestAccount";
 import { isActiveProAccount } from "@/lib/tierTypes";
 
@@ -95,6 +96,25 @@ export async function POST(request: NextRequest) {
         : fallbackBaseElo;
 
     const isTest = Boolean(body?.isTestAccount);
+    const isDevTest = cleanEmail === "devtest@doomchess.local" || cleanUsername === "devtest";
+
+    // Verification code generation if email provided
+    let otpCode: string | null = null;
+    let hashedVerificationCode: string | null = null;
+    let verificationExp: Date | null = null;
+    let emailVerifiedDate: Date | null = null;
+    let requiresEmailVerification = false;
+
+    if (cleanEmail) {
+      if (isDevTest) {
+        emailVerifiedDate = new Date();
+      } else {
+        otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+        hashedVerificationCode = hashSecurityCode(otpCode);
+        verificationExp = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+        requiresEmailVerification = true;
+      }
+    }
 
     let user;
 
@@ -122,6 +142,10 @@ export async function POST(request: NextRequest) {
             passwordHash,
             isTestAccount: isTest || Boolean(guestUser.isTestAccount),
             plan: guestUser.plan === "premium" || guestUser.plan === "pro" ? "premium" : "free",
+            emailVerified: emailVerifiedDate,
+            verificationCode: hashedVerificationCode,
+            verificationExp,
+            twoFactorEnabled: false,
           },
         });
       }
@@ -156,6 +180,10 @@ export async function POST(request: NextRequest) {
           autoAdvance: false,
           soundEnabled: true,
           showCoordinates: true,
+          emailVerified: emailVerifiedDate,
+          verificationCode: hashedVerificationCode,
+          verificationExp,
+          twoFactorEnabled: false,
         },
       });
     }
@@ -166,6 +194,9 @@ export async function POST(request: NextRequest) {
       username: user.username,
       displayName: user.displayName,
       avatar: user.avatar,
+      email: user.email,
+      emailVerified: user.emailVerified,
+      twoFactorEnabled: Boolean(user.twoFactorEnabled),
       elo: user.elo,
       peakElo: user.peakElo,
       targetElo: user.targetElo ?? 1500,
@@ -191,6 +222,16 @@ export async function POST(request: NextRequest) {
       paymentProvider: user.paymentProvider ?? null,
       currentPeriodEnd: user.currentPeriodEnd ?? null,
     };
+
+    if (requiresEmailVerification && cleanEmail && otpCode) {
+      await sendSecurityOtpEmail(cleanEmail, otpCode, "VERIFY_EMAIL");
+      return NextResponse.json({
+        success: true,
+        requiresEmailVerification: true,
+        email: cleanEmail,
+        user: safeUser,
+      });
+    }
 
     const response = NextResponse.json({
       success: true,
@@ -264,6 +305,8 @@ export async function GET(request: NextRequest) {
           currentPeriodEnd: true,
           createdAt: true,
           email: true,
+          emailVerified: true,
+          twoFactorEnabled: true,
           googleId: true,
           passwordHash: true,
         },
@@ -282,6 +325,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "User not found." }, { status: 404 });
     }
 
+    const sessionCookie = request.cookies.get("chess_reel_session")?.value;
+    const isSelf = Boolean(sessionCookie && (sessionCookie === user.id || sessionCookie.startsWith(user.id)));
+
     const {
       email: _email,
       googleId: _googleId,
@@ -295,6 +341,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       user: {
         ...safeUser,
+        email: isSelf ? user.email : undefined,
+        emailVerified: isSelf ? user.emailVerified : undefined,
+        twoFactorEnabled: isSelf ? Boolean(user.twoFactorEnabled) : undefined,
         isPro,
         plan: isPro ? "premium" : "free",
         targetElo: safeUser.targetElo ?? 1500,

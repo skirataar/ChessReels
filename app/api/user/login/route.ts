@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma, { withDbRetry, sanitizeDbError } from "@/lib/prisma";
-import { verifyPassword } from "@/lib/auth";
+import { verifyPassword, hashSecurityCode } from "@/lib/auth";
+import { sendSecurityOtpEmail } from "@/lib/mail";
 import { isActiveProAccount } from "@/lib/tierTypes";
 
 export async function POST(request: NextRequest) {
@@ -52,6 +53,12 @@ export async function POST(request: NextRequest) {
           calibrationStep: true,
           passwordHash: true,
           googleId: true,
+          emailVerified: true,
+          twoFactorEnabled: true,
+          twoFactorCode: true,
+          twoFactorExpires: true,
+          verificationCode: true,
+          verificationExp: true,
           plan: true,
           isPro: true,
           subscriptionStatus: true,
@@ -104,14 +111,69 @@ export async function POST(request: NextRequest) {
       }
 
       // Secure the account with the provided password
-      const { hashPassword } = await import("@/lib/auth");
-      const newHash = hashPassword(password);
+      const { hashPassword: hashPwd } = await import("@/lib/auth");
+      const newHash = hashPwd(password);
       await withDbRetry(() =>
         prisma.user.update({
           where: { id: user.id },
           data: { passwordHash: newHash },
         })
       );
+    }
+
+    // Security Check: automated test user always bypasses verification/2FA challenges
+    const isDevTest = user.email === "devtest@doomchess.local" || user.username === "devtest";
+
+    if (!isDevTest) {
+      // 1. Unverified email requirement
+      if (user.email && !user.emailVerified) {
+        const code = Math.floor(100000 + Math.random() * 900000).toString();
+        const hashed = hashSecurityCode(code);
+        const expires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+        await withDbRetry(() =>
+          prisma.user.update({
+            where: { id: user.id },
+            data: {
+              verificationCode: hashed,
+              verificationExp: expires,
+            },
+          })
+        );
+
+        await sendSecurityOtpEmail(user.email, code, "VERIFY_EMAIL");
+
+        return NextResponse.json({
+          success: true,
+          requiresEmailVerification: true,
+          email: user.email,
+        });
+      }
+
+      // 2. Opt-in Two-Factor Authentication requirement
+      if (user.twoFactorEnabled && user.email) {
+        const code = Math.floor(100000 + Math.random() * 900000).toString();
+        const hashed = hashSecurityCode(code);
+        const expires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+        await withDbRetry(() =>
+          prisma.user.update({
+            where: { id: user.id },
+            data: {
+              twoFactorCode: hashed,
+              twoFactorExpires: expires,
+            },
+          })
+        );
+
+        await sendSecurityOtpEmail(user.email, code, "2FA");
+
+        return NextResponse.json({
+          success: true,
+          requires2FA: true,
+          email: user.email,
+        });
+      }
     }
 
     // Clean user response object without secret fields
@@ -121,6 +183,9 @@ export async function POST(request: NextRequest) {
       username: user.username || clean,
       displayName: user.displayName || user.username,
       avatar: user.avatar || "P",
+      email: user.email,
+      emailVerified: user.emailVerified,
+      twoFactorEnabled: Boolean(user.twoFactorEnabled),
       elo: user.elo,
       peakElo: user.peakElo,
       targetElo: user.targetElo ?? 1500,

@@ -69,6 +69,7 @@ export const metadata: Metadata = {
 import { BottomNav } from "@/components/BottomNav";
 import { PageTransition } from "@/components/PageTransition";
 import { PWAUpdater } from "@/components/PWAUpdater";
+import { IosInstallPrompt } from "@/components/IosInstallPrompt";
 
 export const viewport: Viewport = {
   themeColor: "#0f0e0d",
@@ -116,6 +117,7 @@ export default function RootLayout({
         <PWAUpdater />
         <PageTransition>{children}</PageTransition>
         <BottomNav />
+        <IosInstallPrompt />
       </body>
     </html>
   );

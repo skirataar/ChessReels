@@ -31,3 +31,20 @@ export function verifyPassword(password: string, storedHash: string | null | und
     return false;
   }
 }
+
+/**
+ * Hashes a 6-digit security code using SHA-256.
+ */
+export function hashSecurityCode(code: string): string {
+  return crypto.createHash("sha256").update(code.trim()).digest("hex");
+}
+
+/**
+ * Validates a 6-digit security code against a stored hash or code.
+ */
+export function verifySecurityCode(code: string, stored: string | null | undefined): boolean {
+  if (!stored) return false;
+  const cleanCode = code.trim();
+  const hashed = crypto.createHash("sha256").update(cleanCode).digest("hex");
+  return stored === cleanCode || stored === hashed;
+}

@@ -62,6 +62,8 @@ export interface UserAccount {
   displayName?: string;
   avatar?: string;
   email?: string;
+  emailVerified?: Date | string | null;
+  twoFactorEnabled?: boolean;
   googleId?: string;
   elo: number;
   isCalibrated: boolean;

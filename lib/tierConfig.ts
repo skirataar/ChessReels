@@ -33,6 +33,12 @@ export async function ensureSettingsTable(): Promise<void> {
       ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "bonusQuota" INTEGER DEFAULT 0;
       ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "puzzlesRemaining" INTEGER DEFAULT 15;
       ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "lastRefillTimestamp" TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+      ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "emailVerified" TIMESTAMP WITH TIME ZONE;
+      ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "verificationCode" TEXT;
+      ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "verificationExp" TIMESTAMP WITH TIME ZONE;
+      ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "twoFactorEnabled" BOOLEAN DEFAULT false;
+      ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "twoFactorCode" TEXT;
+      ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "twoFactorExpires" TIMESTAMP WITH TIME ZONE;
     `);
   } catch (err) {
     console.warn("Could not ensure system_settings table or bonusQuota column:", err);

@@ -9,6 +9,8 @@ export interface UserAccountProgress {
   displayName?: string;
   avatar?: string;
   email?: string;
+  emailVerified?: Date | string | null;
+  twoFactorEnabled?: boolean;
   googleId?: string;
   elo: number;
   peakElo?: number;
