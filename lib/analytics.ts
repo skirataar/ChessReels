@@ -1,17 +1,11 @@
-import posthog from "posthog-js";
-
-export type AnalyticsEvent =
-  | "landing_viewed"
-  | "puzzle_1_solved"
-  | "puzzle_3_solved"
-  | "signup_completed";
-
-export function trackEvent(
-  event: AnalyticsEvent,
-  properties?: Record<string, any>
-) {
-  if (typeof window !== "undefined" && process.env.NEXT_PUBLIC_POSTHOG_KEY) {
-    posthog.capture(event, properties);
+export function trackEvent(event: string, properties?: Record<string, any>) {
+  if (typeof window === "undefined") return;
+  try {
+    const posthogKey = process.env.NEXT_PUBLIC_POSTHOG_KEY;
+    if (posthogKey && (window as any).posthog) {
+      (window as any).posthog.capture(event, properties);
+    }
+  } catch (err) {
+    // Silently swallow analytics errors so core user actions are never interrupted
   }
 }
-

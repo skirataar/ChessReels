@@ -1005,11 +1005,23 @@ export default function RootPage() {
           </div>
 
           {/* Bottom Pinned CTAs & Smooth Scroll Down Indicator */}
-          <div className="w-full space-y-3 pb-2 shrink-0 flex flex-col items-center">
+          <div className="w-full space-y-3 pb-2 shrink-0 flex flex-col items-center relative z-20">
             <button
-              onClick={() => router.push("/play")}
+              onClick={() => {
+                try {
+                  trackEvent("get_started_clicked");
+                } catch {}
+                if (typeof window !== "undefined") {
+                  router.push("/play");
+                  setTimeout(() => {
+                    if (window.location.pathname !== "/play") {
+                      window.location.href = "/play";
+                    }
+                  }, 250);
+                }
+              }}
               type="button"
-              className="w-full h-12 rounded-full bg-[#c29b78] hover:bg-[#d4b08f] text-[#0a0908] font-semibold text-sm tracking-wide transition-all duration-150 active:scale-[0.98] shadow-lg shadow-[#c29b78]/20 flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full h-12 rounded-full bg-[#c29b78] hover:bg-[#d4b08f] text-[#0a0908] font-semibold text-sm tracking-wide transition-all duration-150 active:scale-[0.98] shadow-lg shadow-[#c29b78]/20 flex items-center justify-center gap-2 cursor-pointer relative z-20"
             >
               <span>Get Started</span>
               <ArrowRight className="w-4 h-4 stroke-[2]" />

@@ -1399,14 +1399,15 @@ export function PlayView({
   const initialFetchDoneRef = useRef(false);
   useEffect(() => {
     if (!isHydrated) return;
-    if (!userAccount || !userAccount.id) return;
+    if (isLoadingSession) return;
 
-    const userCanPlay = canPlay || puzzlesRemaining > 0;
+    const isGuest = !userAccount;
+    const userCanPlay = isGuest || canPlay || puzzlesRemaining > 0;
     if (userCanPlay || isPro || isCalibrating) {
       if (!initialFetchDoneRef.current) {
         initialFetchDoneRef.current = true;
-        const elo = userAccount.elo || currentEloRef.current || 800;
-        const targetUserId = userAccount.id;
+        const elo = userAccount?.elo || currentEloRef.current || 1000;
+        const targetUserId = userAccount?.id || guestId || "";
 
         // Check local prefetch buffer first - verify it matches user's elo
         const cached = popNextPuzzle(targetUserId);
@@ -1419,7 +1420,8 @@ export function PlayView({
         }
 
         setPuzzleStatus("loading");
-        fetch(`/api/puzzle/random?elo=${elo}&count=5&userId=${encodeURIComponent(targetUserId)}`)
+        const userParam = targetUserId ? `&userId=${encodeURIComponent(targetUserId)}` : "";
+        fetch(`/api/puzzle/random?elo=${elo}&count=5${userParam}`)
           .then((res) => (res.ok ? res.json() : null))
           .then((data) => {
             if (data) {
@@ -1459,7 +1461,7 @@ export function PlayView({
         setIsQuotaModalOpen(true);
       }
     }
-  }, [isHydrated, userAccount?.id, canPlay, isPro, isCalibrating, setIsQuotaModalOpen]);
+  }, [isHydrated, isLoadingSession, userAccount, guestId, canPlay, puzzlesRemaining, isPro, isCalibrating, setIsQuotaModalOpen]);
 
   // Exact standard Elo calculation and instant optimistic UI payout
   const processEloResult = useCallback(
@@ -1924,21 +1926,6 @@ export function PlayView({
       router.replace("/");
     }
   };
-
-  // Route guard: unauthenticated users redirect cleanly to '/'
-  useEffect(() => {
-    if (isHydrated && !userAccount) {
-      router.replace("/");
-    }
-  }, [isHydrated, userAccount, router]);
-
-  if (!userAccount && isHydrated) {
-    return (
-      <div className="min-h-screen bg-[#0a0908] flex items-center justify-center">
-        <RefreshCw className="w-8 h-8 text-[#c29b78] animate-spin" />
-      </div>
-    );
-  }
 
   return (
     <div className="bg-[#151413] font-sans text-[#f5f5f5] flex flex-col h-dvh max-h-dvh selection:bg-[#c29b78] selection:text-[#151413] overflow-hidden overscroll-none w-full select-none justify-between">

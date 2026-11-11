@@ -82,7 +82,7 @@ export function LandingPage({
           <button
             onClick={() => {
               if (typeof window !== "undefined") {
-                window.location.href = "/";
+                window.location.href = "/play";
               }
             }}
             type="button"
