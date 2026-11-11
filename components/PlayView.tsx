@@ -45,6 +45,15 @@ import { RefreshCw, WifiOff, UserPlus, BarChart2, Trophy, Zap, Flame, Crown, Spa
 import { ReelAdCard } from "@/components/ReelAdCard";
 import { RewardedAdModal } from "@/components/RewardedAdModal";
 import { motion, AnimatePresence } from "framer-motion";
+import { trackEvent } from "@/lib/analytics";
+import {
+  getGuestSession,
+  saveGuestSession,
+  recordGuestSolve,
+  syncGuestSessionToAccount,
+  GuestSession,
+} from "@/lib/guestSession";
+import { GuestConversionModal } from "@/components/GuestConversionModal";
 
 const GUEST_ID_KEY = "chess_reel_guest_id";
 const ELO_STORAGE_KEY = "chess_reel_elo";
@@ -515,6 +524,9 @@ export function PlayView({
   const [isStatsModalOpen, setIsStatsModalOpen] = useState<boolean>(false);
   const [oauthAlert, setOauthAlert] = useState<string | null>(null);
   const [incomingFriendRequestsCount, setIncomingFriendRequestsCount] = useState<number>(0);
+  const [isConversionModalOpen, setIsConversionModalOpen] = useState<boolean>(false);
+  const [guestSessionState, setGuestSessionState] = useState<GuestSession | null>(() => getGuestSession());
+  const [isGuestModePillVisible, setIsGuestModePillVisible] = useState<boolean>(false);
 
   // Fetch pending incoming friend requests count for header badge
   useEffect(() => {
@@ -799,21 +811,23 @@ export function PlayView({
         if (raw) {
           const parsed = JSON.parse(raw);
           if (isGuestAccount(parsed)) {
-            clearGuestLocalSession();
             setUserAccount(null);
-            router.replace("/");
+            const gs = getGuestSession();
+            if (gs?.estimatedElo) setCurrentElo(gs.estimatedElo);
             return;
           }
           setUserAccount(parsed);
           if (parsed.elo) setCurrentElo(parsed.elo);
         } else {
           setUserAccount(null);
+          const gs = getGuestSession();
+          if (gs?.estimatedElo) setCurrentElo(gs.estimatedElo);
         }
       } catch {}
     };
     window.addEventListener("account-updated", handleAccountSync);
     return () => window.removeEventListener("account-updated", handleAccountSync);
-  }, [router]);
+  }, []);
 
   useEffect(() => {
     if (!isHydrated) return;
@@ -822,12 +836,10 @@ export function PlayView({
       if (!raw) return;
       const parsed = JSON.parse(raw);
       if (isGuestAccount(parsed) || (userAccount && isGuestAccount(userAccount))) {
-        clearGuestLocalSession();
         setUserAccount(null);
-        router.replace("/");
       }
     } catch {}
-  }, [isHydrated, userAccount, router]);
+  }, [isHydrated, userAccount]);
 
   useEffect(() => {
     if (!isHydrated || !userAccount?.id || isGuestAccount(userAccount)) return;
@@ -880,143 +892,116 @@ export function PlayView({
   // Sync landing visibility to hide/show dock
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const isLanding = !userAccount && isHydrated;
       window.dispatchEvent(
         new CustomEvent("landing-visibility", {
-          detail: { visible: isLanding },
+          detail: { visible: false },
         })
       );
     }
-  }, [userAccount, isHydrated]);
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-      try {
-        window.localStorage.removeItem(GUEST_ID_KEY);
-        window.localStorage.removeItem("chess_reel_preview_guest");
-        setGuestId("");
+    try {
+      // 1. Maintain or initialize persistent guest ID
+      let existingGuestId = window.localStorage.getItem(GUEST_ID_KEY);
+      if (!existingGuestId || !existingGuestId.startsWith("guest_")) {
+        existingGuestId = `guest_${Math.random().toString(36).slice(2, 10)}`;
+        window.localStorage.setItem(GUEST_ID_KEY, existingGuestId);
+      }
+      setGuestId(existingGuestId);
 
-        // 2. Check for Google OAuth callback user cookie & URL params
-        if (typeof document !== "undefined") {
-          const cookieMatch = document.cookie.match(/chess_reel_oauth_user=([^;]+)/);
-          if (cookieMatch && cookieMatch[1]) {
+      // 2. Check for Google OAuth callback user cookie & URL params
+      if (typeof document !== "undefined") {
+        const cookieMatch = document.cookie.match(/chess_reel_oauth_user=([^;]+)/);
+        if (cookieMatch && cookieMatch[1]) {
+          try {
+            let raw = cookieMatch[1];
             try {
-              let raw = cookieMatch[1];
-              try {
-                raw = decodeURIComponent(raw);
-              } catch {}
-              const oauthUser = JSON.parse(raw);
-              document.cookie = "chess_reel_oauth_user=; path=/; max-age=0";
-              if (oauthUser && oauthUser.id && !isGuestAccount(oauthUser)) {
-                document.cookie = `chess_reel_session=${encodeURIComponent(oauthUser.id)}; path=/; max-age=${60 * 60 * 24 * 30}`;
-                window.localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(oauthUser));
-                if (oauthUser.elo) {
-                  window.localStorage.setItem(ELO_STORAGE_KEY, String(oauthUser.elo));
-                }
-                if (oauthUser.plan) {
-                  window.localStorage.setItem("chess_reel_plan", oauthUser.plan);
-                  window.dispatchEvent(new Event("plan-updated"));
-                }
-                setUserAccount(oauthUser);
-                hydrateUserSession(oauthUser);
-                if (oauthUser.elo) setCurrentElo(oauthUser.elo);
-                if (Array.isArray(oauthUser.solvedPuzzleIds) && oauthUser.solvedPuzzleIds.length > 0) {
-                  setSolvedPuzzleIds((prev) => {
-                    const next = new Set(prev);
-                    oauthUser.solvedPuzzleIds.forEach((id: string) => next.add(id));
-                    return next;
-                  });
-                }
-                window.dispatchEvent(new Event("account-updated"));
-                if (window.location.search.includes("google_auth=success")) {
-                  window.history.replaceState({}, document.title, window.location.pathname);
-                }
-              } else {
-                clearGuestLocalSession();
-                router.replace("/");
+              raw = decodeURIComponent(raw);
+            } catch {}
+            const oauthUser = JSON.parse(raw);
+            document.cookie = "chess_reel_oauth_user=; path=/; max-age=0";
+            if (oauthUser && oauthUser.id && !isGuestAccount(oauthUser)) {
+              document.cookie = `chess_reel_session=${encodeURIComponent(oauthUser.id)}; path=/; max-age=${60 * 60 * 24 * 30}`;
+              window.localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(oauthUser));
+              if (oauthUser.elo) {
+                window.localStorage.setItem(ELO_STORAGE_KEY, String(oauthUser.elo));
               }
-            } catch {
-              clearGuestLocalSession();
-              router.replace("/");
-            }
-          }
+              if (oauthUser.plan) {
+                window.localStorage.setItem("chess_reel_plan", oauthUser.plan);
+                window.dispatchEvent(new Event("plan-updated"));
+              }
+              setUserAccount(oauthUser);
+              hydrateUserSession(oauthUser);
+              if (oauthUser.elo) setCurrentElo(oauthUser.elo);
+              if (Array.isArray(oauthUser.solvedPuzzleIds) && oauthUser.solvedPuzzleIds.length > 0) {
+                setSolvedPuzzleIds((prev) => {
+                  const next = new Set(prev);
+                  oauthUser.solvedPuzzleIds.forEach((id: string) => next.add(id));
+                  return next;
+                });
+              }
 
-          // Check for OAuth messages / errors
-          const searchParams = new URLSearchParams(window.location.search);
-          const oauthInfo = searchParams.get("oauth_info");
-          const oauthError = searchParams.get("oauth_error");
-          if (oauthInfo === "google_credentials_required") {
-            setOauthAlert("Google OAuth: Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env to connect live accounts. Quick Test Sign-In is ready.");
-            window.history.replaceState({}, document.title, window.location.pathname);
-          } else if (oauthError) {
-            setOauthAlert(`Google OAuth notification: ${oauthError.replace(/_/g, " ")}`);
-            window.history.replaceState({}, document.title, window.location.pathname);
+              // Transfer guest progress if any
+              syncGuestSessionToAccount(oauthUser.id).then((synced) => {
+                if (synced) {
+                  fetch(`/api/user/stats?userId=${encodeURIComponent(oauthUser.id)}`, { cache: "no-store" })
+                    .then((r) => r.ok ? r.json() : null)
+                    .then((statsData) => {
+                      if (statsData?.stats?.elo) {
+                        setCurrentElo(statsData.stats.elo);
+                        currentEloRef.current = statsData.stats.elo;
+                      }
+                    })
+                    .catch(() => {});
+                }
+              }).catch(() => {});
+
+              window.dispatchEvent(new Event("account-updated"));
+              if (window.location.search.includes("google_auth=success")) {
+                window.history.replaceState({}, document.title, window.location.pathname);
+              }
+            } else {
+              setUserAccount(null);
+            }
+          } catch {
+            setUserAccount(null);
           }
         }
 
-        // 3. Saved Account
-        const savedAccountRaw = window.localStorage.getItem(ACCOUNT_STORAGE_KEY);
-        if (savedAccountRaw) {
-          try {
-            const parsed = JSON.parse(savedAccountRaw);
-            if (parsed && parsed.id && !isGuestAccount(parsed)) {
-              setUserAccount(parsed);
-              if (parsed.elo) {
-                setCurrentElo(parsed.elo);
-              }
-              fetch(`/api/user/account?userId=${encodeURIComponent(parsed.id)}`)
-                .then((res) => (res.ok ? res.json() : null))
-                .then((data) => {
-                  if (data?.user) {
-                    if (isGuestAccount(data.user)) {
-                      clearGuestLocalSession();
-                      setUserAccount(null);
-                      router.replace("/");
-                      return;
-                    }
-                    setUserAccount(data.user);
-                    hydrateUserSession(data.user);
-                    const merged = mergeDbStatsWithLocal(data.user);
-                    setCurrentElo(merged.elo);
-                    currentEloRef.current = merged.elo;
-                    if (Array.isArray(data.user.solvedPuzzleIds) && data.user.solvedPuzzleIds.length > 0) {
-                      setSolvedPuzzleIds((prev) => {
-                        const next = new Set(prev);
-                        data.user.solvedPuzzleIds.forEach((id: string) => next.add(id));
-                        return next;
-                      });
-                    }
-                  }
-                })
-                .catch(() => {});
-            } else {
-              clearGuestLocalSession();
-              setUserAccount(null);
-              router.replace("/");
-              return;
+        // Check for OAuth messages / errors
+        const searchParams = new URLSearchParams(window.location.search);
+        const oauthInfo = searchParams.get("oauth_info");
+        const oauthError = searchParams.get("oauth_error");
+        if (oauthInfo === "google_credentials_required") {
+          setOauthAlert("Google OAuth: Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env to connect live accounts. Quick Test Sign-In is ready.");
+          window.history.replaceState({}, document.title, window.location.pathname);
+        } else if (oauthError) {
+          setOauthAlert(`Google OAuth notification: ${oauthError.replace(/_/g, " ")}`);
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
+      }
+
+      // 3. Saved Account
+      const savedAccountRaw = window.localStorage.getItem(ACCOUNT_STORAGE_KEY);
+      if (savedAccountRaw) {
+        try {
+          const parsed = JSON.parse(savedAccountRaw);
+          if (parsed && parsed.id && !isGuestAccount(parsed)) {
+            setUserAccount(parsed);
+            if (parsed.elo) {
+              setCurrentElo(parsed.elo);
             }
-          } catch {
-            clearGuestLocalSession();
-            setUserAccount(null);
-            router.replace("/");
-            return;
-          }
-        } else {
-          // Check if valid session cookie exists
-          const sessionCookie =
-            typeof document !== "undefined"
-              ? document.cookie
-                  .split("; ")
-                  .find((row) => row.startsWith("chess_reel_session="))
-                  ?.split("=")[1]
-              : null;
-          const decodedSession = sessionCookie ? decodeURIComponent(sessionCookie) : null;
-          if (decodedSession && !isGuestUserId(decodedSession)) {
-            fetch(`/api/user/account?userId=${encodeURIComponent(decodedSession)}`)
+            fetch(`/api/user/account?userId=${encodeURIComponent(parsed.id)}`)
               .then((res) => (res.ok ? res.json() : null))
               .then((data) => {
-                if (data?.user && !isGuestAccount(data.user)) {
+                if (data?.user) {
+                  if (isGuestAccount(data.user)) {
+                    setUserAccount(null);
+                    return;
+                  }
                   setUserAccount(data.user);
                   hydrateUserSession(data.user);
                   const merged = mergeDbStatsWithLocal(data.user);
@@ -1029,28 +1014,83 @@ export function PlayView({
                       return next;
                     });
                   }
-                } else {
-                  clearGuestLocalSession();
-                  setUserAccount(null);
-                  router.replace("/");
                 }
               })
-              .catch(() => {
-                clearGuestLocalSession();
-                setUserAccount(null);
-                router.replace("/");
-              });
+              .catch(() => {});
           } else {
-            clearGuestLocalSession();
             setUserAccount(null);
-            router.replace("/");
+            const gs = getGuestSession() || { solvedCount: 0, estimatedElo: 1000, streak: 0 };
+            saveGuestSession(gs);
+            setGuestSessionState(gs);
+            setCurrentElo(gs.estimatedElo);
+            currentEloRef.current = gs.estimatedElo;
           }
+        } catch {
+          setUserAccount(null);
+          const gs = getGuestSession() || { solvedCount: 0, estimatedElo: 1000, streak: 0 };
+          saveGuestSession(gs);
+          setGuestSessionState(gs);
+          setCurrentElo(gs.estimatedElo);
+          currentEloRef.current = gs.estimatedElo;
         }
-      } catch (e) {
-        console.warn("Storage access restricted:", e);
+      } else {
+        // Check if valid session cookie exists
+        const sessionCookie =
+          typeof document !== "undefined"
+            ? document.cookie
+                .split("; ")
+                .find((row) => row.startsWith("chess_reel_session="))
+                ?.split("=")[1]
+            : null;
+        const decodedSession = sessionCookie ? decodeURIComponent(sessionCookie) : null;
+        if (decodedSession && !isGuestUserId(decodedSession)) {
+          fetch(`/api/user/account?userId=${encodeURIComponent(decodedSession)}`)
+            .then((res) => (res.ok ? res.json() : null))
+            .then((data) => {
+              if (data?.user && !isGuestAccount(data.user)) {
+                setUserAccount(data.user);
+                hydrateUserSession(data.user);
+                const merged = mergeDbStatsWithLocal(data.user);
+                setCurrentElo(merged.elo);
+                currentEloRef.current = merged.elo;
+                if (Array.isArray(data.user.solvedPuzzleIds) && data.user.solvedPuzzleIds.length > 0) {
+                  setSolvedPuzzleIds((prev) => {
+                    const next = new Set(prev);
+                    data.user.solvedPuzzleIds.forEach((id: string) => next.add(id));
+                    return next;
+                  });
+                }
+              } else {
+                setUserAccount(null);
+                const gs = getGuestSession() || { solvedCount: 0, estimatedElo: 1000, streak: 0 };
+                saveGuestSession(gs);
+                setGuestSessionState(gs);
+                setCurrentElo(gs.estimatedElo);
+                currentEloRef.current = gs.estimatedElo;
+              }
+            })
+            .catch(() => {
+              setUserAccount(null);
+              const gs = getGuestSession() || { solvedCount: 0, estimatedElo: 1000, streak: 0 };
+              saveGuestSession(gs);
+              setGuestSessionState(gs);
+              setCurrentElo(gs.estimatedElo);
+              currentEloRef.current = gs.estimatedElo;
+            });
+        } else {
+          setUserAccount(null);
+          const gs = getGuestSession() || { solvedCount: 0, estimatedElo: 1000, streak: 0 };
+          saveGuestSession(gs);
+          setGuestSessionState(gs);
+          setCurrentElo(gs.estimatedElo);
+          currentEloRef.current = gs.estimatedElo;
+        }
       }
-      setIsLoadingSession(false);
-  }, [router]);
+    } catch (e) {
+      console.warn("Storage access restricted:", e);
+    }
+    setIsLoadingSession(false);
+  }, []);
 
   // Account switch detection: wipe previous user's queue and reload for the new user
   useEffect(() => {
@@ -1221,6 +1261,9 @@ export function PlayView({
 
   // Swipe Up / Next Puzzle navigation: strictly increment currentIndex to a new puzzle ID & deduplicate against solved
   const goToNextPuzzle = useCallback(async (bypassAd: boolean = false) => {
+    if (isConversionModalOpen) {
+      return;
+    }
     if (!bypassAd && !isPro && !isCalibrating && puzzlesPlayedInSession > 0 && puzzlesPlayedInSession % 3 === 0 && !showReelAd) {
       setShowReelAd(true);
       return;
@@ -1522,6 +1565,19 @@ export function PlayView({
             );
           }
         } catch {}
+
+        // TASK 2: Guest Solve Tracking & Soft Conversion Modal
+        if (!userAccount) {
+          const { session, justHitFirst, justHitThird } = recordGuestSolve(nextElo, puzzle.id);
+          setGuestSessionState(session);
+
+          if (justHitFirst) {
+            trackEvent("puzzle_1_solved", { elo: nextElo });
+          } else if (justHitThird) {
+            trackEvent("puzzle_3_solved", { elo: nextElo });
+            setIsConversionModalOpen(true);
+          }
+        }
       }
 
       // Record rating state in history
@@ -1773,11 +1829,27 @@ export function PlayView({
     } catch {}
 
     setIsQuotaModalOpen(false);
+    setIsConversionModalOpen(false);
     setSolvedPuzzleIds(new Set());
     setQueue([]);
     setPuzzleStatus("loading");
     setCurrentIndex(0);
     initialFetchDoneRef.current = true;
+
+    // Handshake: transfer guest session progress to account
+    syncGuestSessionToAccount(user.id).then((synced) => {
+      if (synced) {
+        fetch(`/api/user/stats?userId=${encodeURIComponent(user.id)}`, { cache: "no-store" })
+          .then((res) => (res.ok ? res.json() : null))
+          .then((statsData) => {
+            if (statsData?.stats?.elo) {
+              setCurrentElo(statsData.stats.elo);
+              currentEloRef.current = statsData.stats.elo;
+            }
+          })
+          .catch(() => {});
+      }
+    }).catch(() => {});
 
     fetch(`/api/user/stats?userId=${encodeURIComponent(user.id)}`, { cache: "no-store" })
       .then((res) => (res.ok ? res.json() : null))
@@ -2217,8 +2289,8 @@ export function PlayView({
                 guestId={userAccount?.id || guestId}
                 streak={dailyStreak}
                 combo={combo}
-                canPlay={canPlay || puzzlesRemaining > 0}
-                isPaywallOpen={isQuotaModalOpen}
+                canPlay={(canPlay || puzzlesRemaining > 0) && !isConversionModalOpen}
+                isPaywallOpen={isQuotaModalOpen || isConversionModalOpen}
                 lastEloChange={lastEloChange}
                 isCalibration={isCalibrating}
                 calibrationStep={currentCalibrationStep}
@@ -2381,6 +2453,61 @@ export function PlayView({
         </aside>
       )}
 
+      {/* Floating Guest Mode HUD Pill Docked Cleanly Above Bottom Nav */}
+      {isHydrated && !userAccount && activeTab === "reels" && (
+        <aside
+          role="status"
+          aria-label="Guest Mode"
+          data-testid="guest-mode-hud"
+          className="fixed bottom-20 left-1/2 -translate-x-1/2 z-30 w-full max-w-[480px] px-3 animate-in fade-in slide-in-from-bottom-2 duration-200 pointer-events-auto"
+        >
+          <div
+            onClick={() => {
+              setAuthModalTab("register");
+              setIsAuthModalOpen(true);
+            }}
+            className="h-11 rounded-none bg-[#12100e]/95 backdrop-blur-md border border-[#c29b78]/25 px-3 flex items-center justify-between gap-3 shadow-[0_-8px_24px_rgba(0,0,0,0.6)] cursor-pointer hover:border-[#c29b78]/50 transition-colors"
+          >
+            <div className="flex items-center gap-1.5 shrink-0">
+              <svg
+                viewBox="0 0 24 24"
+                className="w-3.5 h-3.5 stroke-[#c29b78] stroke-[2] fill-none shrink-0"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
+                <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+                <path d="M4 22h16" />
+                <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
+                <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
+                <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
+              </svg>
+              <span className="text-[11px] font-semibold text-zinc-100 uppercase tracking-wider">
+                Guest Mode
+              </span>
+              <span className="text-[11px] font-mono text-[#c29b78] flex items-center gap-1">
+                <span className="w-1 h-1 rounded-full bg-[#c29b78]/60 inline-block" aria-hidden="true" />
+                <span>
+                  {(guestSessionState?.solvedCount ?? 0) >= 3
+                    ? "Rating Calibrated"
+                    : `Puzzle ${(guestSessionState?.solvedCount ?? 0) + 1} of 3`}
+                </span>
+              </span>
+            </div>
+
+            <div className="shrink-0 flex items-center gap-2">
+              <span className="text-[10px] font-mono text-zinc-400">
+                Est. <strong className="text-zinc-200">{currentElo}</strong>
+              </span>
+              <span className="text-[10px] font-bold text-[#c29b78] uppercase tracking-wider">
+                Save Rating
+              </span>
+            </div>
+          </div>
+        </aside>
+      )}
+
       {/* 3. Modals & Drawers */}
       <LeaderboardModal
         isOpen={activeTab === "rank"}
@@ -2435,6 +2562,20 @@ export function PlayView({
         }}
         calibratedElo={calibratedFinalElo}
         username={userAccount?.displayName || userAccount?.username || "Challenger"}
+      />
+
+      <GuestConversionModal
+        isOpen={isConversionModalOpen}
+        guestElo={currentElo}
+        onSaveProgress={() => {
+          setIsConversionModalOpen(false);
+          setAuthModalTab("register");
+          setIsAuthModalOpen(true);
+        }}
+        onContinueAsGuest={() => {
+          setIsConversionModalOpen(false);
+          setIsGuestModePillVisible(true);
+        }}
       />
 
       <StatsModal

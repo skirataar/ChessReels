@@ -9,6 +9,8 @@ import { clearGuestLocalSession, isGuestAccount } from "@/lib/guestAccount";
 import { prefetchPuzzles, clearAllUserAndPuzzleCache } from "@/lib/puzzleCache";
 import { hydrateUserSession } from "@/lib/sessionHydration";
 import { OtpModal } from "@/components/OtpModal";
+import { trackEvent } from "@/lib/analytics";
+import { syncGuestSessionToAccount } from "@/lib/guestSession";
 
 // --- Types ---
 type FlowStep = "gate" | "step-elo" | "step-goal" | "step-board" | "auth" | "pro-upsell";
@@ -613,24 +615,16 @@ export default function RootPage() {
       if (hasAccount) {
         try {
           const parsed = JSON.parse(hasAccount);
-          if (isGuestAccount(parsed)) {
-            clearGuestLocalSession();
-            setStep("auth");
-            setAuthMode("signup");
+          if (!isGuestAccount(parsed) && parsed.id) {
+            router.replace("/play");
             return;
           }
-        } catch {
-          clearGuestLocalSession();
-          setStep("auth");
-          setAuthMode("signup");
-          return;
-        }
-        router.replace("/play");
-        return;
+        } catch {}
       }
 
       if (!stepParam && !modeParam && !googleOnboarding) {
         setStep("gate");
+        trackEvent("landing_viewed");
       }
     } catch {}
   }, [router]);
@@ -732,6 +726,7 @@ export default function RootPage() {
       }
 
       if (data.user) {
+        syncGuestSessionToAccount(data.user.id).catch(() => {});
         clearAllUserAndPuzzleCache();
         hydrateUserSession(data.user);
         prefetchPuzzles(startingElo, 5, data.user.id).catch(() => {});
@@ -825,7 +820,9 @@ export default function RootPage() {
         }
 
         if (data.user) {
+          syncGuestSessionToAccount(data.user.id).catch(() => {});
           clearAllUserAndPuzzleCache();
+          syncGuestSessionToAccount(data.user.id).catch(() => {});
           hydrateUserSession(data.user);
           prefetchPuzzles(data.user.elo || 800, 5, data.user.id).catch(() => {});
           document.cookie = `chess_reel_session=${encodeURIComponent(data.user.id)}; path=/; max-age=${60 * 60 * 24 * 30}`;
@@ -896,6 +893,7 @@ export default function RootPage() {
               window.localStorage.removeItem("quota_last_check");
             } catch {}
           }
+          syncGuestSessionToAccount(data.user.id).catch(() => {});
           hydrateUserSession(data.user);
           prefetchPuzzles(data.user.elo || 800, 5, data.user.id).catch(() => {});
           document.cookie = `chess_reel_session=${encodeURIComponent(data.user.id)}; path=/; max-age=${60 * 60 * 24 * 30}`;
@@ -1009,7 +1007,7 @@ export default function RootPage() {
           {/* Bottom Pinned CTAs & Smooth Scroll Down Indicator */}
           <div className="w-full space-y-3 pb-2 shrink-0 flex flex-col items-center">
             <button
-              onClick={() => goTo("step-elo", 1)}
+              onClick={() => router.push("/play")}
               type="button"
               className="w-full h-12 rounded-full bg-[#c29b78] hover:bg-[#d4b08f] text-[#0a0908] font-semibold text-sm tracking-wide transition-all duration-150 active:scale-[0.98] shadow-lg shadow-[#c29b78]/20 flex items-center justify-center gap-2 cursor-pointer"
             >
@@ -1793,6 +1791,7 @@ export default function RootPage() {
                 window.localStorage.removeItem("quota_last_check");
               } catch {}
             }
+            syncGuestSessionToAccount(user.id).catch(() => {});
             hydrateUserSession(user);
             prefetchPuzzles(user.elo || 800, 5, user.id).catch(() => {});
             document.cookie = `chess_reel_session=${encodeURIComponent(user.id)}; path=/; max-age=${60 * 60 * 24 * 30}`;
