@@ -1,78 +1,141 @@
 import { trackEvent } from "@/lib/analytics";
 
-export interface GuestSession {
-  currentStep: number; // 0 to 6
-  puzzleHistory: { puzzleId: string; elo: number; passed: boolean }[];
-  calibratedElo: number | null;
-  isGuestMode: boolean;
-  // Convenience fields for backwards compatibility and database sync
-  solvedCount?: number;
-  estimatedElo?: number;
-  streak?: number;
-  solvedPuzzleIds?: string[];
+export interface PlacementStepResult {
+  puzzleId: string;
+  puzzleElo: number;
+  solved: boolean;
 }
 
-export const PLACEMENT_TOTAL_STEPS = 6;
-export const PLACEMENT_START_ELO = 1000;
-export const PLACEMENT_STEP_WIN_DELTA = 200;
-export const PLACEMENT_STEP_LOSS_DELTA = 150;
-export const MIN_PLACEMENT_ELO = 600;
-export const MAX_PLACEMENT_ELO = 2200;
+export interface PlacementState {
+  currentStep: number; // 1 to 6
+  currentPuzzleElo: number;
+  history: PlacementStepResult[];
+  calibratedElo: number | null;
+  isComplete: boolean;
+}
+
+export const INITIAL_PLACEMENT_ELO = 1000;
+export const TOTAL_PLACEMENT_STEPS = 6;
+export const ELO_STEP_UP = 200;
+export const ELO_STEP_DOWN = 150;
+export const MIN_CALIBRATED_ELO = 600;
+export const MAX_CALIBRATED_ELO = 2200;
 
 export const GUEST_SESSION_KEY = "doomchess_guest_session";
 
+// Backwards compatibility aliases
+export const PLACEMENT_START_ELO = INITIAL_PLACEMENT_ELO;
+export const PLACEMENT_TOTAL_STEPS = TOTAL_PLACEMENT_STEPS;
+export const PLACEMENT_STEP_WIN_DELTA = ELO_STEP_UP;
+export const PLACEMENT_STEP_LOSS_DELTA = ELO_STEP_DOWN;
+export const MIN_PLACEMENT_ELO = MIN_CALIBRATED_ELO;
+export const MAX_PLACEMENT_ELO = MAX_CALIBRATED_ELO;
+
+export interface GuestSession extends PlacementState {
+  isGuestMode: boolean;
+  estimatedElo?: number;
+  solvedCount?: number;
+  streak?: number;
+  solvedPuzzleIds?: string[];
+  puzzleHistory?: { puzzleId: string; elo: number; passed: boolean }[];
+}
+
+export function getInitialPlacementState(): PlacementState {
+  return {
+    currentStep: 1,
+    currentPuzzleElo: INITIAL_PLACEMENT_ELO,
+    history: [],
+    calibratedElo: null,
+    isComplete: false,
+  };
+}
+
+export function processPlacementMove(
+  state: PlacementState,
+  puzzleId: string,
+  solved: boolean
+): PlacementState {
+  if (state.isComplete) return state;
+
+  const stepResult: PlacementStepResult = {
+    puzzleId,
+    puzzleElo: state.currentPuzzleElo,
+    solved,
+  };
+
+  const newHistory = [...state.history, stepResult];
+  const nextStep = state.currentStep + 1;
+
+  if (nextStep > TOTAL_PLACEMENT_STEPS) {
+    // Calibration Complete: compute final rating
+    // Formula: Average attempted puzzle difficulty + net performance bonus
+    const totalAttemptedElo = newHistory.reduce((acc, h) => acc + h.puzzleElo, 0);
+    const avgDifficulty = totalAttemptedElo / TOTAL_PLACEMENT_STEPS;
+    const solves = newHistory.filter((h) => h.solved).length;
+    const fails = TOTAL_PLACEMENT_STEPS - solves;
+
+    // Performance delta: +50 per net solve
+    const rawElo = Math.round(avgDifficulty + (solves - fails) * 50);
+    // Snap to nearest 25 and clamp
+    const roundedElo = Math.round(rawElo / 25) * 25;
+    const finalElo = Math.max(MIN_CALIBRATED_ELO, Math.min(MAX_CALIBRATED_ELO, roundedElo));
+
+    return {
+      currentStep: TOTAL_PLACEMENT_STEPS,
+      currentPuzzleElo: state.currentPuzzleElo,
+      history: newHistory,
+      calibratedElo: finalElo,
+      isComplete: true,
+    };
+  }
+
+  // Next step puzzle target
+  const nextElo = solved
+    ? Math.min(MAX_CALIBRATED_ELO, state.currentPuzzleElo + ELO_STEP_UP)
+    : Math.max(MIN_CALIBRATED_ELO, state.currentPuzzleElo - ELO_STEP_DOWN);
+
+  return {
+    currentStep: nextStep,
+    currentPuzzleElo: nextElo,
+    history: newHistory,
+    calibratedElo: null,
+    isComplete: false,
+  };
+}
+
 export function calculateNextPlacementElo(currentElo: number, passed: boolean): number {
-  const next = passed
-    ? currentElo + PLACEMENT_STEP_WIN_DELTA
-    : currentElo - PLACEMENT_STEP_LOSS_DELTA;
-  return Math.max(MIN_PLACEMENT_ELO, Math.min(MAX_PLACEMENT_ELO, next));
+  const next = passed ? currentElo + ELO_STEP_UP : currentElo - ELO_STEP_DOWN;
+  return Math.max(MIN_CALIBRATED_ELO, Math.min(MAX_CALIBRATED_ELO, next));
 }
 
 export function calculateFinalPlacementElo(
-  history: { puzzleId?: string; elo: number; passed: boolean }[]
+  history: { puzzleId?: string; elo?: number; puzzleElo?: number; passed?: boolean; solved?: boolean }[]
 ): number {
-  if (!history || history.length === 0) return PLACEMENT_START_ELO;
-
+  if (!history || history.length === 0) return INITIAL_PLACEMENT_ELO;
   const count = history.length;
-  const wins = history.filter((h) => h.passed).length;
-  const accuracy = wins / count;
-
-  // Mean difficulty of all attempted placement puzzles
-  const avgDifficulty =
-    history.reduce((sum, h) => sum + (typeof h.elo === "number" ? h.elo : PLACEMENT_START_ELO), 0) /
-    count;
-
-  // Net solve accuracy adjustment: +/- up to 200 points relative to 50% baseline
-  const accuracyBonus = (accuracy - 0.5) * 400;
-
-  let rawElo = avgDifficulty + accuracyBonus;
-
-  // Performance ceiling / floor reinforcement
-  if (wins === count) {
-    const maxElo = Math.max(...history.map((h) => h.elo || PLACEMENT_START_ELO));
-    rawElo = Math.max(rawElo, maxElo + 100);
-  } else if (wins === 0) {
-    const minElo = Math.min(...history.map((h) => h.elo || PLACEMENT_START_ELO));
-    rawElo = Math.min(rawElo, minElo - 100);
-  }
-
-  // Strict clamp between 600 and 2200 ELO
-  const clamped = Math.max(MIN_PLACEMENT_ELO, Math.min(MAX_PLACEMENT_ELO, rawElo));
-
-  // Round to the nearest 25
-  return Math.round(clamped / 25) * 25;
+  const totalAttemptedElo = history.reduce(
+    (acc, h) =>
+      acc + (typeof h.puzzleElo === "number" ? h.puzzleElo : (typeof h.elo === "number" ? h.elo : INITIAL_PLACEMENT_ELO)),
+    0
+  );
+  const avgDifficulty = totalAttemptedElo / count;
+  const solves = history.filter((h) => (h.solved !== undefined ? h.solved : h.passed)).length;
+  const fails = count - solves;
+  const rawElo = Math.round(avgDifficulty + (solves - fails) * 50);
+  const roundedElo = Math.round(rawElo / 25) * 25;
+  return Math.max(MIN_CALIBRATED_ELO, Math.min(MAX_CALIBRATED_ELO, roundedElo));
 }
 
 export function getDefaultGuestSession(): GuestSession {
+  const initial = getInitialPlacementState();
   return {
-    currentStep: 0,
-    puzzleHistory: [],
-    calibratedElo: null,
+    ...initial,
     isGuestMode: false,
+    estimatedElo: initial.currentPuzzleElo,
     solvedCount: 0,
-    estimatedElo: PLACEMENT_START_ELO,
     streak: 0,
     solvedPuzzleIds: [],
+    puzzleHistory: [],
   };
 }
 
@@ -83,26 +146,52 @@ export function getGuestSession(): GuestSession {
     if (!raw) return getDefaultGuestSession();
     const parsed = JSON.parse(raw);
 
-    const history: { puzzleId: string; elo: number; passed: boolean }[] = Array.isArray(
-      parsed.puzzleHistory
-    )
-      ? parsed.puzzleHistory.map((item: any) => ({
-          puzzleId: String(item.puzzleId || ""),
-          elo: typeof item.elo === "number" ? item.elo : PLACEMENT_START_ELO,
-          passed: Boolean(item.passed),
-        }))
-      : [];
+    let history: PlacementStepResult[] = [];
+    if (Array.isArray(parsed.history)) {
+      history = parsed.history.map((h: any) => ({
+        puzzleId: String(h.puzzleId || ""),
+        puzzleElo: typeof h.puzzleElo === "number" ? h.puzzleElo : (typeof h.elo === "number" ? h.elo : INITIAL_PLACEMENT_ELO),
+        solved: Boolean(h.solved !== undefined ? h.solved : h.passed),
+      }));
+    } else if (Array.isArray(parsed.puzzleHistory)) {
+      history = parsed.puzzleHistory.map((h: any) => ({
+        puzzleId: String(h.puzzleId || ""),
+        puzzleElo: typeof h.elo === "number" ? h.elo : INITIAL_PLACEMENT_ELO,
+        solved: Boolean(h.passed !== undefined ? h.passed : h.solved),
+      }));
+    }
+
+    const currentStep =
+      typeof parsed.currentStep === "number" && parsed.currentStep >= 1
+        ? parsed.currentStep
+        : Math.min(TOTAL_PLACEMENT_STEPS, history.length + 1);
+
+    const currentPuzzleElo =
+      typeof parsed.currentPuzzleElo === "number"
+        ? parsed.currentPuzzleElo
+        : (typeof parsed.estimatedElo === "number" ? parsed.estimatedElo : INITIAL_PLACEMENT_ELO);
+
+    const calibratedElo = typeof parsed.calibratedElo === "number" ? parsed.calibratedElo : null;
+    const isComplete = Boolean(
+      parsed.isComplete || calibratedElo !== null || history.length >= TOTAL_PLACEMENT_STEPS
+    );
+
+    const solves = history.filter((h) => h.solved).length;
 
     return {
-      currentStep: typeof parsed.currentStep === "number" ? parsed.currentStep : history.length,
-      puzzleHistory: history,
-      calibratedElo: typeof parsed.calibratedElo === "number" ? parsed.calibratedElo : null,
+      currentStep: isComplete ? TOTAL_PLACEMENT_STEPS : currentStep,
+      currentPuzzleElo,
+      history,
+      calibratedElo,
+      isComplete,
       isGuestMode: Boolean(parsed.isGuestMode),
-      solvedCount: typeof parsed.solvedCount === "number" ? parsed.solvedCount : history.filter((h) => h.passed).length,
-      estimatedElo:
-        typeof parsed.estimatedElo === "number" ? parsed.estimatedElo : PLACEMENT_START_ELO,
+      estimatedElo: calibratedElo || currentPuzzleElo,
+      solvedCount: solves,
       streak: typeof parsed.streak === "number" ? parsed.streak : 0,
-      solvedPuzzleIds: Array.isArray(parsed.solvedPuzzleIds) ? parsed.solvedPuzzleIds : [],
+      solvedPuzzleIds: Array.isArray(parsed.solvedPuzzleIds)
+        ? parsed.solvedPuzzleIds
+        : history.filter((h) => h.solved).map((h) => h.puzzleId),
+      puzzleHistory: history.map((h) => ({ puzzleId: h.puzzleId, elo: h.puzzleElo, passed: h.solved })),
     };
   } catch {
     return getDefaultGuestSession();
@@ -115,6 +204,22 @@ export function saveGuestSession(data: Partial<GuestSession>): GuestSession {
     ...existing,
     ...data,
   };
+
+  if (data.history) {
+    updated.puzzleHistory = data.history.map((h) => ({
+      puzzleId: h.puzzleId,
+      elo: h.puzzleElo,
+      passed: h.solved,
+    }));
+    updated.solvedCount = data.history.filter((h) => h.solved).length;
+    updated.solvedPuzzleIds = data.history.filter((h) => h.solved).map((h) => h.puzzleId);
+  }
+  if (data.currentPuzzleElo !== undefined) {
+    updated.estimatedElo = data.currentPuzzleElo;
+  }
+  if (data.calibratedElo !== undefined) {
+    updated.estimatedElo = data.calibratedElo || updated.currentPuzzleElo;
+  }
 
   if (typeof window !== "undefined") {
     try {
@@ -138,7 +243,7 @@ export function clearGuestSession(): void {
 
 export function recordPlacementStep(
   puzzleId: string,
-  elo: number,
+  _elo: number,
   passed: boolean
 ): {
   session: GuestSession;
@@ -147,47 +252,19 @@ export function recordPlacementStep(
   nextElo: number;
 } {
   const current = getGuestSession();
-  const updatedHistory = [
-    ...current.puzzleHistory,
-    { puzzleId, elo: Math.round(elo), passed },
-  ];
-  const nextStep = Math.min(PLACEMENT_TOTAL_STEPS, current.currentStep + 1);
-  const nextSolvedCount = passed ? (current.solvedCount || 0) + 1 : (current.solvedCount || 0);
-  const nextStreak = passed ? (current.streak || 0) + 1 : 0;
-  const nextPuzzleIds =
-    passed && puzzleId && !current.solvedPuzzleIds?.includes(puzzleId)
-      ? [...(current.solvedPuzzleIds || []), puzzleId]
-      : current.solvedPuzzleIds || [];
-
-  const isComplete = nextStep >= PLACEMENT_TOTAL_STEPS;
-  let finalElo: number | null = null;
-  let nextElo: number;
-
-  if (isComplete) {
-    finalElo = calculateFinalPlacementElo(updatedHistory);
-    nextElo = finalElo;
-  } else {
-    nextElo = calculateNextPlacementElo(elo, passed);
-  }
-
-  const updatedSession: GuestSession = {
-    ...current,
-    currentStep: nextStep,
-    puzzleHistory: updatedHistory,
-    calibratedElo: isComplete ? finalElo : current.calibratedElo,
-    estimatedElo: nextElo,
-    solvedCount: nextSolvedCount,
-    streak: nextStreak,
-    solvedPuzzleIds: nextPuzzleIds,
-  };
-
-  saveGuestSession(updatedSession);
+  const nextState = processPlacementMove(current, puzzleId, passed);
+  const updatedSession = saveGuestSession({
+    ...nextState,
+    isGuestMode: current.isGuestMode,
+  });
 
   return {
     session: updatedSession,
-    isComplete,
-    finalElo,
-    nextElo,
+    isComplete: nextState.isComplete,
+    finalElo: nextState.calibratedElo,
+    nextElo: nextState.isComplete
+      ? (nextState.calibratedElo ?? nextState.currentPuzzleElo)
+      : nextState.currentPuzzleElo,
   };
 }
 
@@ -195,7 +272,7 @@ export async function syncGuestSessionToAccount(userId: string): Promise<boolean
   const session = getGuestSession();
   if (
     !session ||
-    (session.puzzleHistory.length === 0 && (!session.solvedCount || session.solvedCount === 0))
+    (session.history.length === 0 && !session.calibratedElo && (!session.solvedCount || session.solvedCount === 0))
   ) {
     clearGuestSession();
     return false;
@@ -207,9 +284,9 @@ export async function syncGuestSessionToAccount(userId: string): Promise<boolean
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         userId,
-        estimatedElo: session.calibratedElo || session.estimatedElo,
+        estimatedElo: session.calibratedElo || session.currentPuzzleElo,
         calibratedElo: session.calibratedElo,
-        isCalibrated: Boolean(session.calibratedElo || session.currentStep >= PLACEMENT_TOTAL_STEPS),
+        isCalibrated: Boolean(session.isComplete || session.calibratedElo),
         calibrationStep: session.currentStep,
         solvedCount: session.solvedCount,
         streak: session.streak,
@@ -220,7 +297,7 @@ export async function syncGuestSessionToAccount(userId: string): Promise<boolean
 
     if (res.ok) {
       trackEvent("signup_completed", {
-        initialElo: session.calibratedElo || session.estimatedElo,
+        initialElo: session.calibratedElo || session.currentPuzzleElo,
         calibratedElo: session.calibratedElo,
         source: "placement_calibration",
       });
