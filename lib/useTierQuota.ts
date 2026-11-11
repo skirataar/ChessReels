@@ -140,6 +140,9 @@ export function useTierQuota(
   const [canPlay, setCanPlay] = useState<boolean>(() => getInitialTierState(isPro, userId).canPlay);
   const [resetsInMs, setResetsInMs] = useState<number>(() => getInitialTierState(isPro, userId).resetsInMs);
   const [resetsAt, setResetsAt] = useState<number>(0);
+  const [nextChargeInMs, setNextChargeInMs] = useState<number>(0);
+  const [nextChargeAt, setNextChargeAt] = useState<number>(0);
+  const [fullChargeInMs, setFullChargeInMs] = useState<number>(0);
   const [isAdOpen, setIsAdOpen] = useState<boolean>(false);
   const [isQuotaModalOpen, setIsQuotaModalOpen] = useState<boolean>(false);
 
@@ -297,10 +300,16 @@ export function useTierQuota(
             ? new Date(data.quota.resetsAt).getTime()
             : Date.now() + resets;
 
+          const nextMs = typeof data.quota.nextChargeInMs === "number" ? data.quota.nextChargeInMs : 0;
+          const fullMs = typeof data.quota.fullChargeInMs === "number" ? data.quota.fullChargeInMs : 0;
+
           setPuzzlesRemaining(remaining);
           setCanPlay(effectiveCanPlay);
           setResetsInMs(resets);
           setResetsAt(Number.isFinite(serverResetAt) ? serverResetAt : Date.now() + resets);
+          setNextChargeInMs(nextMs);
+          setNextChargeAt(nextMs > 0 ? Date.now() + nextMs : 0);
+          setFullChargeInMs(fullMs);
 
           // Update local tier timestamps so they stay aligned with server remaining
           try {
@@ -354,11 +363,16 @@ export function useTierQuota(
         }
         if (data.quota) {
           const remaining = data.quota.puzzlesRemaining ?? puzzlesRemaining;
+          const nextMs = typeof data.quota.nextChargeInMs === "number" ? data.quota.nextChargeInMs : 0;
+          const fullMs = typeof data.quota.fullChargeInMs === "number" ? data.quota.fullChargeInMs : 0;
           setPuzzlesRemaining(remaining);
           setCanPlay(Boolean(data.quota.canPlay));
           setResetsInMs(data.quota.resetsInMs || 0);
           const resetAt = data.quota.resetsAt ? new Date(data.quota.resetsAt).getTime() : 0;
           setResetsAt(Number.isFinite(resetAt) ? resetAt : 0);
+          setNextChargeInMs(nextMs);
+          setNextChargeAt(nextMs > 0 ? Date.now() + nextMs : 0);
+          setFullChargeInMs(fullMs);
         }
       }).catch(() => {});
 
@@ -455,40 +469,50 @@ export function useTierQuota(
     await syncWithServer();
   }, [userId, syncWithServer]);
 
-  const applyBonusRecharge = useCallback((newRemaining: number, newResetAt?: string | null) => {
-    setPuzzlesRemaining(newRemaining);
-    setCanPlay(newRemaining > 0);
-    if (newResetAt) {
-      const parsed = new Date(newResetAt).getTime();
-      if (Number.isFinite(parsed)) {
-        setResetsAt(parsed);
-        setResetsInMs(Math.max(0, parsed - Date.now()));
+  const applyBonusRecharge = useCallback(
+    (newRemaining: number, newResetAt?: string | null, nextMs?: number, fullMs?: number) => {
+      setPuzzlesRemaining(newRemaining);
+      setCanPlay(newRemaining > 0);
+      if (typeof nextMs === "number") {
+        setNextChargeInMs(nextMs);
+        setNextChargeAt(nextMs > 0 ? Date.now() + nextMs : 0);
       }
-    }
-
-    // Keep local storage tier session timestamps in sync so refresh never reverts to 0
-    if (typeof window !== "undefined") {
-      try {
-        const storageKey = getTierStorageKey(userId);
-        const raw = window.localStorage.getItem(storageKey);
-        const parsed: LocalTierSession = raw ? JSON.parse(raw) : { solveTimestamps: [], puzzlesSinceLastAd: 0 };
-        const effectiveLimit = Math.max(15, config.freePuzzleLimit || 15);
-        const targetUsed = Math.max(0, effectiveLimit - newRemaining);
-        parsed.solveTimestamps = (parsed.solveTimestamps || []).slice(-targetUsed);
-        window.localStorage.setItem(storageKey, JSON.stringify(parsed));
-      } catch {}
-
-      try {
-        const rawStats = window.localStorage.getItem("chessreels_user_stats_v1");
-        if (rawStats) {
-          const parsed = JSON.parse(rawStats);
-          parsed.puzzlesRemaining = newRemaining;
-          if (newResetAt) parsed.nextQuotaRefillTime = newResetAt;
-          window.localStorage.setItem("chessreels_user_stats_v1", JSON.stringify(parsed));
+      if (typeof fullMs === "number") {
+        setFullChargeInMs(fullMs);
+      }
+      if (newResetAt) {
+        const parsed = new Date(newResetAt).getTime();
+        if (Number.isFinite(parsed)) {
+          setResetsAt(parsed);
+          setResetsInMs(Math.max(0, parsed - Date.now()));
         }
-      } catch {}
-    }
-  }, [userId, config.freePuzzleLimit]);
+      }
+
+      // Keep local storage tier session timestamps in sync so refresh never reverts to 0
+      if (typeof window !== "undefined") {
+        try {
+          const storageKey = getTierStorageKey(userId);
+          const raw = window.localStorage.getItem(storageKey);
+          const parsed: LocalTierSession = raw ? JSON.parse(raw) : { solveTimestamps: [], puzzlesSinceLastAd: 0 };
+          const effectiveLimit = Math.max(15, config.freePuzzleLimit || 15);
+          const targetUsed = Math.max(0, effectiveLimit - newRemaining);
+          parsed.solveTimestamps = (parsed.solveTimestamps || []).slice(-targetUsed);
+          window.localStorage.setItem(storageKey, JSON.stringify(parsed));
+        } catch {}
+
+        try {
+          const rawStats = window.localStorage.getItem("chessreels_user_stats_v1");
+          if (rawStats) {
+            const parsed = JSON.parse(rawStats);
+            parsed.puzzlesRemaining = newRemaining;
+            if (newResetAt) parsed.nextQuotaRefillTime = newResetAt;
+            window.localStorage.setItem("chessreels_user_stats_v1", JSON.stringify(parsed));
+          }
+        } catch {}
+      }
+    },
+    [userId, config.freePuzzleLimit]
+  );
 
   return {
     isPro,
@@ -503,6 +527,9 @@ export function useTierQuota(
     annualDiscountPercent: config.annualDiscountPercent,
     resetsInMs,
     resetsAt,
+    nextChargeInMs,
+    nextChargeAt,
+    fullChargeInMs,
     isAdOpen,
     isQuotaModalOpen,
     setIsAdOpen,

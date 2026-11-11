@@ -5,6 +5,7 @@ import {
   isActiveProAccount,
   isProPlan,
 } from "./tierTypes";
+import { calculateUserQuota } from "./quota";
 
 export type { TierConfig };
 export { DEFAULT_TIER_CONFIG, isProPlan };
@@ -30,6 +31,8 @@ export async function ensureSettingsTable(): Promise<void> {
     `);
     await prisma.$executeRawUnsafe(`
       ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "bonusQuota" INTEGER DEFAULT 0;
+      ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "puzzlesRemaining" INTEGER DEFAULT 15;
+      ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "lastRefillTimestamp" TIMESTAMP WITH TIME ZONE DEFAULT NOW();
     `);
   } catch (err) {
     console.warn("Could not ensure system_settings table or bonusQuota column:", err);
@@ -187,160 +190,35 @@ export interface UserQuotaStatus {
   subscriptionPlan: string | null;
   paymentProvider: string | null;
   currentPeriodEnd: string | null;
+  nextChargeInMs?: number;
+  fullChargeInMs?: number;
 }
 
 /**
- * Check user quota based on recent PuzzleHistory solves/attempts.
+ * Check user quota based on authoritative dynamic progressive battery recharge model.
  */
 export async function checkUserQuota(
   userId: string,
   userPlan?: string | null
 ): Promise<UserQuotaStatus> {
   const config = await getTierConfig();
+  const quota = await calculateUserQuota(userId, userPlan);
 
-  // For registered users the database is authoritative (never trust a
-  // client-supplied plan string). Guests have no DB row, so their local plan
-  // flag remains a best-effort hint.
-  let effectivePro = false;
-  let subscriptionStatus = "none";
-  let subscriptionPlan: string | null = null;
-  let paymentProvider: string | null = null;
-  let currentPeriodEnd: string | null = null;
-  let userBonusQuota = 0;
-
-  if (userId && !userId.startsWith("guest-")) {
-    try {
-      const dbUser = await withDbRetry(() =>
-        prisma.user.findUnique({
-          where: { id: userId },
-          select: {
-            plan: true,
-            bonusQuota: true,
-            isPro: true,
-            subscriptionStatus: true,
-            subscriptionPlan: true,
-            paymentProvider: true,
-            currentPeriodEnd: true,
-          },
-        })
-      );
-      effectivePro = isActiveProAccount(dbUser);
-      subscriptionStatus = dbUser?.subscriptionStatus ?? "none";
-      subscriptionPlan = dbUser?.subscriptionPlan ?? null;
-      paymentProvider = dbUser?.paymentProvider ?? null;
-      currentPeriodEnd = dbUser?.currentPeriodEnd?.toISOString() ?? null;
-      userBonusQuota = dbUser?.bonusQuota ?? 0;
-    } catch {
-      effectivePro = isProPlan(userPlan);
-    }
-  } else {
-    effectivePro = isProPlan(userPlan);
-  }
-
-  // Pro users have completely unlimited puzzles and zero ads
-  if (effectivePro) {
-    return {
-      isPro: true,
-      canPlay: true,
-      puzzlesRemaining: 999999,
-      usedInWindow: 0,
-      windowLimit: config.freePuzzleLimit,
-      windowHours: config.freeWindowHours,
-      adFrequency: config.adFrequencyPuzzles,
-      resetsInMs: 0,
-      resetsAt: null,
-      subscriptionStatus,
-      subscriptionPlan,
-      paymentProvider,
-      currentPeriodEnd,
-    };
-  }
-
-  const windowDurationMs = config.freeWindowHours * 3600 * 1000;
-  const windowStart = new Date(Date.now() - windowDurationMs);
-
-  try {
-    // Find all solves recorded in the active rolling window (only successful solves count towards quota)
-    const recentSolves = await withDbRetry(() =>
-      prisma.puzzleHistory.findMany({
-        where: {
-          userId,
-          result: "win",
-          solvedAt: { gte: windowStart },
-        },
-        orderBy: { solvedAt: "asc" },
-        select: { solvedAt: true },
-      })
-    );
-
-    const usedInWindow = recentSolves.length;
-
-    // If window expired and user has 0 solves in window, clear old bonusQuota from DB
-    if (usedInWindow === 0 && userBonusQuota > 0 && userId && !userId.startsWith("guest-")) {
-      prisma.user.update({
-        where: { id: userId },
-        data: { bonusQuota: 0 },
-      }).catch(() => {});
-      userBonusQuota = 0;
-    }
-
-    // Effective used quota deducts bonus charges earned from rewarded ads
-    const effectiveUsed = Math.max(0, usedInWindow - userBonusQuota);
-    const puzzlesRemaining = Math.min(
-      config.freePuzzleLimit,
-      Math.max(0, config.freePuzzleLimit - effectiveUsed)
-    );
-    const canPlay = puzzlesRemaining > 0;
-
-    let resetsInMs = 0;
-    let resetsAt: string | null = null;
-
-    if (effectiveUsed >= config.freePuzzleLimit && recentSolves.length > userBonusQuota) {
-      // Time until the oldest uncompensated solve exits the rolling window
-      const resetIndex = Math.min(userBonusQuota, recentSolves.length - 1);
-      const oldestSolveTime = new Date(recentSolves[resetIndex].solvedAt).getTime();
-      const resetTime = oldestSolveTime + windowDurationMs;
-      resetsInMs = Math.max(0, resetTime - Date.now());
-      resetsAt = new Date(resetTime).toISOString();
-    } else if (effectiveUsed > 0 && recentSolves.length > 0) {
-      const resetIndex = Math.min(userBonusQuota, recentSolves.length - 1);
-      const oldestSolveTime = new Date(recentSolves[resetIndex].solvedAt).getTime();
-      const resetTime = oldestSolveTime + windowDurationMs;
-      resetsInMs = Math.max(0, resetTime - Date.now());
-      resetsAt = new Date(resetTime).toISOString();
-    }
-
-    return {
-      isPro: false,
-      canPlay,
-      puzzlesRemaining,
-      usedInWindow,
-      windowLimit: config.freePuzzleLimit,
-      windowHours: config.freeWindowHours,
-      adFrequency: config.adFrequencyPuzzles,
-      resetsInMs,
-      resetsAt,
-      subscriptionStatus,
-      subscriptionPlan,
-      paymentProvider,
-      currentPeriodEnd,
-    };
-  } catch (err) {
-    console.error("Error computing user quota:", err);
-    return {
-      isPro: false,
-      canPlay: true,
-      puzzlesRemaining: config.freePuzzleLimit,
-      usedInWindow: 0,
-      windowLimit: config.freePuzzleLimit,
-      windowHours: config.freeWindowHours,
-      adFrequency: config.adFrequencyPuzzles,
-      resetsInMs: 0,
-      resetsAt: null,
-      subscriptionStatus,
-      subscriptionPlan,
-      paymentProvider,
-      currentPeriodEnd,
-    };
-  }
+  return {
+    isPro: quota.isPro,
+    canPlay: quota.canPlay,
+    puzzlesRemaining: quota.puzzlesRemaining,
+    usedInWindow: quota.usedInWindow ?? Math.max(0, config.freePuzzleLimit - quota.puzzlesRemaining),
+    windowLimit: config.freePuzzleLimit,
+    windowHours: config.freeWindowHours,
+    adFrequency: config.adFrequencyPuzzles,
+    resetsInMs: quota.resetsInMs,
+    resetsAt: quota.resetsAt,
+    subscriptionStatus: quota.subscriptionStatus ?? "none",
+    subscriptionPlan: quota.subscriptionPlan ?? null,
+    paymentProvider: quota.paymentProvider ?? null,
+    currentPeriodEnd: quota.currentPeriodEnd ?? null,
+    nextChargeInMs: quota.nextChargeInMs,
+    fullChargeInMs: quota.fullChargeInMs,
+  };
 }

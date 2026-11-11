@@ -18,11 +18,14 @@ import {
   Loader2,
   ShieldCheck,
   Crown,
+  Headphones,
+  ExternalLink,
 } from "lucide-react";
 import { BOARD_THEMES, BoardTheme, useBoardTheme } from "@/lib/boardThemes";
 import { sounds } from "@/lib/audio";
 import { UserAvatar } from "@/components/UserAvatar";
 import { isGuestUserId } from "@/lib/guestAccount";
+import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/support";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -609,7 +612,31 @@ export function SettingsModal({
           <div className="h-px bg-white/[0.06]" />
 
           {/* ======================================================== */}
-          {/* 5. ACCOUNT ACTIONS & SIGNOUT                             */}
+          {/* 5. SUPPORT & CONTACT                                     */}
+          {/* ======================================================== */}
+          <div className="p-3 rounded-2xl bg-[#141210] border border-white/[0.08] flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-white/[0.04] text-[#c29b78] border border-white/[0.06]">
+                <Headphones className="w-4 h-4" />
+              </div>
+              <div>
+                <span className="text-xs font-medium text-[#f5f2eb] block">Support &amp; Feedback</span>
+                <span className="text-[10px] text-[#78716c]">{SUPPORT_EMAIL}</span>
+              </div>
+            </div>
+            <a
+              href={SUPPORT_MAILTO}
+              className="px-3 py-1.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-zinc-200 text-xs font-medium border border-white/10 flex items-center gap-1 transition-colors"
+            >
+              <span>Email</span>
+              <ExternalLink className="w-3 h-3 text-zinc-400" />
+            </a>
+          </div>
+
+          <div className="h-px bg-white/[0.06]" />
+
+          {/* ======================================================== */}
+          {/* 6. ACCOUNT ACTIONS & SIGNOUT                             */}
           {/* ======================================================== */}
           <div className="pt-1">
             {onSignOut && (

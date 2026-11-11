@@ -33,8 +33,13 @@ import {
   X,
   Palette,
   Settings,
+  Info,
+  Headphones,
+  ExternalLink,
 } from "lucide-react";
 import { SettingsModal } from "@/components/SettingsModal";
+import { AboutModal } from "@/components/AboutModal";
+import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/support";
 import { BOARD_THEMES, useBoardTheme } from "@/lib/boardThemes";
 import {
   ResponsiveContainer,
@@ -78,6 +83,7 @@ export default function ProfileStatsPage() {
   const [isUploadingDp, setIsUploadingDp] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  const [isAboutOpen, setIsAboutOpen] = useState<boolean>(false);
   const [boardTheme, setBoardTheme] = useBoardTheme();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -500,7 +506,7 @@ export default function ProfileStatsPage() {
             <div
               data-testid="profile-freeze-indicator"
               className="flex items-center gap-1 text-xs font-medium text-sky-400/90 cursor-help"
-              title="Earned every 7-day streak • Protects up to 2 missed days"
+              title="Earned every 7-day streak - Protects up to 2 missed days"
             >
               <Snowflake className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.5} />
               <span>{streakFreezes}/2</span>
@@ -777,6 +783,46 @@ export default function ProfileStatsPage() {
           </button>
         </div>
 
+        {/* About DoomChess */}
+        <div className="flex items-center justify-between pt-2 border-t border-white/5">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-[#151413] text-[#c29b78] border border-white/5">
+              <Info className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-white">About DoomChess</div>
+              <div className="text-[11px] text-[#a3a3a3]">Brand philosophy, 6M+ puzzles &amp; engine</div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsAboutOpen(true)}
+            className="px-3 py-1.5 rounded-xl text-xs font-bold bg-[#151413] hover:bg-[#2d2a28] text-white border border-white/10 transition-colors cursor-pointer"
+          >
+            View
+          </button>
+        </div>
+
+        {/* Support & Contact */}
+        <div className="flex items-center justify-between pt-2 border-t border-white/5">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-[#151413] text-[#c29b78] border border-white/5">
+              <Headphones className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-white">Support &amp; Feedback</div>
+              <div className="text-[11px] text-[#a3a3a3]">{SUPPORT_EMAIL}</div>
+            </div>
+          </div>
+          <a
+            href={SUPPORT_MAILTO}
+            className="px-3 py-1.5 rounded-xl text-xs font-bold bg-[#151413] hover:bg-[#2d2a28] text-white border border-white/10 transition-colors flex items-center gap-1 cursor-pointer"
+          >
+            <span>Email</span>
+            <ExternalLink className="w-3 h-3 text-[#a3a3a3]" />
+          </a>
+        </div>
+
         {/* Sign Out Button */}
         {userAccount && (
           <div className="pt-2 border-t border-white/5">
@@ -798,6 +844,14 @@ export default function ProfileStatsPage() {
         onClose={() => setIsSettingsOpen(false)}
         userAccount={userAccount}
         onSignOut={handleSignOut}
+      />
+
+      {/* About Modal */}
+      <AboutModal
+        isOpen={isAboutOpen}
+        onClose={() => setIsAboutOpen(false)}
+        isPro={isPro}
+        onOpenUpgrade={handleUpgradePro}
       />
 
       {/* Auth Modal for Sign in / Account creation */}

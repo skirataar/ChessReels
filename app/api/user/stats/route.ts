@@ -25,6 +25,8 @@ export async function GET(request: NextRequest) {
         currentPeriodEnd: null,
         puzzlesRemaining: 15,
         nextQuotaRefillTime: null,
+        nextChargeInMs: 0,
+        fullChargeInMs: 0,
         windowLimit: 15,
         windowHours: 4,
         stats: {
@@ -40,6 +42,8 @@ export async function GET(request: NextRequest) {
           currentPeriodEnd: null,
           puzzlesRemaining: 15,
           nextQuotaRefillTime: null,
+          nextChargeInMs: 0,
+          fullChargeInMs: 0,
         },
       }, { headers: NO_CACHE_HEADERS });
     }
@@ -89,6 +93,8 @@ export async function GET(request: NextRequest) {
       puzzlesRemaining: quota.puzzlesRemaining,
       nextQuotaRefillTime: quota.resetsAt,
       resetsInMs: quota.resetsInMs,
+      nextChargeInMs: quota.nextChargeInMs ?? 0,
+      fullChargeInMs: quota.fullChargeInMs ?? 0,
       canPlay: quota.canPlay,
       windowLimit: quota.windowLimit,
       windowHours: quota.windowHours,
@@ -105,6 +111,8 @@ export async function GET(request: NextRequest) {
         currentPeriodEnd,
         puzzlesRemaining: quota.puzzlesRemaining,
         nextQuotaRefillTime: quota.resetsAt,
+        nextChargeInMs: quota.nextChargeInMs ?? 0,
+        fullChargeInMs: quota.fullChargeInMs ?? 0,
       },
     }, { headers: NO_CACHE_HEADERS });
   } catch (error) {

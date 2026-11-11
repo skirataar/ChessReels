@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
 import { checkUserQuota, getTierConfig, ensureSettingsTable } from "@/lib/tierConfig";
+import { addRewardedCharges } from "@/lib/quota";
 import { isGuestUserId } from "@/lib/guestAccount";
 
 export async function POST(request: NextRequest) {
@@ -26,22 +26,15 @@ export async function POST(request: NextRequest) {
         windowHours: config.freeWindowHours,
         nextQuotaRefillTime: null,
         resetsInMs: 0,
+        nextChargeInMs: 0,
+        fullChargeInMs: 0,
       });
     }
 
     await ensureSettingsTable();
 
-    // Authenticated user: authoritatively increment bonusQuota in PostgreSQL
-    await prisma.user.update({
-      where: { id: userId },
-      data: {
-        bonusQuota: {
-          increment: 3,
-        },
-      },
-    });
-
-    const quota = await checkUserQuota(userId);
+    // Authenticated user: authoritatively increment charges in PostgreSQL
+    const quota = await addRewardedCharges(userId, 3);
 
     return NextResponse.json({
       success: true,
@@ -50,6 +43,8 @@ export async function POST(request: NextRequest) {
       windowHours: quota.windowHours,
       nextQuotaRefillTime: quota.resetsAt,
       resetsInMs: quota.resetsInMs,
+      nextChargeInMs: quota.nextChargeInMs,
+      fullChargeInMs: quota.fullChargeInMs,
     });
   } catch (error) {
     console.error("[/api/user/quota/reward-ad POST] Error:", error);

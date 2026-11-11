@@ -16,6 +16,8 @@ export interface UserStatsCache {
   comboCount: number;
   puzzlesRemaining?: number;
   nextQuotaRefillTime?: string | null;
+  nextChargeInMs?: number;
+  fullChargeInMs?: number;
 }
 
 const DEFAULT_STATS: UserStatsCache = {
@@ -87,6 +89,8 @@ export function getStoredUserStats(): UserStatsCache {
               ? parsed.puzzlesRemaining
               : undefined,
           nextQuotaRefillTime: parsed.nextQuotaRefillTime || null,
+          nextChargeInMs: typeof parsed.nextChargeInMs === "number" ? parsed.nextChargeInMs : undefined,
+          fullChargeInMs: typeof parsed.fullChargeInMs === "number" ? parsed.fullChargeInMs : undefined,
         };
       }
     }

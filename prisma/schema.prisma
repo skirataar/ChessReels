@@ -35,6 +35,8 @@ model User {
   passwordHash    String?
   plan            String?      @default("free")
   bonusQuota      Int          @default(0)
+  puzzlesRemaining Int?        @default(15)
+  lastRefillTimestamp DateTime? @default(now())
   isPro               Boolean   @default(false)
   subscriptionStatus  String    @default("none")
   subscriptionPlan    String?

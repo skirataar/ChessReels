@@ -563,10 +563,14 @@ export function PlayView({
     windowHours,
     resetsInMs,
     resetsAt,
+    nextChargeInMs,
+    nextChargeAt,
+    fullChargeInMs,
     isQuotaModalOpen,
     setIsQuotaModalOpen,
     recordPuzzlePlayed,
     refreshSubscription,
+    syncWithServer,
   } = useTierQuota(userAccount?.id || guestId, userAccount?.plan);
 
   const [paywallReason, setPaywallReason] = useState<"quota" | "practice">("quota");
@@ -602,15 +606,46 @@ export function PlayView({
     } catch {}
   }, []);
 
+  // Continuous Dynamic Battery: tick every second whenever battery is not full (< 15) and user is not Pro
   useEffect(() => {
-    const shouldTick = isBatteryMenuOpen || (puzzlesRemaining <= 0 && !isPro);
+    const shouldTick = isBatteryMenuOpen || (puzzlesRemaining < windowLimit && !isPro);
     if (!shouldTick) return;
 
     const updateTime = () => setBatteryNow(Date.now());
     updateTime();
     const interval = window.setInterval(updateTime, 1000);
     return () => window.clearInterval(interval);
-  }, [isBatteryMenuOpen, puzzlesRemaining, isPro]);
+  }, [isBatteryMenuOpen, puzzlesRemaining, isPro, windowLimit]);
+
+  const REFILL_INTERVAL_MS = 16 * 60 * 1000;
+  let effectiveNextChargeAt = nextChargeAt;
+  if (!effectiveNextChargeAt && resetsAt > 0 && puzzlesRemaining < windowLimit) {
+    const chargesNeeded = Math.max(1, windowLimit - puzzlesRemaining);
+    effectiveNextChargeAt = Math.max(Date.now() + 1000, resetsAt - (chargesNeeded - 1) * REFILL_INTERVAL_MS);
+  } else if (!effectiveNextChargeAt && puzzlesRemaining < windowLimit && batteryNow > 0) {
+    effectiveNextChargeAt = batteryNow + REFILL_INTERVAL_MS;
+  }
+
+  // Live progressive refill tick check
+  useEffect(() => {
+    if (isPro || puzzlesRemaining >= windowLimit || !effectiveNextChargeAt || batteryNow <= 0) return;
+    if (batteryNow >= effectiveNextChargeAt) {
+      applyBonusRecharge(Math.min(windowLimit, puzzlesRemaining + 1));
+      syncWithServer?.();
+    }
+  }, [batteryNow, effectiveNextChargeAt, isPro, puzzlesRemaining, windowLimit, applyBonusRecharge, syncWithServer]);
+
+  const msToNextCharge =
+    batteryNow > 0 && effectiveNextChargeAt > batteryNow
+      ? Math.max(0, effectiveNextChargeAt - batteryNow)
+      : puzzlesRemaining < windowLimit ? REFILL_INTERVAL_MS : 0;
+
+  const nextMinutes = Math.floor(msToNextCharge / 60000);
+  const nextSeconds = Math.floor((msToNextCharge % 60000) / 1000);
+  const formattedNextCharge =
+    nextMinutes > 0
+      ? `${nextMinutes}m ${nextSeconds}s`
+      : `${nextSeconds}s`;
 
   const resetAt = resetsAt || (batteryNow > 0 ? batteryNow + resetsInMs : 0);
   const rechargeCountdown =
@@ -811,7 +846,12 @@ export function PlayView({
           window.localStorage.setItem("chessreels_user_stats_v1", JSON.stringify(dbStats));
         }
         if (data?.puzzlesRemaining !== undefined) {
-          applyBonusRecharge(data.puzzlesRemaining, data.nextQuotaRefillTime);
+          applyBonusRecharge(
+            data.puzzlesRemaining,
+            data.nextQuotaRefillTime,
+            data.nextChargeInMs,
+            data.fullChargeInMs
+          );
         }
       })
       .catch(() => {});
@@ -2040,11 +2080,19 @@ export function PlayView({
                                   {puzzlesRemaining} / {windowLimit} Energy
                                 </div>
                               )}
-                              <div className="mt-1 text-[11px] font-mono text-zinc-400">
+                              <div className="mt-1 text-[11px] font-mono text-zinc-400 space-y-1">
                                 {isFull ? (
-                                  `Full charge (${windowLimit}/${windowLimit})`
+                                  <div>Full charge ({windowLimit}/{windowLimit})</div>
                                 ) : (
-                                  `Full charge in ${recharge.hours}h ${recharge.minutes}m ${recharge.seconds}s`
+                                  <>
+                                    <div className="text-[#c29b78] font-semibold flex items-center gap-1.5">
+                                      <Zap className="w-3 h-3 fill-[#c29b78]/30 shrink-0" />
+                                      <span>+1 in {formattedNextCharge}</span>
+                                    </div>
+                                    <div className="text-zinc-400 text-[10px]">
+                                      Full charge in {recharge.hours}h {recharge.minutes}m {recharge.seconds}s
+                                    </div>
+                                  </>
                                 )}
                               </div>
                             </div>
@@ -2267,9 +2315,9 @@ export function PlayView({
               <span className="text-[11px] font-semibold text-zinc-100 whitespace-nowrap">
                 0/15 Energy
               </span>
-              <span className="text-[11px] font-mono text-zinc-500 tracking-tight truncate flex items-center gap-1">
+              <span className="text-[11px] font-mono text-zinc-400 tracking-tight truncate flex items-center gap-1">
                 <span className="w-1 h-1 rounded-full bg-zinc-500 shrink-0 inline-block" aria-hidden="true" />
-                <span>{formattedCountdown}</span>
+                <span className="text-[#c29b78] font-semibold">+1 in {formattedNextCharge}</span>
               </span>
             </div>
 
@@ -2342,7 +2390,7 @@ export function PlayView({
           setAuthModalTab("register");
           setIsAuthModalOpen(true);
         }}
-        onOpenLanding={() => router.replace("/")}
+        onOpenLanding={() => router.push("/about")}
         onSignOut={handleSignOut}
         onResetElo={handleResetElo}
         onOpenUpgrade={() => {

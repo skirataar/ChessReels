@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkUserQuota, getTierConfig } from "@/lib/tierConfig";
+import { consumeUserCharge } from "@/lib/quota";
 import prisma from "@/lib/prisma";
 import { isGuestUserId } from "@/lib/guestAccount";
 
@@ -50,6 +51,7 @@ export async function POST(request: NextRequest) {
         update: { result: "win", solvedAt: new Date() },
         create: { userId, puzzleId: body.puzzleId, result: "win", solvedAt: new Date() },
       });
+      await consumeUserCharge(userId);
     }
 
     const [quota, config] = await Promise.all([

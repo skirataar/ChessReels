@@ -30,6 +30,8 @@ import {
   ArrowLeft,
   ChevronRight,
   Snowflake,
+  Info,
+  Headphones,
 } from "lucide-react";
 import { sounds } from "@/lib/audio";
 import { getTier } from "./LeaderboardModal";
@@ -38,6 +40,8 @@ import { CURATED_AVATARS, compressImageFile, persistAvatar } from "@/lib/avatarU
 import { PuzzleCard, PuzzleData, PuzzleStatus } from "@/components/PuzzleCard";
 import { isGuestUserId } from "@/lib/guestAccount";
 import { formatTitle } from "@/lib/formatTitle";
+import { AboutModal } from "./AboutModal";
+import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/support";
 
 export interface ProfileModalProps {
   isOpen: boolean;
@@ -94,6 +98,7 @@ export function ProfileModal({
   const [peakElo, setPeakElo] = useState<number>(currentElo);
   const [bestStreak, setBestStreak] = useState<number>(streak);
   const [isUpgraded, setIsUpgraded] = useState<boolean>(false);
+  const [isAboutOpen, setIsAboutOpen] = useState<boolean>(false);
   const [activeAvatar, setActiveAvatar] = useState<string | undefined>(userAccount?.avatar);
   const [isDpPickerOpen, setIsDpPickerOpen] = useState<boolean>(false);
   const [isUploadingDp, setIsUploadingDp] = useState<boolean>(false);
@@ -467,7 +472,7 @@ export function ProfileModal({
       >
         {activeSavedPuzzle ? (
           <div className="flex flex-col h-full w-full overflow-y-auto">
-            {/* Top-left "← Back to Saved" header bar */}
+            {/* Top-left "Back to Saved" header bar */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-[#22201e] shrink-0 sticky top-0 z-30">
               <button
                 type="button"
@@ -864,7 +869,7 @@ export function ProfileModal({
                       <div
                         data-testid="profile-freeze-indicator"
                         className="flex items-center gap-1 text-xs font-medium text-sky-400/90 cursor-help"
-                        title="Earned every 7-day streak • Protects up to 2 missed days"
+                        title="Earned every 7-day streak - Protects up to 2 missed days"
                       >
                         <Snowflake className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.5} />
                         <span>{streakFreezes}/2</span>
@@ -1156,25 +1161,70 @@ export function ProfileModal({
                 </button>
               </div>
 
-              {onOpenLanding && (
-                <button
-                  onClick={() => {
-                    onClose();
-                    onOpenLanding();
-                  }}
-                  className="w-full flex items-center justify-between p-3 rounded-xl bg-[#22201e] border border-white/10 hover:border-[#c29b78]/40 transition-all text-left cursor-pointer group"
-                >
+              {/* Subscription & Plan Management */}
+              <button
+                type="button"
+                onClick={handleUpgradeSubscription}
+                className="w-full flex items-center justify-between p-3 rounded-xl bg-[#22201e] border border-white/10 hover:border-[#c29b78]/40 transition-all text-left cursor-pointer group"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-lg bg-[#c29b78]/15 text-[#c29b78]">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
                   <div>
                     <div className="text-xs font-semibold text-white group-hover:text-[#c29b78] transition-colors">
-                      About DoomChess &amp; Subscriptions
+                      {isUpgraded ? "Manage Pro Subscription" : "Subscription & Pricing"}
                     </div>
                     <div className="text-[10px] text-[#a3a3a3]">
-                      Compare Free vs Premium plans
+                      {isUpgraded ? "Active membership details & perks" : "Compare Free vs Premium plans"}
                     </div>
                   </div>
-                  <ChevronRight className="w-4 h-4 text-[#a3a3a3] group-hover:text-[#c29b78] transition-colors" />
-                </button>
-              )}
+                </div>
+                <ChevronRight className="w-4 h-4 text-[#a3a3a3] group-hover:text-[#c29b78] transition-colors" />
+              </button>
+
+              {/* About DoomChess */}
+              <button
+                type="button"
+                onClick={() => setIsAboutOpen(true)}
+                className="w-full flex items-center justify-between p-3 rounded-xl bg-[#22201e] border border-white/10 hover:border-[#c29b78]/40 transition-all text-left cursor-pointer group"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-lg bg-white/5 text-zinc-300">
+                    <Info className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold text-white group-hover:text-[#c29b78] transition-colors">
+                      About DoomChess
+                    </div>
+                    <div className="text-[10px] text-[#a3a3a3]">
+                      Philosophy, 6M+ puzzles &amp; engine info
+                    </div>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-[#a3a3a3] group-hover:text-[#c29b78] transition-colors" />
+              </button>
+
+              {/* Support & Contact */}
+              <a
+                href={SUPPORT_MAILTO}
+                className="w-full flex items-center justify-between p-3 rounded-xl bg-[#22201e] border border-white/10 hover:border-[#c29b78]/40 transition-all text-left cursor-pointer group"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-lg bg-white/5 text-zinc-300">
+                    <Headphones className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold text-white group-hover:text-[#c29b78] transition-colors">
+                      Support &amp; Feedback
+                    </div>
+                    <div className="text-[10px] text-[#a3a3a3]">
+                      {SUPPORT_EMAIL}
+                    </div>
+                  </div>
+                </div>
+                <ExternalLink className="w-4 h-4 text-[#a3a3a3] group-hover:text-[#c29b78] transition-colors" />
+              </a>
             </div>
 
             {/* Reset Rating Option */}
@@ -1224,6 +1274,13 @@ export function ProfileModal({
           </>
         )}
       </div>
+
+      <AboutModal
+        isOpen={isAboutOpen}
+        onClose={() => setIsAboutOpen(false)}
+        isPro={isUpgraded}
+        onOpenUpgrade={handleUpgradeSubscription}
+      />
     </div>
   );
 }
