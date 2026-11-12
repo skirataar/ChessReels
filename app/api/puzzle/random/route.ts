@@ -20,15 +20,20 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const eloParam = searchParams.get("elo");
+    const targetEloParam = searchParams.get("targetElo");
+    const eloParam = targetEloParam ?? searchParams.get("elo");
     const minRatingParam = searchParams.get("minRating");
     const maxRatingParam = searchParams.get("maxRating");
     const themesParam = searchParams.get("themes");
+    const excludeIdsParam = searchParams.get("excludeIds");
 
     const elo = eloParam !== null ? Number.parseInt(eloParam, 10) : 800;
 
     let minElo: number;
     let maxElo: number;
+
+    const isTargetElo = targetEloParam !== null && !Number.isNaN(Number(targetEloParam));
+    const targetElo = isTargetElo ? Number.parseInt(targetEloParam!, 10) : elo;
 
     if (minRatingParam !== null && maxRatingParam !== null) {
       minElo = Math.max(0, Number.parseInt(minRatingParam, 10) || 400);
@@ -39,6 +44,10 @@ export async function GET(request: NextRequest) {
     } else if (maxRatingParam !== null) {
       minElo = 0;
       maxElo = Math.max(0, Number.parseInt(maxRatingParam, 10) || 2800);
+    } else if (isTargetElo) {
+      // Tight ELO window: ±75 ELO
+      minElo = Math.max(0, targetElo - 75);
+      maxElo = targetElo + 75;
     } else {
       if (Number.isNaN(elo)) {
         return NextResponse.json(
@@ -82,84 +91,120 @@ export async function GET(request: NextRequest) {
         ? Prisma.sql`AND (${Prisma.join(themeConditionsFallback, " OR ")})`
         : Prisma.empty;
 
-    let puzzles: Puzzle[] = [];
+    // Parse excludeIds to avoid re-serving history or completed placement puzzles
+    const rawExclude = excludeIdsParam
+      ? excludeIdsParam
+          .split(/[,\s]+/)
+          .map((id) => id.trim())
+          .filter(Boolean)
+      : [];
 
-    if (userId) {
-      // 1. Fast path: Bernoulli sampling on 6.15M dataset (under 150ms)
-      try {
-        puzzles = await prisma.$queryRaw<Puzzle[]>`
-          SELECT p.*
-          FROM "Puzzle" AS p TABLESAMPLE BERNOULLI (0.5)
-          WHERE p."rating" >= ${minElo} AND p."rating" <= ${maxElo}
-            ${themeClause}
-            AND NOT EXISTS (
-              SELECT 1 FROM "PuzzleHistory" ph
-              WHERE ph."userId" = ${userId} AND ph."puzzleId" = p."id"
-            )
-          LIMIT ${count};
-        `;
-      } catch (err) {
-        console.error("Fast path Bernoulli query error:", err);
-      }
+    const excludeClause =
+      rawExclude.length > 0
+        ? Prisma.sql`AND p."id" NOT IN (${Prisma.join(rawExclude)})`
+        : Prisma.empty;
 
-      // Fallback with fast random offset if sample yielded 0 rows
-      if (!puzzles || puzzles.length === 0) {
+    const excludeClauseFallback =
+      rawExclude.length > 0
+        ? Prisma.sql`AND "id" NOT IN (${Prisma.join(rawExclude)})`
+        : Prisma.empty;
+
+    async function queryPuzzles(min: number, max: number): Promise<Puzzle[]> {
+      let result: Puzzle[] = [];
+
+      if (userId) {
+        // 1. Fast path: Bernoulli sampling on 6.15M dataset (under 150ms)
         try {
-          const randOffset = Math.floor(Math.random() * 200);
-          puzzles = await prisma.$queryRaw<Puzzle[]>`
+          result = await prisma.$queryRaw<Puzzle[]>`
             SELECT p.*
-            FROM "Puzzle" AS p
-            WHERE p."rating" >= ${minElo} AND p."rating" <= ${maxElo}
+            FROM "Puzzle" AS p TABLESAMPLE BERNOULLI (0.5)
+            WHERE p."rating" >= ${min} AND p."rating" <= ${max}
               ${themeClause}
+              ${excludeClause}
               AND NOT EXISTS (
                 SELECT 1 FROM "PuzzleHistory" ph
                 WHERE ph."userId" = ${userId} AND ph."puzzleId" = p."id"
               )
+            LIMIT ${count};
+          `;
+        } catch (err) {
+          console.error("Fast path Bernoulli query error:", err);
+        }
+
+        // Fallback with fast random offset if sample yielded 0 rows
+        if (!result || result.length === 0) {
+          try {
+            const randOffset = Math.floor(Math.random() * 200);
+            result = await prisma.$queryRaw<Puzzle[]>`
+              SELECT p.*
+              FROM "Puzzle" AS p
+              WHERE p."rating" >= ${min} AND p."rating" <= ${max}
+                ${themeClause}
+                ${excludeClause}
+                AND NOT EXISTS (
+                  SELECT 1 FROM "PuzzleHistory" ph
+                  WHERE ph."userId" = ${userId} AND ph."puzzleId" = p."id"
+                )
+              OFFSET ${randOffset}
+              LIMIT ${count};
+            `;
+          } catch {}
+        }
+      }
+
+      // 2. Fast path for guest / non-personalized queries
+      if (!result || result.length === 0) {
+        try {
+          result = await prisma.$queryRaw<Puzzle[]>`
+            SELECT *
+            FROM "Puzzle" TABLESAMPLE BERNOULLI (0.5)
+            WHERE "rating" >= ${min} AND "rating" <= ${max}
+              ${themeClauseFallback}
+              ${excludeClauseFallback}
+            LIMIT ${count};
+          `;
+        } catch {}
+      }
+
+      // 3. Fallback if sample was too sparse
+      if (!result || result.length === 0) {
+        const randOffset = Math.floor(Math.random() * 200);
+        try {
+          result = await prisma.$queryRaw<Puzzle[]>`
+            SELECT *
+            FROM "Puzzle"
+            WHERE "rating" >= ${min} AND "rating" <= ${max}
+              ${themeClauseFallback}
+              ${excludeClauseFallback}
             OFFSET ${randOffset}
             LIMIT ${count};
           `;
         } catch {}
       }
+
+      // 4. Relax theme filter if still empty
+      if ((!result || result.length === 0) && rawThemes.length > 0) {
+        try {
+          result = await prisma.$queryRaw<Puzzle[]>`
+            SELECT *
+            FROM "Puzzle" TABLESAMPLE BERNOULLI (0.5)
+            WHERE "rating" >= ${min} AND "rating" <= ${max}
+              ${excludeClauseFallback}
+            LIMIT ${count};
+          `;
+        } catch {}
+      }
+
+      return result || [];
     }
 
-    // 2. Fast path for guest / non-personalized queries
-    if (!puzzles || puzzles.length === 0) {
-      try {
-        puzzles = await prisma.$queryRaw<Puzzle[]>`
-          SELECT *
-          FROM "Puzzle" TABLESAMPLE BERNOULLI (0.5)
-          WHERE "rating" >= ${minElo} AND "rating" <= ${maxElo}
-            ${themeClauseFallback}
-          LIMIT ${count};
-        `;
-      } catch {}
-    }
+    let puzzles: Puzzle[] = await queryPuzzles(minElo, maxElo);
 
-    // 3. Fallback if sample was too sparse
-    if (!puzzles || puzzles.length === 0) {
-      const randOffset = Math.floor(Math.random() * 200);
-      try {
-        puzzles = await prisma.$queryRaw<Puzzle[]>`
-          SELECT *
-          FROM "Puzzle"
-          WHERE "rating" >= ${minElo} AND "rating" <= ${maxElo}
-            ${themeClauseFallback}
-          OFFSET ${randOffset}
-          LIMIT ${count};
-        `;
-      } catch {}
-    }
-
-    // 4. Relax theme filter if still empty
-    if ((!puzzles || puzzles.length === 0) && rawThemes.length > 0) {
-      try {
-        puzzles = await prisma.$queryRaw<Puzzle[]>`
-          SELECT *
-          FROM "Puzzle" TABLESAMPLE BERNOULLI (0.5)
-          WHERE "rating" >= ${minElo} AND "rating" <= ${maxElo}
-          LIMIT ${count};
-        `;
-      } catch {}
+    // If targetElo was passed and tight ±75 returned 0 puzzles, widen search band to ±150
+    if (isTargetElo && (!puzzles || puzzles.length === 0)) {
+      minElo = Math.max(0, targetElo - 150);
+      maxElo = targetElo + 150;
+      puzzles = await queryPuzzles(minElo, maxElo);
     }
 
     if (!puzzles || puzzles.length === 0) {

@@ -502,6 +502,8 @@ export function PuzzleCard({
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [hintArrow, setHintArrow] = useState<{ from: string; to: string } | null>(null);
   const [hintUsed, setHintUsed] = useState<boolean>(false);
+  const [hintsUsedThisPuzzle, setHintsUsedThisPuzzle] = useState<number>(0);
+  const MAX_PLACEMENT_HINTS_PER_PUZZLE = 1;
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const isHintGlowing =
     retryCount >= 3 && !hintUsed && (status === "playing" || status === "failed");
@@ -871,6 +873,7 @@ export function PuzzleCard({
     setHighlightStyles({});
     setHintArrow(null);
     setHintUsed(false);
+    setHintsUsedThisPuzzle(0);
     hasPenalizedRef.current = false;
     hasWonRef.current = false;
 
@@ -2107,6 +2110,9 @@ export function PuzzleCard({
   // authored solution -> chess.js verbose/UCI match -> Stockfish bestmove.
   const handleTriggerHint = async () => {
     if (status !== "playing" && status !== "failed") return;
+    if (isCalibration && hintsUsedThisPuzzle >= MAX_PLACEMENT_HINTS_PER_PUZZLE) {
+      return;
+    }
     haptics.tap();
 
     const positionFen = gameRef.current?.fen() || puzzle?.fen || "";
@@ -2148,6 +2154,7 @@ export function PuzzleCard({
 
     setHintArrow({ from: fromSquare, to: toSquare });
     setHintUsed(true);
+    setHintsUsedThisPuzzle((prev) => prev + 1);
     if (puzzle) {
       puzzle.hintUsed = true;
     }
@@ -3106,31 +3113,49 @@ export function PuzzleCard({
             {/* Hint Button */}
             <button
               onClick={handleTriggerHint}
-              disabled={status !== "playing" && status !== "failed"}
+              disabled={
+                (status !== "playing" && status !== "failed") ||
+                (isCalibration && hintsUsedThisPuzzle >= MAX_PLACEMENT_HINTS_PER_PUZZLE)
+              }
               aria-label="Hint"
               data-testid="hint-btn"
-              title={isHintGlowing ? "Need help? Click for a hint!" : "Show tactical move arrow"}
-              className={`p-2 -m-2 cursor-pointer active:scale-90 transition-all relative ${
-                isHintGlowing
-                  ? "text-[#c29b78] drop-shadow-[0_0_10px_rgba(194,155,120,0.95)] animate-pulse"
+              title={
+                isCalibration && hintsUsedThisPuzzle >= MAX_PLACEMENT_HINTS_PER_PUZZLE
+                  ? "Placement mode: Max 1 hint per puzzle"
+                  : isHintGlowing
+                  ? "Need help? Click for a hint!"
+                  : "Show tactical move arrow"
+              }
+              className={`p-2 -m-2 transition-all relative ${
+                isCalibration && hintsUsedThisPuzzle >= MAX_PLACEMENT_HINTS_PER_PUZZLE
+                  ? "opacity-40 cursor-not-allowed text-stone-600"
+                  : isHintGlowing
+                  ? "text-[#c29b78] drop-shadow-[0_0_10px_rgba(194,155,120,0.95)] animate-pulse cursor-pointer active:scale-90"
                   : hintUsed
-                  ? "text-stone-600"
-                  : "text-[#78716c] hover:text-[#f5f2eb]"
+                  ? "text-stone-600 cursor-pointer active:scale-90"
+                  : "text-[#78716c] hover:text-[#f5f2eb] cursor-pointer active:scale-90"
               }`}
             >
-              {isHintGlowing && (
+              {isHintGlowing && !(isCalibration && hintsUsedThisPuzzle >= MAX_PLACEMENT_HINTS_PER_PUZZLE) && (
                 <span className="absolute -inset-1 rounded-full bg-[#c29b78]/30 animate-ping pointer-events-none" />
               )}
               <Lightbulb
                 strokeWidth={1.75}
                 className={`w-[22px] h-[22px] transition-colors ${
-                  isHintGlowing
+                  isCalibration && hintsUsedThisPuzzle >= MAX_PLACEMENT_HINTS_PER_PUZZLE
+                    ? "text-stone-600 opacity-60"
+                    : isHintGlowing
                     ? "fill-[#c29b78] text-[#c29b78]"
                     : hintUsed
                     ? "text-stone-600"
                     : "fill-[#c29b78]/20"
                 }`}
               />
+              {isCalibration && (
+                <span className="absolute -top-1 -right-1 text-[8px] font-mono font-bold bg-[#151413] text-[#c29b78] border border-[#c29b78]/40 px-1 py-0.2 rounded-full pointer-events-none shadow-sm">
+                  {hintsUsedThisPuzzle >= 1 ? "1/1" : "0/1"}
+                </span>
+              )}
             </button>
 
             {/* Previous Move Button (<) */}

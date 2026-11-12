@@ -502,6 +502,10 @@ export function PlayView({
   // Initialized to empty array so no hardcoded placeholder puzzles render before real API puzzles arrive.
   const [queue, setQueue] = useState<PuzzleData[]>([]);
   const [currentIndex, setCurrentIndex] = useState<number>(0);
+  const currentIndexRef = useRef<number>(0);
+  useEffect(() => {
+    currentIndexRef.current = currentIndex;
+  }, [currentIndex]);
   const [slideDirection, setSlideDirection] = useState<"next" | "prev">("next");
 
   // Active puzzle derived from queue and currentIndex
@@ -1423,6 +1427,57 @@ export function PlayView({
     const elo = currentEloRef.current;
     const targetUserId = userAccount?.id;
 
+    // In placement calibration: strictly fetch/serve puzzles matching dynamic targetElo
+    if (isCalibrating) {
+      const currentPlacement = loadPlacementStateFromStorage();
+      if (currentPlacement.isComplete || currentPlacement.history.length >= TOTAL_PLACEMENT_STEPS) {
+        if (!userAccount) {
+          setIsConversionModalOpen(true);
+        } else {
+          setIsCalibratedModalOpen(true);
+        }
+        return;
+      }
+
+      const targetElo = currentPlacement.currentPuzzleElo || currentEloRef.current || 1000;
+      const historyIds = currentPlacement.history.map((h) => h.puzzleId);
+
+      const nextInQueue = queue[currentIndex + 1];
+      const isNextMatched =
+        nextInQueue &&
+        !historyIds.includes(nextInQueue.id) &&
+        Math.abs(nextInQueue.rating - targetElo) <= 100;
+
+      if (nextInQueue && isNextMatched) {
+        setSlideDirection("next");
+        setCurrentIndex(currentIndex + 1);
+        setPuzzleStatus("playing");
+        return;
+      }
+
+      setPuzzleStatus("loading");
+      try {
+        const userParam = targetUserId ? `&userId=${encodeURIComponent(targetUserId)}` : "";
+        const excludeParam = historyIds.length > 0 ? `&excludeIds=${historyIds.join(",")}` : "";
+        const res = await fetch(`/api/puzzle/random?targetElo=${targetElo}&count=1${userParam}${excludeParam}`);
+        if (res.ok) {
+          const data = await res.json();
+          const p = Array.isArray(data) ? data[0] : data;
+          if (p) {
+            const freshPuzzle = ensurePuzzleInstanceId(p);
+            setQueue((prev) => [...prev.slice(0, currentIndex + 1), freshPuzzle]);
+            setSlideDirection("next");
+            setCurrentIndex(currentIndex + 1);
+            setPuzzleStatus("playing");
+            return;
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch target-elo placement puzzle:", err);
+      }
+      return;
+    }
+
     // Buffer management: prefetch & pull ahead when within 3 puzzles of queue end
     if (currentIndex + 1 >= queue.length - 3) {
       prefetchPuzzles(elo, 5, targetUserId).catch(() => {});
@@ -1441,41 +1496,6 @@ export function PlayView({
         setPuzzleStatus("playing");
       }
       return;
-    }
-
-    // In calibration mode, fetch fresh puzzle matching the adaptive rating
-    if (isCalibrating) {
-      const currentPlacement = loadPlacementStateFromStorage();
-      if (currentPlacement.isComplete || currentPlacement.history.length >= TOTAL_PLACEMENT_STEPS) {
-        if (!userAccount) {
-          setIsConversionModalOpen(true);
-        } else {
-          setIsCalibratedModalOpen(true);
-        }
-        return;
-      }
-      setPuzzleStatus("loading");
-      try {
-        const userParam = targetUserId ? `&userId=${encodeURIComponent(targetUserId)}` : "";
-        const res = await fetch(`/api/puzzle/random?elo=${elo}&count=3${userParam}`);
-        if (res.ok) {
-          const data = await res.json();
-          const arr: PuzzleData[] = Array.isArray(data) ? data : [data];
-          const validBatch = arr
-            .filter((p) => p && p.id !== currentId && !currentSolved.has(p.id) && !ratedPuzzleIdsRef.current.has(p.id))
-            .map(ensurePuzzleInstanceId);
-
-          if (validBatch.length > 0) {
-            const chosen = validBatch[0];
-            setQueue((prev) => [...prev.slice(0, currentIndex + 1), chosen]);
-            setCurrentIndex(currentIndex + 1);
-            setPuzzleStatus("playing");
-            return;
-          }
-        }
-      } catch (e) {
-        console.error("Failed to load adaptive placement puzzle:", e);
-      }
     }
 
     // 2. No upcoming puzzle in active queue; pop from local cache or fetch fresh
@@ -1578,6 +1598,31 @@ export function PlayView({
         initialFetchDoneRef.current = true;
         const elo = userAccount?.elo || currentEloRef.current || 1000;
         const targetUserId = userAccount?.id || guestId || "";
+
+        // Dynamic target-elo placement fetch (single puzzle, no buffering 5 random puzzles)
+        if (isCalibrating) {
+          const targetElo = currentPlacement.currentPuzzleElo || currentEloRef.current || 1000;
+          const historyIds = currentPlacement.history.map((h) => h.puzzleId);
+          const excludeParam = historyIds.length > 0 ? `&excludeIds=${historyIds.join(",")}` : "";
+          setPuzzleStatus("loading");
+          const userParam = targetUserId ? `&userId=${encodeURIComponent(targetUserId)}` : "";
+          fetch(`/api/puzzle/random?targetElo=${targetElo}&count=1${userParam}${excludeParam}`)
+            .then((res) => (res.ok ? res.json() : null))
+            .then((data) => {
+              if (data) {
+                const p = Array.isArray(data) ? data[0] : data;
+                if (p) {
+                  setQueue([ensurePuzzleInstanceId(p)]);
+                  setCurrentIndex(0);
+                  setPuzzleStatus("playing");
+                  return;
+                }
+              }
+              setPuzzleStatus("loading");
+            })
+            .catch(() => setPuzzleStatus("loading"));
+          return;
+        }
 
         // Check local prefetch buffer first - verify it matches user's elo
         const cached = popNextPuzzle(targetUserId);
@@ -1745,6 +1790,24 @@ export function PlayView({
             step: nextPlacementState.currentStep,
             targetElo: nextPlacementState.currentPuzzleElo,
           });
+
+          // Eagerly prefetch the upcoming nextTargetElo puzzle during the 1.2s feedback timer so it is queued for goToNextPuzzle
+          const nextTargetElo = nextPlacementState.currentPuzzleElo;
+          const historyIds = nextPlacementState.history.map((h) => h.puzzleId);
+          const userParam = userAccount?.id ? `&userId=${encodeURIComponent(userAccount.id)}` : "";
+          const excludeParam = historyIds.length > 0 ? `&excludeIds=${historyIds.join(",")}` : "";
+          const activeIdx = currentIndexRef.current;
+          fetch(`/api/puzzle/random?targetElo=${nextTargetElo}&count=1${userParam}${excludeParam}`)
+            .then((r) => (r.ok ? r.json() : null))
+            .then((data) => {
+              if (data) {
+                const p = Array.isArray(data) ? data[0] : data;
+                if (p) {
+                  setQueue((prev) => [...prev.slice(0, activeIdx + 1), ensurePuzzleInstanceId(p)]);
+                }
+              }
+            })
+            .catch(() => {});
         }
 
         // Return early! Bypasses all standard calculateEloDelta and updateUserElo API routes!
