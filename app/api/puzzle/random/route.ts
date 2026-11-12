@@ -1,7 +1,27 @@
-import { NextRequest, NextResponse } from "next/server";
+import { SeverityNumber } from "@opentelemetry/api-logs";
+import { after, NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { Prisma } from "@/lib/generated/prisma/client";
 import type { Puzzle } from "@/lib/generated/prisma/client";
+import { posthogLogProvider } from "@/instrumentation";
+
+const posthogPuzzleLogger = posthogLogProvider?.getLogger("chess-reel.puzzle-api");
+
+function emitPuzzleLog(
+  body: string,
+  attributes: Record<string, boolean | number | string>,
+  severityNumber = SeverityNumber.INFO,
+) {
+  posthogPuzzleLogger?.emit({
+    body,
+    severityNumber,
+    attributes,
+  });
+
+  after(() => {
+    void posthogLogProvider?.forceFlush().catch(() => {});
+  });
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -13,6 +33,9 @@ export async function GET(request: NextRequest) {
           where: { id: idParam },
         });
         if (singlePuzzle) {
+          emitPuzzleLog("Puzzle request fulfilled", {
+            "puzzle.request_type": "by_id",
+          });
           return NextResponse.json(singlePuzzle);
         }
       } catch (err) {
@@ -208,6 +231,13 @@ export async function GET(request: NextRequest) {
     }
 
     if (!puzzles || puzzles.length === 0) {
+      emitPuzzleLog("Puzzle request unavailable", {
+        "puzzle.request_type": "random",
+        "puzzle.personalized": Boolean(userId),
+        "puzzle.requested_count": count,
+        "puzzle.rating_min": minElo,
+        "puzzle.rating_max": maxElo,
+      }, SeverityNumber.WARN);
       return NextResponse.json(
         {
           message: `No puzzle found within Elo range [${minElo}, ${maxElo}].`,
@@ -216,6 +246,13 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    emitPuzzleLog("Puzzle request fulfilled", {
+      "puzzle.request_type": "random",
+      "puzzle.personalized": Boolean(userId),
+      "puzzle.requested_count": count,
+      "puzzle.returned_count": puzzles.length,
+      "puzzle.target_range": isTargetElo,
+    });
     return NextResponse.json(count > 1 ? puzzles : puzzles[0]);
   } catch (error: unknown) {
     if (
@@ -228,6 +265,10 @@ export async function GET(request: NextRequest) {
     }
 
     console.error("Failed to query random puzzle:", error);
+    emitPuzzleLog("Puzzle request failed", {
+      "puzzle.request_type": "random",
+      "http.status_code": 500,
+    }, SeverityNumber.ERROR);
     return NextResponse.json(
       { error: "Internal server error fetching puzzle" },
       { status: 500 }

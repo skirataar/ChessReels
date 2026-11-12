@@ -1,42 +1,61 @@
 "use client";
 
-import React, { useEffect } from "react";
+import { useEffect, useRef } from "react";
+import posthog from "posthog-js";
+import { isGuestAccount } from "@/lib/guestAccount";
 
-export function PostHogProvider({ children }: { children: React.ReactNode }) {
-  const posthogKey = process.env.NEXT_PUBLIC_POSTHOG_KEY;
+type StoredAccount = {
+  id: string;
+  email?: string;
+  displayName?: string;
+  username?: string;
+  plan?: string;
+};
+
+function readStoredAccount(): StoredAccount | null {
+  try {
+    const rawAccount = window.localStorage.getItem("chess_reel_account");
+    if (!rawAccount) return null;
+
+    const account = JSON.parse(rawAccount) as StoredAccount;
+    return typeof account.id === "string" && account.id && !isGuestAccount(account)
+      ? account
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export function PostHogIdentity() {
+  const identifiedUserId = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!posthogKey || !posthogKey.trim() || typeof window === "undefined") {
-      return;
-    }
+    const identifyStoredAccount = () => {
+      const account = readStoredAccount();
+      if (!account || identifiedUserId.current === account.id) return;
 
-    try {
-      import("posthog-js")
-        .then(({ default: posthog }) => {
-          if (!posthog.__loaded) {
-            const host =
-              process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://us.i.posthog.com";
-            posthog.init(posthogKey, {
-              api_host: host,
-              session_recording: {
-                recordCrossOriginIframes: true,
-              },
-              capture_pageview: true,
-              autocapture: true,
-            });
-          }
-        })
-        .catch(() => {
-          // Silently swallow dynamic import failures (e.g. adblockers)
+      try {
+        const previousUserId = posthog.get_property("$user_id");
+        if (previousUserId && previousUserId !== account.id) {
+          posthog.reset();
+        }
+
+        posthog.identify(account.id, {
+          ...(account.email ? { email: account.email } : {}),
+          ...(account.displayName ? { name: account.displayName } : {}),
+          ...(account.username ? { username: account.username } : {}),
+          ...(account.plan ? { plan: account.plan } : {}),
         });
-    } catch {
-      // Silently swallow analytics init errors
-    }
-  }, [posthogKey]);
+        identifiedUserId.current = account.id;
+      } catch {
+        // Analytics must not interrupt account restoration.
+      }
+    };
 
-  if (!posthogKey || !posthogKey.trim()) {
-    return <>{children}</>;
-  }
+    identifyStoredAccount();
+    window.addEventListener("account-updated", identifyStoredAccount);
+    return () => window.removeEventListener("account-updated", identifyStoredAccount);
+  }, []);
 
-  return <>{children}</>;
+  return null;
 }

@@ -53,6 +53,7 @@ import { sounds } from "@/lib/audio";
 import { compressImageFile, persistAvatar } from "@/lib/avatarUpload";
 import { clearGuestLocalSession, isGuestAccount } from "@/lib/guestAccount";
 import { clearAllUserAndPuzzleCache } from "@/lib/puzzleCache";
+import posthog from "posthog-js";
 
 interface DayData {
   day: string;
@@ -216,6 +217,7 @@ export default function ProfileStatsPage() {
 
   const handleSignOut = () => {
     const oldUserId = userAccount?.id;
+    posthog.reset();
     setUserAccount(null);
     clearAllUserAndPuzzleCache(oldUserId);
     if (typeof window !== "undefined") {

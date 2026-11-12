@@ -16,6 +16,7 @@ import {
   Send,
 } from "lucide-react";
 import { UserAvatar } from "@/components/UserAvatar";
+import { trackEvent } from "@/lib/analytics";
 
 export interface FriendEntry {
   id: string;
@@ -264,6 +265,7 @@ export function LeaderboardModal({
       }
 
       setFriendSuccess(data.message || `Request sent to @${uname}`);
+      trackEvent("friend_request_sent");
       setFriendInput("");
       await loadFriendsAndRequests();
     } catch {
@@ -295,6 +297,7 @@ export function LeaderboardModal({
         setFriendError(data.error || `Could not ${action} request.`);
       } else {
         setFriendSuccess(data.message || (action === "accept" ? "Friend request accepted." : "Friend request declined."));
+        trackEvent("friend_request_responded", { action });
         await loadFriendsAndRequests();
       }
     } catch {
@@ -335,6 +338,7 @@ export function LeaderboardModal({
         }),
       });
       if (res.ok) {
+        trackEvent("friend_removed");
         setFriends((prev) => prev.filter((f) => f.id !== friendId));
       }
     } catch (e) {

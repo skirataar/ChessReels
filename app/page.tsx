@@ -759,6 +759,7 @@ export default function RootPage() {
 
   // Trigger Google OAuth: mode can be 'signup' (new accounts from onboarding) or 'signin' (existing accounts)
   const handleGoogleAuth = (mode: "signup" | "signin" = authMode) => {
+    trackEvent("google_auth_started", { auth_mode: mode });
     saveCalibrationToStorage();
     const returnUrl = encodeURIComponent("/play");
     const skillLevel = skill.skillLevel;
@@ -859,6 +860,9 @@ export default function RootPage() {
             elo: effectiveCalibratedElo || data.user.elo,
           };
           hydrateUserSession(userWithCal);
+          trackEvent("account_registered", {
+            is_calibrated: userWithCal.isCalibrated,
+          });
           prefetchPuzzles(userWithCal.elo || 800, 5, userWithCal.id).catch(() => {});
           document.cookie = `chess_reel_session=${encodeURIComponent(userWithCal.id)}; path=/; max-age=${60 * 60 * 24 * 30}`;
           setStep("pro-upsell");
@@ -930,6 +934,7 @@ export default function RootPage() {
           }
           syncGuestSessionToAccount(data.user.id).catch(() => {});
           hydrateUserSession(data.user);
+          trackEvent("login_completed");
           prefetchPuzzles(data.user.elo || 800, 5, data.user.id).catch(() => {});
           document.cookie = `chess_reel_session=${encodeURIComponent(data.user.id)}; path=/; max-age=${60 * 60 * 24 * 30}`;
           if (typeof window !== "undefined") {

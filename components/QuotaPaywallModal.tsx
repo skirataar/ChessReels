@@ -27,6 +27,7 @@ import {
   getYearlySavingsPercent,
 } from "@/lib/pricing";
 import { hydrateUserSession } from "@/lib/sessionHydration";
+import { trackEvent } from "@/lib/analytics";
 
 interface QuotaPaywallModalProps {
   isOpen: boolean;
@@ -309,16 +310,20 @@ export function QuotaPaywallModal({
     };
   }, [isOpen]);
 
-  const finishUpgrade = useCallback(async () => {
+  const finishUpgrade = useCallback(async (activationSource: "checkout" | "restore" = "checkout") => {
     clearPendingPayment();
     try {
       await onUpgradeComplete?.();
     } catch {
       // The subscription is already persisted; UI refresh can be retried.
     }
+    trackEvent("subscription_activated", {
+      activation_source: activationSource,
+      plan: selectedPlan,
+    });
     setStatus("success");
     setTimeout(() => onClose(), 900);
-  }, [onClose, onUpgradeComplete]);
+  }, [onClose, onUpgradeComplete, selectedPlan]);
 
   const finishUpgradeRef = useRef(finishUpgrade);
 
@@ -422,7 +427,7 @@ export function QuotaPaywallModal({
       }
 
       clearPendingPayment();
-      await finishUpgrade();
+      await finishUpgrade("restore");
     } catch (error: unknown) {
       setStatus("error");
       setErrorMessage(
@@ -460,6 +465,12 @@ export function QuotaPaywallModal({
             : "Could not start checkout. Please try again."
         );
       }
+
+      trackEvent("checkout_started", {
+        entry_point: reason,
+        gateway: activePricing.gateway,
+        plan: selectedPlan,
+      });
 
       // Local development without provider keys: simulate a successful payment.
       if (data?.mockMode) {
@@ -684,6 +695,7 @@ export function QuotaPaywallModal({
     onUpgradeComplete,
     selectedPlan,
     status,
+    reason,
   ]);
 
   if (!isOpen) return null;

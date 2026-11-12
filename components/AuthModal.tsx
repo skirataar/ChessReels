@@ -21,6 +21,7 @@ import {
 import { compressImageFile } from "@/lib/avatarUpload";
 import { UserAvatar } from "@/components/UserAvatar";
 import { OtpModal } from "@/components/OtpModal";
+import { trackEvent } from "@/lib/analytics";
 import {
   getGuestSession,
   syncGuestSessionToAccount,
@@ -191,6 +192,9 @@ export function AuthModal({
         elo: effectiveCalibratedElo || data.user?.elo,
       };
       onAccountSuccess(safeUser);
+      trackEvent("account_registered", {
+        is_calibrated: safeUser.isCalibrated,
+      });
       onClose();
     } catch {
       setErrorMsg("Network error. Please try again.");
@@ -271,6 +275,9 @@ export function AuthModal({
           clearGuestSession();
         }
         onAccountSuccess(data.user);
+        trackEvent("login_completed", {
+          has_completed_placement: hasCompletedPlacement,
+        });
       }
       onClose();
     } catch {
@@ -281,6 +288,7 @@ export function AuthModal({
   };
 
   const handleGoogleOAuthRedirect = () => {
+    trackEvent("google_auth_started", { auth_mode: tab });
     setIsLoading(true);
     const returnUrl = encodeURIComponent(
       typeof window !== "undefined" ? window.location.pathname : "/play"

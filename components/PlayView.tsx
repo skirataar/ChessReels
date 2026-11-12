@@ -46,6 +46,7 @@ import { ReelAdCard } from "@/components/ReelAdCard";
 import { RewardedAdModal } from "@/components/RewardedAdModal";
 import { motion, AnimatePresence } from "framer-motion";
 import { trackEvent } from "@/lib/analytics";
+import posthog from "posthog-js";
 import {
   getGuestSession,
   saveGuestSession,
@@ -1316,6 +1317,11 @@ export function PlayView({
       const instanceKey = puzzle.instanceId || `${puzzle.id}_attempt_1`;
 
       if (status === "failed") {
+        trackEvent("puzzle_failed", {
+          is_calibrating: isCalibrating,
+          puzzle_rating: puzzle.rating,
+          is_requeued: Boolean(puzzle.isRequeued),
+        });
         const puzzleKey = puzzle.instanceId || puzzle.id;
         if (!countedSessionPuzzlesRef.current.has(puzzleKey)) {
           countedSessionPuzzlesRef.current.add(puzzleKey);
@@ -1331,6 +1337,11 @@ export function PlayView({
           scheduleFailedPuzzleReinsertion(puzzle, currentIndex);
         }
       } else if (status === "solved") {
+        trackEvent("puzzle_solved", {
+          is_calibrating: isCalibrating,
+          puzzle_rating: puzzle.rating,
+          is_requeued: Boolean(puzzle.isRequeued),
+        });
         const puzzleKey = puzzle.instanceId || puzzle.id;
         if (!countedSessionPuzzlesRef.current.has(puzzleKey)) {
           countedSessionPuzzlesRef.current.add(puzzleKey);
@@ -2245,6 +2256,7 @@ export function PlayView({
   // Sign out handler: clears all caches and transitions cleanly in a single step without landing page flash
   const handleSignOut = () => {
     const oldUserId = userAccount?.id;
+    posthog.reset();
 
     // 1. Optimistically clear local React state
     setUserAccount(null);

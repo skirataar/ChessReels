@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { SettingsModal } from "@/components/SettingsModal";
 import { clearAllUserAndPuzzleCache } from "@/lib/puzzleCache";
+import posthog from "posthog-js";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -25,6 +26,7 @@ export default function SettingsPage() {
         onClose={() => router.push("/play")}
         userAccount={account}
         onSignOut={() => {
+          posthog.reset();
           clearAllUserAndPuzzleCache(account?.id);
           router.replace("/");
         }}

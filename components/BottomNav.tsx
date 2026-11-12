@@ -7,6 +7,7 @@ import { Play, Target, User, Settings } from "lucide-react";
 import { SettingsModal } from "@/components/SettingsModal";
 import { isGuestAccount } from "@/lib/guestAccount";
 import { clearAllUserAndPuzzleCache } from "@/lib/puzzleCache";
+import posthog from "posthog-js";
 
 interface NavItem {
   name: string;
@@ -249,6 +250,7 @@ export function BottomNav() {
         onClose={() => setIsSettingsOpen(false)}
         userAccount={userAccount}
         onSignOut={() => {
+          posthog.reset();
           clearAllUserAndPuzzleCache(userAccount?.id);
           if (typeof window !== "undefined") {
             try {
