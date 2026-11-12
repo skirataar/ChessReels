@@ -58,7 +58,7 @@ test.describe("Landing Page, Skill Gauging, Google Auth & Calibration", () => {
     await page.fill("#reg-display", "Grandmaster Mind");
     await page.fill("#reg-password", "StrongPass123!");
 
-    const submitBtn = page.getByRole("button", { name: /create account & start placement/i });
+    const submitBtn = page.getByRole("button", { name: /^create account$/i });
     await submitBtn.click();
 
     // Verify Account created and calibrated at 1600 baseline Elo (not guest Elo 800)

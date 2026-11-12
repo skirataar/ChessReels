@@ -589,7 +589,7 @@ export function AuthModal({
                     disabled={isLoading}
                     className="w-full py-3 rounded-xl bg-[#c29b78] hover:bg-[#d4b08f] disabled:opacity-50 text-[#151413] font-black text-xs uppercase tracking-wider transition-all cursor-pointer shadow-lg shadow-[#c29b78]/25 flex items-center justify-center gap-2 active:scale-98"
                   >
-                    <span>{isLoading ? "Creating Account..." : "Create Account & Start Placement"}</span>
+                    <span>{isLoading ? "Creating Account..." : "Create Account"}</span>
                     <ArrowRight className="w-4 h-4 stroke-[3]" />
                   </button>
                 </form>
