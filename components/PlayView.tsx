@@ -50,6 +50,8 @@ import {
   getGuestSession,
   saveGuestSession,
   clearGuestSession,
+  loadPlacementStateFromStorage,
+  savePlacementStateToStorage,
   recordPlacementStep,
   calculateFinalPlacementElo,
   markGuestMode,
@@ -549,6 +551,28 @@ export function PlayView({
     return Boolean(gs?.isGuestMode);
   });
 
+  const placementStateRef = useRef<PlacementState>(loadPlacementStateFromStorage());
+  const processedPlacementPuzzleIdsRef = useRef<Set<string>>(
+    new Set(guestSessionState?.history?.map((h) => h.puzzleId) || [])
+  );
+
+  useEffect(() => {
+    if (guestSessionState) {
+      placementStateRef.current = {
+        currentStep: guestSessionState.currentStep,
+        currentPuzzleElo: guestSessionState.currentPuzzleElo,
+        history: guestSessionState.history,
+        calibratedElo: guestSessionState.calibratedElo,
+        isComplete: guestSessionState.isComplete,
+      };
+      if (Array.isArray(guestSessionState.history)) {
+        guestSessionState.history.forEach((h) => {
+          if (h.puzzleId) processedPlacementPuzzleIdsRef.current.add(h.puzzleId);
+        });
+      }
+    }
+  }, [guestSessionState]);
+
   // Fetch pending incoming friend requests count for header badge
   useEffect(() => {
     const effectiveId = userAccount?.id || guestId;
@@ -805,13 +829,14 @@ export function PlayView({
     userAccount &&
     !userAccount.isCalibrated &&
     !guestSessionState?.isComplete &&
-    !guestSessionState?.calibratedElo
+    !guestSessionState?.calibratedElo &&
+    (userAccount?.calibrationStep ?? 0) < TOTAL_PLACEMENT_STEPS
   );
   const isCalibrating = isUserCalibrating || isGuestCalibrating;
   const currentCalibrationStep = isUserCalibrating
     ? Math.min(TOTAL_PLACEMENT_STEPS, (userAccount?.calibrationStep ?? 0) + 1)
     : isGuestCalibrating
-    ? Math.min(TOTAL_PLACEMENT_STEPS, guestSessionState?.currentStep ?? 1)
+    ? Math.min(TOTAL_PLACEMENT_STEPS, (guestSessionState?.history?.length ?? 0) + 1)
     : 0;
 
   // Subscription to online status
@@ -873,6 +898,42 @@ export function PlayView({
     window.addEventListener("account-updated", handleAccountSync);
     return () => window.removeEventListener("account-updated", handleAccountSync);
   }, []);
+
+  // Immediate Completion Modal & Board Lock on Step 6
+  useEffect(() => {
+    if (!isHydrated) return;
+    const historyCount = guestSessionState?.history?.length ?? 0;
+    const isFinished = Boolean(
+      guestSessionState?.isComplete ||
+      historyCount >= TOTAL_PLACEMENT_STEPS ||
+      (guestSessionState?.calibratedElo !== null && guestSessionState?.calibratedElo !== undefined)
+    );
+
+    if (isFinished && isCalibrating) {
+      const finalElo =
+        guestSessionState?.calibratedElo ||
+        guestSessionState?.currentPuzzleElo ||
+        currentEloRef.current ||
+        1000;
+      setCalibratedFinalElo(finalElo);
+
+      if (userAccount) {
+        if (!userAccount.isCalibrated) {
+          setIsCalibratedModalOpen(true);
+        }
+      } else {
+        setIsConversionModalOpen(true);
+      }
+    }
+  }, [
+    isHydrated,
+    isCalibrating,
+    guestSessionState?.isComplete,
+    guestSessionState?.history?.length,
+    guestSessionState?.calibratedElo,
+    guestSessionState?.currentPuzzleElo,
+    userAccount,
+  ]);
 
   useEffect(() => {
     if (!isHydrated) return;
@@ -1311,9 +1372,23 @@ export function PlayView({
 
   // Swipe Up / Next Puzzle navigation: strictly increment currentIndex to a new puzzle ID & deduplicate against solved
   const goToNextPuzzle = useCallback(async (bypassAd: boolean = false) => {
-    if (isConversionModalOpen) {
+    if (isConversionModalOpen || isCalibratedModalOpen) {
       return;
     }
+
+    // Strict 6-puzzle hard cap for placement: never deal a 7th placement puzzle
+    if (isCalibrating) {
+      const currentPlacement = loadPlacementStateFromStorage();
+      if (currentPlacement.isComplete || currentPlacement.history.length >= TOTAL_PLACEMENT_STEPS) {
+        if (!userAccount) {
+          setIsConversionModalOpen(true);
+        } else {
+          setIsCalibratedModalOpen(true);
+        }
+        return;
+      }
+    }
+
     if (!bypassAd && !isPro && !isCalibrating && puzzlesPlayedInSession > 0 && puzzlesPlayedInSession % 3 === 0 && !showReelAd) {
       setShowReelAd(true);
       return;
@@ -1370,6 +1445,15 @@ export function PlayView({
 
     // In calibration mode, fetch fresh puzzle matching the adaptive rating
     if (isCalibrating) {
+      const currentPlacement = loadPlacementStateFromStorage();
+      if (currentPlacement.isComplete || currentPlacement.history.length >= TOTAL_PLACEMENT_STEPS) {
+        if (!userAccount) {
+          setIsConversionModalOpen(true);
+        } else {
+          setIsCalibratedModalOpen(true);
+        }
+        return;
+      }
       setPuzzleStatus("loading");
       try {
         const userParam = targetUserId ? `&userId=${encodeURIComponent(targetUserId)}` : "";
@@ -1478,6 +1562,16 @@ export function PlayView({
     if (isLoadingSession) return;
 
     const isGuest = !userAccount;
+    const currentPlacement = loadPlacementStateFromStorage();
+    if (isCalibrating && (currentPlacement.isComplete || currentPlacement.history.length >= TOTAL_PLACEMENT_STEPS)) {
+      if (!userAccount) {
+        setIsConversionModalOpen(true);
+      } else {
+        setIsCalibratedModalOpen(true);
+      }
+      return;
+    }
+
     const userCanPlay = isGuest || canPlay || puzzlesRemaining > 0;
     if (userCanPlay || isPro || isCalibrating) {
       if (!initialFetchDoneRef.current) {
@@ -1557,22 +1651,35 @@ export function PlayView({
       if (isCalibrating) {
         // PLACEMENT / CALIBRATION MODE: DO NOT invoke standard calculateEloDelta or updateUserElo API routes!
         const isWin = result === "win";
-        const currentPlacementState: PlacementState = {
-          currentStep: guestSessionState?.currentStep ?? 1,
-          currentPuzzleElo: guestSessionState?.currentPuzzleElo || currentEloRef.current || INITIAL_PLACEMENT_ELO,
-          history: guestSessionState?.history ?? [],
-          calibratedElo: guestSessionState?.calibratedElo ?? null,
-          isComplete: Boolean(guestSessionState?.isComplete),
-        };
+
+        // Idempotency: prevent a single puzzle ID from being scored twice
+        if (processedPlacementPuzzleIdsRef.current.has(puzzle.id)) {
+          return;
+        }
+
+        // Always read latest persisted state to prevent closure staleness
+        const stored = loadPlacementStateFromStorage();
+        const currentPlacementState: PlacementState =
+          stored.history.length >= (placementStateRef.current?.history?.length ?? 0)
+            ? stored
+            : (placementStateRef.current || stored);
+
+        if (
+          currentPlacementState.isComplete ||
+          currentPlacementState.history.length >= TOTAL_PLACEMENT_STEPS ||
+          currentPlacementState.history.some((h) => h.puzzleId === puzzle.id)
+        ) {
+          return;
+        }
+
+        // Mark puzzle as scored
+        processedPlacementPuzzleIdsRef.current.add(puzzle.id);
 
         const nextPlacementState = processPlacementMove(currentPlacementState, puzzle.id, isWin);
         const eloDelta = isWin ? ELO_STEP_UP : -ELO_STEP_DOWN;
 
         // Determine target Elo
-        const targetElo =
-          nextPlacementState.isComplete && nextPlacementState.calibratedElo !== null
-            ? nextPlacementState.calibratedElo
-            : nextPlacementState.currentPuzzleElo;
+        const targetElo = nextPlacementState.currentPuzzleElo;
 
         // 1. Immediate optimistic UI updates
         setCurrentElo(targetElo);
@@ -1581,11 +1688,9 @@ export function PlayView({
         triggerEloDeltaBadge(eloDelta);
         saveUserStatsSync({ elo: targetElo });
 
-        // 2. Synchronize placement state to guest session
-        const updatedSession = saveGuestSession({
-          ...nextPlacementState,
-          isGuestMode: Boolean(guestSessionState?.isGuestMode),
-        });
+        // 2. Synchronize placement state to storage & ref
+        placementStateRef.current = nextPlacementState;
+        const updatedSession = savePlacementStateToStorage(nextPlacementState);
         setGuestSessionState(updatedSession);
 
         // 3. Mark puzzle state locally
@@ -1627,8 +1732,10 @@ export function PlayView({
                 calibrationStep: TOTAL_PLACEMENT_STEPS,
               }),
             }).catch(() => {});
+            setIsCalibratedModalOpen(true);
+          } else {
+            setIsConversionModalOpen(true);
           }
-          setIsConversionModalOpen(true);
           trackEvent("placement_test_completed", {
             finalElo: nextPlacementState.calibratedElo,
             totalPuzzles: TOTAL_PLACEMENT_STEPS,

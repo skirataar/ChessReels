@@ -84,4 +84,75 @@ describe('Unified Placement Engine Running Rating & Calibration', () => {
     const finalElo = calculateFinalPlacementElo(history);
     expect(finalElo).toBe(1400);
   });
+
+  it('sequentially transitions history.length from 0 -> 1 -> 2 -> 3 -> 4 -> 5 -> 6, updating elo on every call and hard-locking on 6th', () => {
+    let state = getInitialPlacementState();
+    expect(state.history.length).toBe(0);
+    expect(state.currentStep).toBe(1);
+    expect(state.currentPuzzleElo).toBe(1000);
+    expect(state.isComplete).toBe(false);
+
+    // Call 1: Win (+150 -> 1150)
+    state = processPlacementMove(state, 'puzzle-1', true);
+    expect(state.history.length).toBe(1);
+    expect(state.currentStep).toBe(2);
+    expect(state.currentPuzzleElo).toBe(1150);
+    expect(state.isComplete).toBe(false);
+
+    // Call 2: Fail (-100 -> 1050)
+    state = processPlacementMove(state, 'puzzle-2', false);
+    expect(state.history.length).toBe(2);
+    expect(state.currentStep).toBe(3);
+    expect(state.currentPuzzleElo).toBe(1050);
+    expect(state.isComplete).toBe(false);
+
+    // Call 3: Win (+150 -> 1200)
+    state = processPlacementMove(state, 'puzzle-3', true);
+    expect(state.history.length).toBe(3);
+    expect(state.currentStep).toBe(4);
+    expect(state.currentPuzzleElo).toBe(1200);
+    expect(state.isComplete).toBe(false);
+
+    // Call 4: Win (+150 -> 1350)
+    state = processPlacementMove(state, 'puzzle-4', true);
+    expect(state.history.length).toBe(4);
+    expect(state.currentStep).toBe(5);
+    expect(state.currentPuzzleElo).toBe(1350);
+    expect(state.isComplete).toBe(false);
+
+    // Call 5: Fail (-100 -> 1250)
+    state = processPlacementMove(state, 'puzzle-5', false);
+    expect(state.history.length).toBe(5);
+    expect(state.currentStep).toBe(6);
+    expect(state.currentPuzzleElo).toBe(1250);
+    expect(state.isComplete).toBe(false);
+
+    // Call 6: Win (+150 -> 1400) -> Hard locks completion on 6th move!
+    state = processPlacementMove(state, 'puzzle-6', true);
+    expect(state.history.length).toBe(6);
+    expect(state.currentStep).toBe(6);
+    expect(state.currentPuzzleElo).toBe(1400);
+    expect(state.calibratedElo).toBe(1400);
+    expect(state.isComplete).toBe(true);
+
+    // Call 7: Attempting 7th call is strictly ignored
+    const state7 = processPlacementMove(state, 'puzzle-7', true);
+    expect(state7.history.length).toBe(6);
+    expect(state7.currentStep).toBe(6);
+    expect(state7.currentPuzzleElo).toBe(1400);
+    expect(state7.calibratedElo).toBe(1400);
+    expect(state7.isComplete).toBe(true);
+  });
+
+  it('prevents duplicate scoring for the same puzzleId', () => {
+    let state = getInitialPlacementState();
+    state = processPlacementMove(state, 'p-same', true);
+    expect(state.history.length).toBe(1);
+    expect(state.currentPuzzleElo).toBe(1150);
+
+    // Same puzzleId called again
+    state = processPlacementMove(state, 'p-same', true);
+    expect(state.history.length).toBe(1);
+    expect(state.currentPuzzleElo).toBe(1150);
+  });
 });
