@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Play, Target, User, Settings } from "lucide-react";
 import { SettingsModal } from "@/components/SettingsModal";
+import { haptics } from "@/lib/haptics";
 import { isGuestAccount } from "@/lib/guestAccount";
 import { clearAllUserAndPuzzleCache } from "@/lib/puzzleCache";
 import posthog from "posthog-js";
@@ -123,6 +124,7 @@ export function BottomNav() {
   }
 
   const handleNavClick = (e: React.MouseEvent, href: string) => {
+    haptics.trigger("button");
     if (href === "#settings") {
       e.preventDefault();
       setIsSettingsOpen(true);

@@ -24,6 +24,7 @@ describe("Cross-Platform Haptic Engine", () => {
     };
 
     const mockDocument = {
+      readyState: "complete",
       createElement: (tag: string) => {
         const el: any = {
           tagName: tag.toUpperCase(),
@@ -41,6 +42,9 @@ describe("Cross-Platform Haptic Engine", () => {
         };
         elementsCreated.push(el);
         return el;
+      },
+      getElementById: (id: string) => {
+        return elementsCreated.find((el) => el.id === id) || null;
       },
       body: {
         appendChild: vi.fn(),
@@ -92,8 +96,17 @@ describe("Cross-Platform Haptic Engine", () => {
   });
 
   it("triggers correct vibration patterns on Android / supported browsers", async () => {
+    let mockTime = 1000;
+    vi.spyOn(performance, "now").mockImplementation(() => {
+      mockTime += 100;
+      return mockTime;
+    });
+
     const { HapticEngine } = await import("../lib/haptics");
     const engine = new HapticEngine();
+
+    engine.trigger("select");
+    expect(vibrateMock).toHaveBeenLastCalledWith(6);
 
     engine.trigger("button");
     expect(vibrateMock).toHaveBeenLastCalledWith(8);
@@ -112,6 +125,27 @@ describe("Cross-Platform Haptic Engine", () => {
 
     engine.trigger("blunder");
     expect(vibrateMock).toHaveBeenLastCalledWith([45, 50, 60]);
+  });
+
+  it("debounces rapid duplicate triggers within 25ms", async () => {
+    let mockTime = 1000;
+    vi.spyOn(performance, "now").mockImplementation(() => mockTime);
+
+    const { HapticEngine } = await import("../lib/haptics");
+    const engine = new HapticEngine();
+
+    engine.trigger("select");
+    expect(vibrateMock).toHaveBeenCalledTimes(1);
+
+    // Call again within 10ms
+    mockTime += 10;
+    engine.trigger("move");
+    expect(vibrateMock).toHaveBeenCalledTimes(1);
+
+    // Call after 30ms (total +40ms)
+    mockTime += 30;
+    engine.trigger("move");
+    expect(vibrateMock).toHaveBeenCalledTimes(2);
   });
 
   it("does not trigger vibration when disabled", async () => {
@@ -137,7 +171,7 @@ describe("Cross-Platform Haptic Engine", () => {
     engine.trigger("button");
 
     expect(labelClicked).toBe(true);
-    const hasSwitchInput = elementsCreated.some((el) => el.id === "doomchess-ios-haptic-switch" && el.switch !== undefined);
+    const hasSwitchInput = elementsCreated.some((el) => el.id === "doomchess-taptic-input" && el.switch !== undefined);
     expect(hasSwitchInput).toBe(true);
   });
 });

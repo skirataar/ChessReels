@@ -959,10 +959,10 @@ export function PuzzleCard({
   // QOL: If incorrect on step x+1 (currentMoveIndex > solutionStartIndex), progress up to step x is preserved!
   const handleRetry = useCallback(
     (resetToStartArg?: boolean | unknown) => {
+      haptics.trigger("button");
       if (!puzzle || !puzzle.fen || !puzzle.moves) return;
       const resetToStart =
         typeof resetToStartArg === "boolean" ? resetToStartArg : false;
-      haptics.tap();
 
       // Invalidate any pending engine validation before resetting the board.
       moveValidationTokenRef.current += 1;
@@ -1992,8 +1992,8 @@ export function PuzzleCard({
 
   // Right Rail Action: Bookmark Toggle
   const handleToggleBookmark = () => {
+    haptics.trigger("button");
     if (!puzzle) return;
-    haptics.tap();
     try {
       const userKey = guestId ? `chess_reel_bookmarks_${guestId}` : "chess_reel_bookmarks";
       const saved = localStorage.getItem(userKey) || localStorage.getItem("chess_reel_bookmarks");
@@ -2036,7 +2036,7 @@ export function PuzzleCard({
 
   // Right Rail Action: SFX Mute Toggle
   const handleToggleSFX = () => {
-    haptics.tap();
+    haptics.trigger("button");
     const muted = sounds.toggleMute();
     setIsMuted(muted);
     showToast(muted ? "Sound Effects Muted" : "Sound Effects On");
@@ -2044,8 +2044,8 @@ export function PuzzleCard({
 
   // Community Action: Like Puzzle
   const handleToggleLike = async () => {
+    haptics.trigger("button");
     if (!puzzle?.id) return;
-    haptics.tap();
 
     const nextLiked = !isLiked;
     setIsLiked(nextLiked);
@@ -2081,7 +2081,7 @@ export function PuzzleCard({
 
   // Right Rail Action: Share
   const handleShare = async () => {
-    haptics.tap();
+    haptics.trigger("button");
     const shareText = `Can you solve this ${puzzle?.rating ?? 1200} Elo puzzle on DoomChess? ${likesCount} players liked it!`;
     const shareUrl = typeof window !== "undefined" ? window.location.href : "";
 
@@ -2108,7 +2108,7 @@ export function PuzzleCard({
 
   // Right Rail Action: Flip Board Orientation
   const handleFlipBoard = () => {
-    haptics.tap();
+    haptics.trigger("button");
     setBoardOrientation((prev) => (prev === "white" ? "black" : "white"));
   };
 
@@ -2116,11 +2116,11 @@ export function PuzzleCard({
   // Every puzzle resolves to a concrete `{ from, to }` pair on the first click:
   // authored solution -> chess.js verbose/UCI match -> Stockfish bestmove.
   const handleTriggerHint = async () => {
+    haptics.trigger("button");
     if (status !== "playing" && status !== "failed") return;
     if (isCalibration && hintsUsedThisPuzzle >= MAX_PLACEMENT_HINTS_PER_PUZZLE) {
       return;
     }
-    haptics.tap();
 
     const positionFen = gameRef.current?.fen() || puzzle?.fen || "";
     if (!positionFen) return;
@@ -2196,6 +2196,7 @@ export function PuzzleCard({
 
   // Trigger next puzzle advance with smooth reel upward launch
   const triggerSwipeNext = useCallback(() => {
+    haptics.trigger("button");
     dismissIdleIndicator();
     if (placementTransitionTimerRef.current) {
       clearTimeout(placementTransitionTimerRef.current);
@@ -2212,7 +2213,6 @@ export function PuzzleCard({
     if (isExiting) return;
     setIsExiting(true);
     setDragY(-360);
-    haptics.tap();
     if (typeof window !== "undefined") {
       window.scrollTo({ top: 0, left: 0, behavior: "instant" });
     }
@@ -2230,6 +2230,7 @@ export function PuzzleCard({
 
   // Trigger previous puzzle advance with smooth reel downward slide
   const triggerSwipePrev = useCallback(() => {
+    haptics.trigger("button");
     dismissIdleIndicator();
     if (placementTransitionTimerRef.current) {
       clearTimeout(placementTransitionTimerRef.current);
@@ -2242,7 +2243,6 @@ export function PuzzleCard({
     if (isExiting) return;
     setIsExiting(true);
     setDragY(360);
-    haptics.tap();
     if (typeof window !== "undefined") {
       window.scrollTo({ top: 0, left: 0, behavior: "instant" });
     }
@@ -2671,6 +2671,8 @@ export function PuzzleCard({
           data-testid="chessboard-container"
           data-fen={displayFen}
           data-in-check-square={inCheckKingSquare || undefined}
+          onPointerDown={() => haptics.trigger("select")}
+          onPointerUp={() => haptics.trigger("move")}
           onTouchStart={handleBoardTouchStart}
           onTouchMove={handleBoardTouchMove}
           onTouchEnd={handleBoardTouchEnd}

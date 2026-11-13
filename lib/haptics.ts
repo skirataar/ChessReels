@@ -1,36 +1,56 @@
-export type HapticPattern = 'move' | 'capture' | 'check' | 'solve' | 'blunder' | 'button';
+export type HapticPattern = 'move' | 'capture' | 'check' | 'solve' | 'blunder' | 'button' | 'select';
 
 export class HapticEngine {
   private enabled: boolean = true;
-  private iosSwitchLabel: HTMLLabelElement | null = null;
+  private iosLabel: HTMLLabelElement | null = null;
+  private iosInput: HTMLInputElement | null = null;
+  private lastTriggerTime: number = 0;
 
   constructor() {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('doomchess_haptics') ?? localStorage.getItem('chess_reel_haptics');
       this.enabled = saved !== null ? (saved === 'true' || saved === '1') : true;
+      // Mount switch as soon as DOM is ready
+      if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        this.mountIosSwitch();
+      } else {
+        window.addEventListener('DOMContentLoaded', () => this.mountIosSwitch(), { once: true });
+      }
     }
   }
 
-  private ensureIosSwitch() {
-    if (typeof document === 'undefined' || this.iosSwitchLabel) return;
-    const container = document.createElement('div');
-    container.style.position = 'fixed';
-    container.style.opacity = '0';
-    container.style.pointerEvents = 'none';
-    container.style.left = '-9999px';
+  public mountIosSwitch() {
+    if (typeof document === 'undefined' || this.iosLabel) return;
+
+    const existing = document.getElementById('doomchess-taptic-label') as HTMLLabelElement | null;
+    if (existing) {
+      this.iosLabel = existing;
+      return;
+    }
+
+    // Must remain inside viewport bounds with non-zero opacity (0.01) so iOS WebKit does not cull Taptics
+    const wrapper = document.createElement('div');
+    wrapper.setAttribute('aria-hidden', 'true');
+    wrapper.style.cssText =
+      'position:fixed;bottom:0;right:0;width:1px;height:1px;opacity:0.01;pointer-events:none;z-index:-1;overflow:hidden;';
 
     const input = document.createElement('input');
     input.type = 'checkbox';
-    input.id = 'doomchess-ios-haptic-switch';
+    input.id = 'doomchess-taptic-input';
     input.setAttribute('switch', '');
+    input.tabIndex = -1;
 
     const label = document.createElement('label');
-    label.htmlFor = 'doomchess-ios-haptic-switch';
+    label.id = 'doomchess-taptic-label';
+    label.htmlFor = 'doomchess-taptic-input';
+    label.style.cssText = 'display:block;width:1px;height:1px;';
 
-    container.appendChild(input);
-    container.appendChild(label);
-    document.body.appendChild(container);
-    this.iosSwitchLabel = label;
+    wrapper.appendChild(input);
+    wrapper.appendChild(label);
+    document.body.appendChild(wrapper);
+
+    this.iosInput = input;
+    this.iosLabel = label;
   }
 
   public isEnabled(): boolean {
@@ -46,42 +66,34 @@ export class HapticEngine {
     if (val) this.trigger('button');
   }
 
-  public trigger(type: HapticPattern) {
+  public trigger(type: HapticPattern = 'move') {
     if (!this.enabled || typeof window === 'undefined') return;
 
+    // Debounce duplicate firing within the same 25ms gesture frame
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    if (now - this.lastTriggerTime < 25) return;
+    this.lastTriggerTime = now;
+
     try {
-      // 1. Standard Vibration API (Android / supported browsers)
-      if (typeof navigator !== 'undefined' && navigator.vibrate) {
-        switch (type) {
-          case 'button':
-            navigator.vibrate(8);
-            break;
-          case 'move':
-            navigator.vibrate(12);
-            break;
-          case 'capture':
-            navigator.vibrate([18, 25, 22]);
-            break;
-          case 'check':
-            navigator.vibrate([25, 30, 35]);
-            break;
-          case 'solve':
-            navigator.vibrate([15, 40, 30]);
-            break;
-          case 'blunder':
-            navigator.vibrate([45, 50, 60]);
-            break;
-        }
+      // 1. Android / Chromium Vibration API
+      if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+        const patterns: Record<HapticPattern, number | number[]> = {
+          select: 6,
+          button: 8,
+          move: 12,
+          capture: [18, 25, 22],
+          check: [25, 30, 35],
+          solve: [15, 40, 30],
+          blunder: [45, 50, 60],
+        };
+        navigator.vibrate(patterns[type] ?? 10);
         return;
       }
 
-      // 2. iOS Safari Taptic Engine Fallback (iOS 17.4+ switch attribute)
-      this.ensureIosSwitch();
-      if (this.iosSwitchLabel) {
-        this.iosSwitchLabel.click();
-        if (type === 'solve' || type === 'blunder' || type === 'capture') {
-          setTimeout(() => this.iosSwitchLabel?.click(), 65);
-        }
+      // 2. iOS Safari Synchronous Taptic Switch Trigger
+      this.mountIosSwitch();
+      if (this.iosLabel) {
+        this.iosLabel.click();
       }
     } catch {
       // Fail silently if blocked by browser policy
