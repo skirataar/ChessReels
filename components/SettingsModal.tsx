@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { BOARD_THEMES, BoardTheme, useBoardTheme } from "@/lib/boardThemes";
 import { sounds } from "@/lib/audio";
+import { haptics } from "@/lib/haptics";
 import { UserAvatar } from "@/components/UserAvatar";
 import { isGuestUserId } from "@/lib/guestAccount";
 import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/support";
@@ -85,8 +86,8 @@ export function SettingsModal({
     setIsSfxEnabled(!sounds.getIsMuted());
 
     // Haptics
-    const haptics = window.localStorage.getItem("chess_reel_haptics");
-    setIsHapticsEnabled(haptics !== "0");
+    const savedHaptics = window.localStorage.getItem("doomchess_haptics") ?? window.localStorage.getItem("chess_reel_haptics");
+    setIsHapticsEnabled(savedHaptics !== null ? (savedHaptics === "true" || savedHaptics === "1") : true);
 
     // Auto advance (defaults to false)
     const auto = window.localStorage.getItem("chess_reel_auto_advance");
@@ -234,12 +235,7 @@ export function SettingsModal({
   const handleToggleHaptics = () => {
     const nextState = !isHapticsEnabled;
     setIsHapticsEnabled(nextState);
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem("chess_reel_haptics", nextState ? "1" : "0");
-      if (nextState && typeof navigator !== "undefined" && navigator.vibrate) {
-        navigator.vibrate(25);
-      }
-    }
+    haptics.setEnabled(nextState);
   };
 
   // Toggle auto advance

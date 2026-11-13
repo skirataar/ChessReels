@@ -68,6 +68,7 @@ import {
   PLACEMENT_TOTAL_STEPS,
 } from "@/lib/placementEngine";
 import { GuestConversionModal } from "@/components/GuestConversionModal";
+import { haptics } from "@/lib/haptics";
 
 const GUEST_ID_KEY = "chess_reel_guest_id";
 const ELO_STORAGE_KEY = "chess_reel_elo";
@@ -1387,6 +1388,7 @@ export function PlayView({
 
   // Swipe Up / Next Puzzle navigation: strictly increment currentIndex to a new puzzle ID & deduplicate against solved
   const goToNextPuzzle = useCallback(async (bypassAd: boolean = false) => {
+    haptics.trigger("button");
     if (isConversionModalOpen || isCalibratedModalOpen) {
       return;
     }

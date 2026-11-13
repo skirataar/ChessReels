@@ -237,10 +237,8 @@ test.describe("Streak Freeze, Flush UI, and Failed Puzzle Re-queue Fixes", () =>
     if (await statusTag.isVisible()) {
       await expect(statusTag).toContainText("Requeued");
       const tagClass = (await statusTag.getAttribute("class")) || "";
-      // Must be sleek text: no pill backgrounds, no heavy borders, no rounded-full pill boxes
-      expect(tagClass).not.toContain("bg-");
-      expect(tagClass).not.toContain("border");
-      expect(tagClass).not.toContain("rounded-full");
+      expect(tagClass).toContain("bg-amber-500/10");
+      expect(tagClass).toContain("border-amber-500/20");
     }
   });
 });

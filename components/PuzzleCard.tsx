@@ -1239,7 +1239,7 @@ export function PuzzleCard({
       }
 
       sounds.playIllegal();
-      haptics.error();
+      haptics.trigger("blunder");
 
       if (isCalibration) {
         // Placement / Calibration game: finish on wrong move with clear crimson feedback & board highlight
@@ -1368,7 +1368,15 @@ export function PuzzleCard({
       // Strict Priority SFX (check/checkmate, promote, castle, capture, standard)
       // Automatically triggers game-end 150ms later if isSolved
       playSoundForMove(moveMade, game, false, isSolved);
-      haptics.success();
+      if (isSolved) {
+        haptics.trigger("solve");
+      } else if (game.inCheck()) {
+        haptics.trigger("check");
+      } else if (moveMade.captured) {
+        haptics.trigger("capture");
+      } else {
+        haptics.trigger("move");
+      }
       setMistakeFeedback(null);
       setIsFlashingRed(false);
       setIsShaking(false);
@@ -1376,7 +1384,6 @@ export function PuzzleCard({
 
       // Check if the puzzle sequence is complete
       if (isSolved) {
-        haptics.success();
         onStatusChange("solved");
 
         const updatedHistory = [...moveHistory, playerFen];
@@ -1473,7 +1480,7 @@ export function PuzzleCard({
         setCurrentMoveIndex(afterOppIndex);
 
         if (isSolvedAfterOpp) {
-          haptics.success();
+          haptics.trigger("solve");
           onStatusChange("solved");
 
           if (puzzle) {
@@ -3195,26 +3202,18 @@ export function PuzzleCard({
         {/* Flush Subtitle: Turn status + Step counter + Rating */}
         <div
           data-testid="puzzle-status-bar"
-          className="w-full flex items-center justify-between pt-1 text-[13px] tracking-tight font-medium"
+          className="flex items-center justify-between gap-2 w-full overflow-hidden py-1 tracking-tight"
         >
-          <div data-testid="puzzle-turn-indicator" className="flex items-center gap-1.5">
+          <div
+            data-testid="puzzle-turn-indicator"
+            className="flex items-center gap-1.5 min-w-0 overflow-x-auto no-scrollbar"
+          >
             {status === "solved" ? (
               <>
                 <CheckCircle2 className="w-3.5 h-3.5 text-[#10b981] shrink-0 stroke-[2.25]" />
-                <span className="font-bold text-[#10b981]">Solved</span>
-                {isRequeued && (
-                  <span data-testid="requeued-status-tag" className="text-[12px] text-amber-400/80 font-normal">
-                    • Requeued
-                  </span>
-                )}
-                {Boolean(hintUsed || puzzle?.hintUsed) && (
-                  <span data-testid="hint-used-tag" className="text-[12px] text-[#c29b78]/90 font-normal">
-                    • Hint Used
-                  </span>
-                )}
-                {isReviewMode && (
-                  <span className="text-[12px] text-[#78716c] font-normal">• Review Mode</span>
-                )}
+                <span className="text-xs font-semibold text-[#10b981] whitespace-nowrap shrink-0">
+                  Solved
+                </span>
               </>
             ) : (
               <>
@@ -3225,36 +3224,44 @@ export function PuzzleCard({
                       : "bg-neutral-900 ring-neutral-600 shadow-black/80"
                   }`}
                 />
-                <span className="font-bold text-[#f5f2eb]">{playerTurnMessage}</span>
-                <span className="text-[#78716c] tabular-nums">
-                  • Step {currentStep} of {totalPlayerMoves}
+                <span className="text-xs font-semibold text-zinc-100 whitespace-nowrap shrink-0">
+                  {playerTurnMessage}
                 </span>
-                {isRequeued && (
-                  <span data-testid="requeued-status-tag" className="text-[12px] text-amber-400/80 font-normal">
-                    • Requeued
-                  </span>
-                )}
-                {Boolean(hintUsed || puzzle?.hintUsed) && (
-                  <span data-testid="hint-used-tag" className="text-[12px] text-[#c29b78]/90 font-normal">
-                    • Hint Used
-                  </span>
-                )}
-                {isReviewMode && (
-                  <span className="text-[12px] text-[#78716c] font-normal">• Review</span>
-                )}
+                <span className="text-xs text-zinc-400 whitespace-nowrap shrink-0 tabular-nums">
+                  • {currentStep}/{totalPlayerMoves}
+                </span>
               </>
+            )}
+
+            {isRequeued && (
+              <span
+                data-testid="requeued-status-tag"
+                className="text-[10px] font-medium text-amber-400/90 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded whitespace-nowrap shrink-0"
+              >
+                Requeued
+              </span>
+            )}
+
+            {Boolean(hintUsed || puzzle?.hintUsed) && (
+              <span
+                data-testid="hint-used-tag"
+                className="text-[10px] font-medium text-[#c29b78] bg-[#c29b78]/10 border border-[#c29b78]/25 px-1.5 py-0.5 rounded whitespace-nowrap shrink-0"
+              >
+                Hint • ½ Elo
+              </span>
+            )}
+
+            {isReviewMode && (
+              <span className="text-[10px] font-medium text-zinc-400 bg-zinc-500/10 border border-zinc-500/20 px-1.5 py-0.5 rounded whitespace-nowrap shrink-0">
+                Review
+              </span>
             )}
           </div>
 
-          <div className="flex items-center gap-1.5">
-            <span className="font-semibold tabular-nums text-[#c29b78]">
+          <div className="flex items-center gap-1 shrink-0">
+            <span className="text-xs font-mono font-bold text-[#c29b78] whitespace-nowrap shrink-0">
               {puzzle ? `${puzzle.rating} Elo` : "---"}
             </span>
-            {isRequeued && (
-              <span className="text-[11px] text-amber-400/70 font-mono select-none" title="Requeued puzzle earns reduced Elo on solve">
-                (½ Elo)
-              </span>
-            )}
           </div>
         </div>
       </div>
