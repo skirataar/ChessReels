@@ -8,23 +8,43 @@ export class HapticEngine {
 
   constructor() {
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('doomchess_haptics') ?? localStorage.getItem('chess_reel_haptics');
-      this.enabled = saved !== null ? (saved === 'true' || saved === '1') : true;
-      // Mount switch as soon as DOM is ready
-      if (document.readyState === 'complete' || document.readyState === 'interactive') {
-        this.mountIosSwitch();
-      } else {
-        window.addEventListener('DOMContentLoaded', () => this.mountIosSwitch(), { once: true });
+      const checkStored = () => {
+        const saved = localStorage.getItem('doomchess_haptics') ?? localStorage.getItem('chess_reel_haptics');
+        this.enabled = saved !== null ? (saved === 'true' || saved === '1') : true;
+      };
+      checkStored();
+
+      if (typeof window.addEventListener === 'function') {
+        window.addEventListener('doomchess-haptics-changed', checkStored);
+      }
+
+      // Mount fallback switch as soon as DOM is ready if needed
+      if (typeof document !== 'undefined') {
+        if (document.readyState === 'complete' || document.readyState === 'interactive') {
+          this.mountIosSwitch();
+        } else if (typeof window.addEventListener === 'function') {
+          window.addEventListener('DOMContentLoaded', () => this.mountIosSwitch(), { once: true });
+        }
       }
     }
   }
 
   public mountIosSwitch() {
-    if (typeof document === 'undefined' || this.iosLabel) return;
+    if (typeof document === 'undefined') return;
+
+    // Check if the root native switch exists first
+    const nativeSwitch = document.getElementById('doomchess-native-taptic-switch') as HTMLInputElement | null;
+    const nativeLabel = document.getElementById('doomchess-native-taptic-label') as HTMLLabelElement | null;
+    if (nativeSwitch && nativeLabel) {
+      this.iosInput = nativeSwitch;
+      this.iosLabel = nativeLabel;
+      return;
+    }
 
     const existing = document.getElementById('doomchess-taptic-label') as HTMLLabelElement | null;
     if (existing) {
       this.iosLabel = existing;
+      this.iosInput = document.getElementById('doomchess-taptic-input') as HTMLInputElement | null;
       return;
     }
 
@@ -62,6 +82,11 @@ export class HapticEngine {
     if (typeof window !== 'undefined') {
       localStorage.setItem('doomchess_haptics', String(val));
       localStorage.setItem('chess_reel_haptics', val ? '1' : '0');
+      if (typeof window.dispatchEvent === 'function') {
+        try {
+          window.dispatchEvent(new Event('doomchess-haptics-changed'));
+        } catch {}
+      }
     }
     if (val) this.trigger('button');
   }
@@ -90,7 +115,15 @@ export class HapticEngine {
         return;
       }
 
-      // 2. iOS Safari Synchronous Taptic Switch Trigger
+      // 2. iOS Safari Programmatic Trigger Fallback
+      if (typeof document !== 'undefined') {
+        const nativeLabel = document.getElementById('doomchess-native-taptic-label') as HTMLLabelElement | null;
+        if (nativeLabel) {
+          nativeLabel.click();
+          return;
+        }
+      }
+
       this.mountIosSwitch();
       if (this.iosLabel) {
         this.iosLabel.click();

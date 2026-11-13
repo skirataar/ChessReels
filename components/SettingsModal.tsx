@@ -24,6 +24,7 @@ import {
 import { BOARD_THEMES, BoardTheme, useBoardTheme } from "@/lib/boardThemes";
 import { sounds } from "@/lib/audio";
 import { haptics } from "@/lib/haptics";
+import { HapticButton } from "@/components/HapticButton";
 import { UserAvatar } from "@/components/UserAvatar";
 import { isGuestUserId } from "@/lib/guestAccount";
 import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/support";
@@ -615,9 +616,9 @@ export function SettingsModal({
                   </div>
                 </div>
 
-                <button
-                  type="button"
+                <HapticButton
                   onClick={handleToggleSound}
+                  aria-label="Toggle sound effects"
                   className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
                     isSfxEnabled ? "bg-[#c29b78]" : "bg-white/[0.1]"
                   }`}
@@ -627,7 +628,7 @@ export function SettingsModal({
                       isSfxEnabled ? "translate-x-5 bg-[#0a0908]" : "translate-x-0 bg-white"
                     }`}
                   />
-                </button>
+                </HapticButton>
               </div>
 
               {/* Haptic Vibration Switch */}
@@ -642,9 +643,10 @@ export function SettingsModal({
                   </div>
                 </div>
 
-                <button
-                  type="button"
+                <HapticButton
                   onClick={handleToggleHaptics}
+                  data-testid="settings-haptics-toggle"
+                  aria-label="Toggle haptic feedback"
                   className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
                     isHapticsEnabled ? "bg-[#c29b78]" : "bg-white/[0.1]"
                   }`}
@@ -654,7 +656,7 @@ export function SettingsModal({
                       isHapticsEnabled ? "translate-x-5 bg-[#0a0908]" : "translate-x-0 bg-white"
                     }`}
                   />
-                </button>
+                </HapticButton>
               </div>
             </div>
           </div>
@@ -680,8 +682,7 @@ export function SettingsModal({
                   <span className="text-[10px] text-[#78716c]">Automatically swipe to next puzzle after solve</span>
                 </div>
 
-                <button
-                  type="button"
+                <HapticButton
                   data-testid="settings-auto-advance-toggle"
                   aria-label="Toggle auto-advance after solving"
                   onClick={handleToggleAutoAdvance}
@@ -694,7 +695,7 @@ export function SettingsModal({
                       autoAdvance ? "translate-x-5 bg-[#0a0908]" : "translate-x-0 bg-white"
                     }`}
                   />
-                </button>
+                </HapticButton>
               </div>
 
               {/* Board Coordinates / Markings */}
@@ -704,9 +705,9 @@ export function SettingsModal({
                   <span className="text-[10px] text-[#78716c]">Display coordinates notation on rank & file (a-h, 1-8)</span>
                 </div>
 
-                <button
-                  type="button"
+                <HapticButton
                   data-testid="toggle-coordinates-btn"
+                  aria-label="Toggle board coordinates markings"
                   onClick={handleToggleCoordinates}
                   className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
                     showCoordinates ? "bg-[#c29b78]" : "bg-white/[0.1]"
@@ -717,7 +718,7 @@ export function SettingsModal({
                       showCoordinates ? "translate-x-5 bg-[#0a0908]" : "translate-x-0 bg-white"
                     }`}
                   />
-                </button>
+                </HapticButton>
               </div>
 
               {/* Animation Speed */}

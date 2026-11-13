@@ -31,6 +31,7 @@ import {
   Vibrate,
 } from "lucide-react";
 import { haptics, HapticPattern } from "@/lib/haptics";
+import { HapticButton } from "@/components/HapticButton";
 import {
   clearAllUserAndPuzzleCache,
   getStoredQueue,
@@ -156,7 +157,10 @@ export default function TempQAPage() {
       setIsHapticsEnabled(haptics.isEnabled());
       const isVibrateSupported = typeof navigator !== "undefined" && typeof navigator.vibrate === "function";
       const isIos = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-      const isSwitchMounted = Boolean(document.getElementById("doomchess-taptic-label"));
+      const isSwitchMounted = Boolean(
+        document.getElementById("doomchess-native-taptic-switch") ||
+        document.getElementById("doomchess-taptic-label")
+      );
       setDeviceInfo({ isVibrateSupported, isIos, isSwitchMounted });
     }
   }, [hasMounted]);
@@ -1005,8 +1009,7 @@ export default function TempQAPage() {
                   {deviceInfo.isIos ? "iOS Safari (Taptic Switch)" : deviceInfo.isVibrateSupported ? "Vibration API Supported" : "Standard Web"}
                 </span>
 
-                <button
-                  type="button"
+                <HapticButton
                   onClick={handleToggleHapticEnable}
                   className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                     isHapticsEnabled
@@ -1015,7 +1018,7 @@ export default function TempQAPage() {
                   }`}
                 >
                   {isHapticsEnabled ? "Haptics: ON" : "Haptics: OFF"}
-                </button>
+                </HapticButton>
               </div>
             </div>
 
@@ -1030,11 +1033,11 @@ export default function TempQAPage() {
                 { id: "solve", label: "Puzzle Solved", desc: "15-40-30ms win", pattern: "solve" as HapticPattern },
                 { id: "blunder", label: "Blunder / Mistake", desc: "45-50-60ms heavy", pattern: "blunder" as HapticPattern },
               ].map((item) => (
-                <button
+                <HapticButton
                   key={item.id}
-                  type="button"
+                  pattern={item.pattern}
                   onClick={() => handleTestHaptic(item.pattern)}
-                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer active:scale-95 ${
+                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer active:scale-95 block ${
                     lastTriggeredPattern === item.pattern
                       ? "bg-[#c29b78]/20 border-[#c29b78] text-white"
                       : "bg-[#181614] border-white/5 hover:border-white/15 text-zinc-200"
@@ -1042,7 +1045,7 @@ export default function TempQAPage() {
                 >
                   <div className="text-xs font-bold">{item.label}</div>
                   <div className="text-[10px] text-zinc-400 font-mono mt-0.5">{item.desc}</div>
-                </button>
+                </HapticButton>
               ))}
             </div>
 
