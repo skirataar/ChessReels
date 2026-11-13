@@ -28,7 +28,9 @@ import {
   ArrowLeft,
   Download,
   Upload,
+  Vibrate,
 } from "lucide-react";
+import { haptics, HapticPattern } from "@/lib/haptics";
 import {
   clearAllUserAndPuzzleCache,
   getStoredQueue,
@@ -136,6 +138,39 @@ export default function TempQAPage() {
   useEffect(() => {
     setHasMounted(true);
   }, []);
+
+  // -------------------------------------------------------------
+  // MODULE 0: Cross-Platform Haptics & Taptic Engine Tester
+  // -------------------------------------------------------------
+  const [isHapticsEnabled, setIsHapticsEnabled] = useState<boolean>(true);
+  const [lastTriggeredPattern, setLastTriggeredPattern] = useState<string | null>(null);
+  const [isPieceTouched, setIsPieceTouched] = useState<boolean>(false);
+  const [deviceInfo, setDeviceInfo] = useState<{ isVibrateSupported: boolean; isIos: boolean; isSwitchMounted: boolean }>({
+    isVibrateSupported: false,
+    isIos: false,
+    isSwitchMounted: false,
+  });
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setIsHapticsEnabled(haptics.isEnabled());
+      const isVibrateSupported = typeof navigator !== "undefined" && typeof navigator.vibrate === "function";
+      const isIos = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+      const isSwitchMounted = Boolean(document.getElementById("doomchess-taptic-label"));
+      setDeviceInfo({ isVibrateSupported, isIos, isSwitchMounted });
+    }
+  }, [hasMounted]);
+
+  const handleTestHaptic = (pattern: HapticPattern) => {
+    haptics.trigger(pattern);
+    setLastTriggeredPattern(pattern);
+  };
+
+  const handleToggleHapticEnable = () => {
+    const next = !isHapticsEnabled;
+    setIsHapticsEnabled(next);
+    haptics.setEnabled(next);
+  };
 
   // -------------------------------------------------------------
   // MODULE 1: Onboarding Summary Pill & Pro Upsell Simulator
@@ -936,11 +971,128 @@ export default function TempQAPage() {
         </div>
       </header>
 
-      {/* Main Grid: 7 Modular Sections */}
+      {/* Main Grid: 8 Modular Sections */}
       <main
         suppressHydrationWarning
         className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6 pb-20 w-full px-4 sm:px-6"
       >
+
+        {/* ------------------------------------------------------------- */}
+        {/* MODULE 0: Cross-Platform Haptics & Taptic Engine Tester */}
+        {/* ------------------------------------------------------------- */}
+        <section
+          data-testid="module-haptics-tester"
+          className="min-w-0 w-full p-5 sm:p-6 rounded-2xl bg-[#12100e] border border-white/10 flex flex-col justify-between overflow-hidden md:col-span-2"
+        >
+          <div>
+            <div className="flex flex-wrap items-center justify-between pb-3 border-b border-white/10 mb-4 gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-[#c29b78]/15 border border-[#c29b78]/30 flex items-center justify-center text-[#c29b78] font-bold text-xs">
+                  <Vibrate className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-white tracking-wide">
+                    Cross-Platform Haptics & Taptic Engine Tester
+                  </h2>
+                  <p className="text-[11px] text-zinc-400">
+                    Test hardware vibration (Android/Chromium) & Taptic Engine (iOS 17.4+ Safari)
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-[#c29b78] font-mono px-2 py-0.5 rounded-full bg-[#c29b78]/10 border border-[#c29b78]/25">
+                  {deviceInfo.isIos ? "iOS Safari (Taptic Switch)" : deviceInfo.isVibrateSupported ? "Vibration API Supported" : "Standard Web"}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={handleToggleHapticEnable}
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    isHapticsEnabled
+                      ? "bg-[#c29b78] text-[#0a0908]"
+                      : "bg-white/10 text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  {isHapticsEnabled ? "Haptics: ON" : "Haptics: OFF"}
+                </button>
+              </div>
+            </div>
+
+            {/* Pattern buttons grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-5">
+              {[
+                { id: "select", label: "Piece Select", desc: "6ms • Touch down", pattern: "select" as HapticPattern },
+                { id: "button", label: "Button Tap", desc: "8ms • UI clicks", pattern: "button" as HapticPattern },
+                { id: "move", label: "Piece Move", desc: "12ms • Drop piece", pattern: "move" as HapticPattern },
+                { id: "capture", label: "Capture", desc: "18-25-22ms pulse", pattern: "capture" as HapticPattern },
+                { id: "check", label: "Check", desc: "25-30-35ms alert", pattern: "check" as HapticPattern },
+                { id: "solve", label: "Puzzle Solved", desc: "15-40-30ms win", pattern: "solve" as HapticPattern },
+                { id: "blunder", label: "Blunder / Mistake", desc: "45-50-60ms heavy", pattern: "blunder" as HapticPattern },
+              ].map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => handleTestHaptic(item.pattern)}
+                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer active:scale-95 ${
+                    lastTriggeredPattern === item.pattern
+                      ? "bg-[#c29b78]/20 border-[#c29b78] text-white"
+                      : "bg-[#181614] border-white/5 hover:border-white/15 text-zinc-200"
+                  }`}
+                >
+                  <div className="text-xs font-bold">{item.label}</div>
+                  <div className="text-[10px] text-zinc-400 font-mono mt-0.5">{item.desc}</div>
+                </button>
+              ))}
+            </div>
+
+            {/* Interactive Piece Drag & Drop Pad */}
+            <div className="p-4 rounded-xl bg-[#161412] border border-white/5 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div>
+                <div className="text-xs font-bold text-white">Interactive Piece Gesture Pad</div>
+                <div className="text-[11px] text-zinc-400 mt-0.5">
+                  Touch down to trigger <span className="text-[#c29b78] font-mono">select</span>, release to trigger <span className="text-[#c29b78] font-mono">move</span>
+                </div>
+              </div>
+
+              <div
+                onPointerDown={() => {
+                  setIsPieceTouched(true);
+                  handleTestHaptic("select");
+                }}
+                onPointerUp={() => {
+                  setIsPieceTouched(false);
+                  handleTestHaptic("move");
+                }}
+                onPointerCancel={() => setIsPieceTouched(false)}
+                className={`w-44 h-14 rounded-xl flex items-center justify-center text-xs font-bold select-none cursor-pointer transition-all border ${
+                  isPieceTouched
+                    ? "bg-[#c29b78] text-[#0a0908] border-[#c29b78] scale-95 shadow-[0_0_15px_rgba(194,155,120,0.5)]"
+                    : "bg-[#201e1a] text-[#c29b78] border-[#c29b78]/30 hover:border-[#c29b78]/60"
+                }`}
+              >
+                {isPieceTouched ? "Released = Move" : "Touch & Hold Piece"}
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-4 mt-4 border-t border-white/5 flex flex-wrap items-center justify-between gap-3 text-xs text-zinc-400">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Status: {lastTriggeredPattern ? `Last played "${lastTriggeredPattern}"` : "Ready to test"}</span>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <Link
+                href="/play"
+                className="text-[#c29b78] hover:underline font-semibold flex items-center gap-1"
+              >
+                <span>Live Chessboard</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+          </div>
+        </section>
 
         {/* ------------------------------------------------------------- */}
         {/* MODULE 1: Onboarding Summary Pill & Pro Upsell Simulator */}
