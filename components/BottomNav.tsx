@@ -180,67 +180,72 @@ export function BottomNav() {
                   isActive ? "text-[#c29b78]" : "text-zinc-500 hover:text-zinc-300"
                 }`}
               >
-                {isActive && (
-                  <span className="absolute top-0 w-6 h-[2px] rounded-full bg-[#c29b78] shadow-[0_0_8px_rgba(194,155,120,0.6)]" />
-                )}
+                <label
+                  htmlFor="doomchess-native-taptic-switch"
+                  className="w-full h-full flex flex-col items-center justify-center gap-1 cursor-pointer"
+                >
+                  {isActive && (
+                    <span className="absolute top-0 w-6 h-[2px] rounded-full bg-[#c29b78] shadow-[0_0_8px_rgba(194,155,120,0.6)]" />
+                  )}
 
-                <div className="relative flex items-center justify-center">
-                  {isProfile ? (
-                    userImage && !avatarError ? (
-                      <img
-                        src={userImage}
-                        alt="Profile"
-                        data-testid="bottom-nav-profile-avatar"
-                        onError={() => setAvatarError(true)}
-                        className={`w-5 h-5 rounded-full object-cover transition-all ${
-                          isPro
-                            ? "ring-1.5 ring-[#c29b78] shadow-[0_0_6px_rgba(194,155,120,0.35)]"
-                            : isActive
-                            ? "ring-1.5 ring-[#c29b78]"
-                            : "ring-1 ring-white/20"
+                  <div className="relative flex items-center justify-center">
+                    {isProfile ? (
+                      userImage && !avatarError ? (
+                        <img
+                          src={userImage}
+                          alt="Profile"
+                          data-testid="bottom-nav-profile-avatar"
+                          onError={() => setAvatarError(true)}
+                          className={`w-5 h-5 rounded-full object-cover transition-all ${
+                            isPro
+                              ? "ring-1.5 ring-[#c29b78] shadow-[0_0_6px_rgba(194,155,120,0.35)]"
+                              : isActive
+                              ? "ring-1.5 ring-[#c29b78]"
+                              : "ring-1 ring-white/20"
+                          }`}
+                        />
+                      ) : (
+                        <div
+                          data-testid="bottom-nav-profile-avatar"
+                          className={`w-5 h-5 rounded-full flex items-center justify-center transition-all ${
+                            isPro
+                              ? "ring-1.5 ring-[#c29b78] text-[#c29b78] shadow-[0_0_6px_rgba(194,155,120,0.35)]"
+                              : isActive
+                              ? "ring-1.5 ring-[#c29b78] text-[#c29b78]"
+                              : "ring-1 ring-white/20 text-zinc-500 group-hover:text-zinc-300"
+                          }`}
+                        >
+                          <User className="w-3.5 h-3.5" strokeWidth={1.75} />
+                        </div>
+                      )
+                    ) : (
+                      <Icon
+                        className={`w-4 h-4 transition-transform duration-200 ${
+                          isActive
+                            ? "stroke-[2.2] text-[#c29b78]"
+                            : "stroke-[1.8] text-zinc-500 group-hover:text-zinc-300"
                         }`}
                       />
-                    ) : (
-                      <div
-                        data-testid="bottom-nav-profile-avatar"
-                        className={`w-5 h-5 rounded-full flex items-center justify-center transition-all ${
-                          isPro
-                            ? "ring-1.5 ring-[#c29b78] text-[#c29b78] shadow-[0_0_6px_rgba(194,155,120,0.35)]"
-                            : isActive
-                            ? "ring-1.5 ring-[#c29b78] text-[#c29b78]"
-                            : "ring-1 ring-white/20 text-zinc-500 group-hover:text-zinc-300"
-                        }`}
+                    )}
+                    {hasMounted && item.href === "/practice" && !isPro && (
+                      <span
+                        data-testid="bottom-nav-practice-lock"
+                        className="absolute -top-1.5 -right-5 px-1 py-[1px] text-[8px] font-bold tracking-widest uppercase rounded bg-[#c29b78]/15 text-[#c29b78] border border-[#c29b78]/30"
+                        title="Pro only"
                       >
-                        <User className="w-3.5 h-3.5" strokeWidth={1.75} />
-                      </div>
-                    )
-                  ) : (
-                    <Icon
-                      className={`w-4 h-4 transition-transform duration-200 ${
-                        isActive
-                          ? "stroke-[2.2] text-[#c29b78]"
-                          : "stroke-[1.8] text-zinc-500 group-hover:text-zinc-300"
-                      }`}
-                    />
-                  )}
-                  {hasMounted && item.href === "/practice" && !isPro && (
-                    <span
-                      data-testid="bottom-nav-practice-lock"
-                      className="absolute -top-1.5 -right-5 px-1 py-[1px] text-[8px] font-bold tracking-widest uppercase rounded bg-[#c29b78]/15 text-[#c29b78] border border-[#c29b78]/30"
-                      title="Pro only"
-                    >
-                      PRO
-                    </span>
-                  )}
-                </div>
+                        PRO
+                      </span>
+                    )}
+                  </div>
 
-                <span
-                  className={`text-[10px] tracking-wider uppercase transition-colors ${
-                    isActive ? "font-semibold text-[#c29b78]" : "font-medium text-zinc-500 group-hover:text-zinc-300"
-                  }`}
-                >
-                  {item.name}
-                </span>
+                  <span
+                    className={`text-[10px] tracking-wider uppercase transition-colors ${
+                      isActive ? "font-semibold text-[#c29b78]" : "font-medium text-zinc-500 group-hover:text-zinc-300"
+                    }`}
+                  >
+                    {item.name}
+                  </span>
+                </label>
               </Link>
             );
           })}

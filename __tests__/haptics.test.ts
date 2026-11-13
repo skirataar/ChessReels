@@ -51,7 +51,11 @@ describe("Cross-Platform Haptic Engine", () => {
       },
     };
 
-    (globalThis as any).window = globalThis;
+    (globalThis as any).window = {
+      ...globalThis,
+      addEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    };
     (globalThis as any).document = mockDocument;
     (globalThis as any).localStorage = mockStorage;
     Object.defineProperty(globalThis, "navigator", {
@@ -93,6 +97,17 @@ describe("Cross-Platform Haptic Engine", () => {
     expect(engine.isEnabled()).toBe(true);
     expect(storageMap["doomchess_haptics"]).toBe("true");
     expect(storageMap["chess_reel_haptics"]).toBe("1");
+  });
+
+  it("dispatches doomchess-haptics-changed event when setEnabled is toggled", async () => {
+    const dispatchSpy = vi.fn();
+    (globalThis as any).window.dispatchEvent = dispatchSpy;
+
+    const { HapticEngine } = await import("../lib/haptics");
+    const engine = new HapticEngine();
+    engine.setEnabled(false);
+
+    expect(dispatchSpy).toHaveBeenCalledWith(expect.objectContaining({ type: "doomchess-haptics-changed" }));
   });
 
   it("triggers correct vibration patterns on Android / supported browsers", async () => {

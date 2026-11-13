@@ -36,6 +36,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 
 import { Chessboard, defaultArrowOptions } from "react-chessboard";
+import { HapticButton } from "@/components/HapticButton";
 import { useBoardTheme } from "@/lib/boardThemes";
 import { isGuestUserId } from "@/lib/guestAccount";
 import { formatTitle } from "@/lib/formatTitle";
@@ -2683,6 +2684,13 @@ export function PuzzleCard({
             isShaking ? "animate-board-shake" : ""
           }`}
         >
+          {/* iOS Safari Native Taptic Relay */}
+          <label
+            htmlFor="doomchess-native-taptic-switch"
+            id="board-taptic-relay"
+            className="hidden"
+            aria-hidden="true"
+          />
           {displayFen ? (
             <Chessboard
               customBoardStyle={{ borderRadius: "0px" }}
@@ -2702,6 +2710,13 @@ export function PuzzleCard({
                 ...({ isDraggablePiece } as any),
                 onPieceClick: (args) => {
                   setTouchArrows([]);
+                  try {
+                    if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+                      navigator.vibrate(6);
+                    } else {
+                      document.getElementById('board-taptic-relay')?.click();
+                    }
+                  } catch {}
                   handlePieceClick(args);
                 },
                 onPieceDrag: (args) => {
@@ -2727,6 +2742,13 @@ export function PuzzleCard({
                 },
                 onSquareClick: (args) => {
                   setTouchArrows([]);
+                  try {
+                    if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+                      navigator.vibrate(12);
+                    } else {
+                      document.getElementById('board-taptic-relay')?.click();
+                    }
+                  } catch {}
                   handleSquareClick(args);
                 },
                 squareStyles: customSquareStyles,
@@ -3055,7 +3077,7 @@ export function PuzzleCard({
           {/* Left: Engagement (Like, Bookmark, Share) */}
           <div className="flex items-center gap-5">
             {/* Animated Like Button */}
-            <button
+            <HapticButton
               onClick={handleToggleLike}
               data-testid="like-btn"
               aria-label="Like puzzle"
@@ -3076,10 +3098,10 @@ export function PuzzleCard({
               <span data-testid="like-count" className="text-[15px] font-medium tabular-nums text-[#f5f2eb]">
                 {formatLikes(likesCount)}
               </span>
-            </button>
+            </HapticButton>
 
             {/* Save / Bookmark Button */}
-            <button
+            <HapticButton
               onClick={handleToggleBookmark}
               data-testid="bookmark-btn"
               aria-label="Save puzzle pattern"
@@ -3092,10 +3114,10 @@ export function PuzzleCard({
                   isBookmarked ? "fill-[#c29b78] text-[#c29b78]" : ""
                 }`}
               />
-            </button>
+            </HapticButton>
 
             {/* Share Button */}
-            <button
+            <HapticButton
               onClick={handleShare}
               data-testid="share-puzzle-btn"
               aria-label="Share puzzle card"
@@ -3103,13 +3125,13 @@ export function PuzzleCard({
               className="p-2 -m-2 text-[#78716c] hover:text-[#f5f2eb] cursor-pointer transition-all active:scale-90"
             >
               <Share2 strokeWidth={1.75} className="w-[22px] h-[22px]" />
-            </button>
+            </HapticButton>
           </div>
 
           {/* Right: Tactical Solver Controls & Navigation (Reset, Glowing Hint, Prev, Next) */}
           <div className="flex items-center gap-5">
             {/* Reset Button */}
-            <button
+            <HapticButton
               onClick={() => handleRetry(true)}
               data-testid="reset-puzzle-btn"
               aria-label="Reset puzzle"
@@ -3117,10 +3139,10 @@ export function PuzzleCard({
               className="p-2 -m-2 text-[#78716c] hover:text-[#f5f2eb] cursor-pointer active:scale-90 transition-all"
             >
               <RotateCcw strokeWidth={1.75} className="w-[22px] h-[22px]" />
-            </button>
+            </HapticButton>
 
             {/* Hint Button */}
-            <button
+            <HapticButton
               onClick={handleTriggerHint}
               disabled={
                 (status !== "playing" && status !== "failed") ||
@@ -3165,10 +3187,10 @@ export function PuzzleCard({
                   {hintsUsedThisPuzzle >= 1 ? "1/1" : "0/1"}
                 </span>
               )}
-            </button>
+            </HapticButton>
 
             {/* Previous Move Button (<) */}
-            <button
+            <HapticButton
               onClick={handleStepBack}
               data-testid="prev-puzzle-btn"
               aria-label="Previous move"
@@ -3181,10 +3203,10 @@ export function PuzzleCard({
               }`}
             >
               <ChevronLeft strokeWidth={1.75} className="w-[22px] h-[22px]" />
-            </button>
+            </HapticButton>
 
             {/* Next Move Button (>) */}
-            <button
+            <HapticButton
               onClick={handleStepForward}
               data-testid="next-puzzle-btn"
               aria-label="Next move"
@@ -3197,7 +3219,7 @@ export function PuzzleCard({
               }`}
             >
               <ChevronRight strokeWidth={1.75} className="w-[22px] h-[22px]" />
-            </button>
+            </HapticButton>
           </div>
         </div>
 
