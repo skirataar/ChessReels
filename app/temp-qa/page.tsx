@@ -158,7 +158,7 @@ export default function TempQAPage() {
       const isVibrateSupported = typeof navigator !== "undefined" && typeof navigator.vibrate === "function";
       const isIos = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
       const isSwitchMounted = Boolean(
-        document.getElementById("doomchess-native-taptic-switch") ||
+        document.getElementById("doomchess-taptic-switch") ||
         document.getElementById("doomchess-taptic-label")
       );
       setDeviceInfo({ isVibrateSupported, isIos, isSwitchMounted });

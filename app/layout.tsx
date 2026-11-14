@@ -72,7 +72,7 @@ import { PageTransition } from "@/components/PageTransition";
 import { PWAUpdater } from "@/components/PWAUpdater";
 import { IosInstallPrompt } from "@/components/IosInstallPrompt";
 import { PostHogIdentity } from "@/components/PostHogProvider";
-import { IosTapticRoot } from "@/components/IosTapticRoot";
+import { IosTapticEngine } from "@/components/IosTapticEngine";
 
 export const viewport: Viewport = {
   themeColor: "#0f0e0d",
@@ -117,7 +117,7 @@ export default function RootLayout({
         )}
       </head>
       <body suppressHydrationWarning className="min-h-full flex flex-col bg-[#151413] text-[#f5f5f5] select-none overscroll-none pb-20">
-        <IosTapticRoot />
+        <IosTapticEngine />
         <PostHogIdentity />
         <PWAUpdater />
         <PageTransition>{children}</PageTransition>

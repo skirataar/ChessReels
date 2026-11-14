@@ -47,19 +47,18 @@ export const HapticButton = React.forwardRef<HTMLButtonElement, HapticButtonProp
           haptics.trigger(pattern);
           onClick?.(e);
         }}
-        className={`relative inline-flex items-center justify-center select-none ${
+        className={`inline-flex items-center justify-center select-none ${
           disabled ? 'pointer-events-none opacity-40 cursor-not-allowed' : 'cursor-pointer'
         } ${className}`}
         {...props}
       >
-        {!disabled && (
-          <label
-            htmlFor="doomchess-native-taptic-switch"
-            className="absolute inset-0 cursor-pointer z-10"
-            aria-hidden="true"
-          />
+        {disabled ? (
+          children
+        ) : (
+          <label htmlFor="doomchess-taptic-switch" className="contents cursor-pointer">
+            {children}
+          </label>
         )}
-        {children}
       </button>
     );
   }

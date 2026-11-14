@@ -2686,7 +2686,7 @@ export function PuzzleCard({
         >
           {/* iOS Safari Native Taptic Relay */}
           <label
-            htmlFor="doomchess-native-taptic-switch"
+            htmlFor="doomchess-taptic-switch"
             id="board-taptic-relay"
             className="hidden"
             aria-hidden="true"
@@ -2933,20 +2933,17 @@ export function PuzzleCard({
                       }
                       onNextPuzzle();
                     }}
-                    className="relative w-full h-11 bg-[#c29b78] hover:bg-[#d4b08f] text-[#12100e] font-semibold rounded-xl shadow-lg shadow-[#c29b78]/20 flex items-center justify-center gap-2 transition-transform active:scale-95 cursor-pointer text-sm"
+                    className="w-full h-11 bg-[#c29b78] hover:bg-[#d4b08f] text-[#12100e] font-semibold rounded-xl shadow-lg shadow-[#c29b78]/20 flex items-center justify-center gap-2 transition-transform active:scale-95 cursor-pointer text-sm"
                   >
-                    <label
-                      htmlFor="doomchess-native-taptic-switch"
-                      className="absolute inset-0 cursor-pointer z-10"
-                      aria-hidden="true"
-                    />
-                    <span>Next Puzzle</span>
-                    {autoNextCountdown !== null && (
-                      <span className="text-xs bg-[#12100e]/20 px-2 py-0.5 rounded-full font-mono">
-                        {autoNextCountdown}s
-                      </span>
-                    )}
-                    <ArrowRight className="w-4 h-4 stroke-[2]" />
+                    <label htmlFor="doomchess-taptic-switch" className="contents cursor-pointer">
+                      <span>Next Puzzle</span>
+                      {autoNextCountdown !== null && (
+                        <span className="text-xs bg-[#12100e]/20 px-2 py-0.5 rounded-full font-mono">
+                          {autoNextCountdown}s
+                        </span>
+                      )}
+                      <ArrowRight className="w-4 h-4 stroke-[2]" />
+                    </label>
                   </button>
 
                   <button
@@ -2960,15 +2957,12 @@ export function PuzzleCard({
                       }
                       setAutoNextCountdown(null);
                     }}
-                    className="relative w-full h-9 text-xs text-[#78716c] hover:text-[#f5f2eb] hover:bg-white/[0.04] flex items-center justify-center gap-1.5 rounded-lg cursor-pointer transition-colors"
+                    className="w-full h-9 text-xs text-[#78716c] hover:text-[#f5f2eb] hover:bg-white/[0.04] flex items-center justify-center gap-1.5 rounded-lg cursor-pointer transition-colors"
                   >
-                    <label
-                      htmlFor="doomchess-native-taptic-switch"
-                      className="absolute inset-0 cursor-pointer z-10"
-                      aria-hidden="true"
-                    />
-                    <Eye className="w-3.5 h-3.5" />
-                    <span>Review Board</span>
+                    <label htmlFor="doomchess-taptic-switch" className="contents cursor-pointer">
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>Review Board</span>
+                    </label>
                   </button>
                 </div>
               </motion.div>

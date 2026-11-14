@@ -180,12 +180,7 @@ export function BottomNav() {
                   isActive ? "text-[#c29b78]" : "text-zinc-500 hover:text-zinc-300"
                 }`}
               >
-                <label
-                  htmlFor="doomchess-native-taptic-switch"
-                  className="absolute inset-0 cursor-pointer z-10"
-                  aria-hidden="true"
-                />
-                <div className="w-full h-full flex flex-col items-center justify-center gap-1">
+                <label htmlFor="doomchess-taptic-switch" className="contents cursor-pointer">
                   {isActive && (
                     <span className="absolute top-0 w-6 h-[2px] rounded-full bg-[#c29b78] shadow-[0_0_8px_rgba(194,155,120,0.6)]" />
                   )}
@@ -247,7 +242,7 @@ export function BottomNav() {
                   >
                     {item.name}
                   </span>
-                </div>
+                </label>
               </Link>
             );
           })}

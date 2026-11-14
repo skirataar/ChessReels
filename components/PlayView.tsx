@@ -2568,18 +2568,15 @@ export function PlayView({
               className="w-7 h-7 rounded-full hover:bg-[#22201e] flex items-center justify-center text-[#a3a3a3] hover:text-[#c29b78] transition-colors cursor-pointer relative"
               title="Global Standings & Friends"
             >
-              <label
-                htmlFor="doomchess-native-taptic-switch"
-                className="absolute inset-0 cursor-pointer z-10"
-                aria-hidden="true"
-              />
-              <Trophy className="w-3.5 h-3.5" />
-              {isHydrated && incomingFriendRequestsCount > 0 && (
-                <span
-                  data-testid="header-friend-requests-dot"
-                  className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-[#c29b78] shadow-[0_0_6px_rgba(194,155,120,0.8)]"
-                />
-              )}
+              <label htmlFor="doomchess-taptic-switch" className="contents cursor-pointer">
+                <Trophy className="w-3.5 h-3.5" />
+                {isHydrated && incomingFriendRequestsCount > 0 && (
+                  <span
+                    data-testid="header-friend-requests-dot"
+                    className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-[#c29b78] shadow-[0_0_6px_rgba(194,155,120,0.8)]"
+                  />
+                )}
+              </label>
             </button>
           </div>
         </div>
@@ -2718,21 +2715,18 @@ export function PlayView({
                 type="button"
                 data-testid="hud-watch-ad-btn"
                 onClick={() => setIsRewardedAdOpen(true)}
-                className="relative h-7 px-2.5 rounded-md bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.97] border border-white/[0.1] text-zinc-200 text-[11px] font-medium flex items-center gap-1 transition-all cursor-pointer"
+                className="h-7 px-2.5 rounded-md bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.97] border border-white/[0.1] text-zinc-200 text-[11px] font-medium flex items-center gap-1 transition-all cursor-pointer"
               >
-                <label
-                  htmlFor="doomchess-native-taptic-switch"
-                  className="absolute inset-0 cursor-pointer z-10"
-                  aria-hidden="true"
-                />
-                <svg
-                  viewBox="0 0 24 24"
-                  className="w-2.5 h-2.5 fill-[#c29b78] stroke-none shrink-0"
-                  aria-hidden="true"
-                >
-                  <polygon points="6 3 20 12 6 21 6 3" />
-                </svg>
-                <span>+3 Free</span>
+                <label htmlFor="doomchess-taptic-switch" className="contents cursor-pointer">
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="w-2.5 h-2.5 fill-[#c29b78] stroke-none shrink-0"
+                    aria-hidden="true"
+                  >
+                    <polygon points="6 3 20 12 6 21 6 3" />
+                  </svg>
+                  <span>+3 Free</span>
+                </label>
               </button>
 
               <button
@@ -2742,13 +2736,9 @@ export function PlayView({
                   setPaywallReason("quota");
                   setIsQuotaModalOpen(true);
                 }}
-                className="relative h-7 px-2.5 rounded-md bg-[#c29b78] hover:bg-[#d1ab88] active:scale-[0.97] text-[#0a0908] text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer"
+                className="h-7 px-2.5 rounded-md bg-[#c29b78] hover:bg-[#d1ab88] active:scale-[0.97] text-[#0a0908] text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer"
               >
-                <label
-                  htmlFor="doomchess-native-taptic-switch"
-                  className="absolute inset-0 cursor-pointer z-10"
-                  aria-hidden="true"
-                />
+                <label htmlFor="doomchess-taptic-switch" className="contents cursor-pointer">
                 <svg
                   viewBox="0 0 24 24"
                   className="w-3 h-3 stroke-[#0a0908] stroke-[2.2] fill-none shrink-0"
@@ -2759,7 +2749,8 @@ export function PlayView({
                   <path d="M18.178 8c5.096 0 5.096 8 0 8-5.095 0-7.133-8-12.739-8-4.585 0-4.585 8 0 8 5.606 0 7.644-8 12.74-8z" />
                 </svg>
                 <span>PRO</span>
-              </button>
+              </label>
+            </button>
             </div>
           </div>
         </aside>
