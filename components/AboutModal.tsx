@@ -42,7 +42,7 @@ export function AboutModal({
         <div className="p-4 border-b border-white/[0.08] flex items-center justify-between shrink-0 bg-[#0f0e0d]">
           <div className="flex items-center gap-2.5">
             <img
-              src="/icons/icon.svg"
+              src="/icons/icon-v2.svg?v=2"
               alt=""
               aria-hidden="true"
               className="w-7 h-7 rounded-md object-contain"

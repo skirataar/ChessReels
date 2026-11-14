@@ -182,8 +182,10 @@ export function BottomNav() {
               >
                 <label
                   htmlFor="doomchess-native-taptic-switch"
-                  className="w-full h-full flex flex-col items-center justify-center gap-1 cursor-pointer"
-                >
+                  className="absolute inset-0 cursor-pointer z-10"
+                  aria-hidden="true"
+                />
+                <div className="w-full h-full flex flex-col items-center justify-center gap-1">
                   {isActive && (
                     <span className="absolute top-0 w-6 h-[2px] rounded-full bg-[#c29b78] shadow-[0_0_8px_rgba(194,155,120,0.6)]" />
                   )}
@@ -245,7 +247,7 @@ export function BottomNav() {
                   >
                     {item.name}
                   </span>
-                </label>
+                </div>
               </Link>
             );
           })}

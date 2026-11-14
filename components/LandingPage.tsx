@@ -37,7 +37,7 @@ export function LandingPage({
       <header className="w-full max-w-md mx-auto flex items-center justify-between z-20 mb-4 sm:mb-6">
         <div className="flex items-center gap-2">
           <img
-            src="/icons/icon.svg"
+            src="/icons/icon-v2.svg?v=2"
             alt="DoomChess"
             className="h-9 w-9 rounded-xl object-contain shadow-lg shadow-amber-500/20"
           />

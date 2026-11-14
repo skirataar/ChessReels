@@ -2320,7 +2320,7 @@ export function PlayView({
           {/* Brand Logo & Title */}
           <div className="flex items-center gap-2 shrink-0">
             <img
-              src="/icons/icon.svg"
+              src="/icons/icon-v2.svg?v=2"
               alt=""
               aria-hidden="true"
               className="h-7 w-7 rounded-md object-contain"
@@ -2568,6 +2568,11 @@ export function PlayView({
               className="w-7 h-7 rounded-full hover:bg-[#22201e] flex items-center justify-center text-[#a3a3a3] hover:text-[#c29b78] transition-colors cursor-pointer relative"
               title="Global Standings & Friends"
             >
+              <label
+                htmlFor="doomchess-native-taptic-switch"
+                className="absolute inset-0 cursor-pointer z-10"
+                aria-hidden="true"
+              />
               <Trophy className="w-3.5 h-3.5" />
               {isHydrated && incomingFriendRequestsCount > 0 && (
                 <span
@@ -2713,8 +2718,13 @@ export function PlayView({
                 type="button"
                 data-testid="hud-watch-ad-btn"
                 onClick={() => setIsRewardedAdOpen(true)}
-                className="h-7 px-2.5 rounded-md bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.97] border border-white/[0.1] text-zinc-200 text-[11px] font-medium flex items-center gap-1 transition-all cursor-pointer"
+                className="relative h-7 px-2.5 rounded-md bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.97] border border-white/[0.1] text-zinc-200 text-[11px] font-medium flex items-center gap-1 transition-all cursor-pointer"
               >
+                <label
+                  htmlFor="doomchess-native-taptic-switch"
+                  className="absolute inset-0 cursor-pointer z-10"
+                  aria-hidden="true"
+                />
                 <svg
                   viewBox="0 0 24 24"
                   className="w-2.5 h-2.5 fill-[#c29b78] stroke-none shrink-0"
@@ -2732,8 +2742,13 @@ export function PlayView({
                   setPaywallReason("quota");
                   setIsQuotaModalOpen(true);
                 }}
-                className="h-7 px-2.5 rounded-md bg-[#c29b78] hover:bg-[#d1ab88] active:scale-[0.97] text-[#0a0908] text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer"
+                className="relative h-7 px-2.5 rounded-md bg-[#c29b78] hover:bg-[#d1ab88] active:scale-[0.97] text-[#0a0908] text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer"
               >
+                <label
+                  htmlFor="doomchess-native-taptic-switch"
+                  className="absolute inset-0 cursor-pointer z-10"
+                  aria-hidden="true"
+                />
                 <svg
                   viewBox="0 0 24 24"
                   className="w-3 h-3 stroke-[#0a0908] stroke-[2.2] fill-none shrink-0"

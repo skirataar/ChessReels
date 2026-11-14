@@ -15,8 +15,6 @@ export function IosTapticRoot() {
     return () => window.removeEventListener('doomchess-haptics-changed', check);
   }, []);
 
-  if (!enabled) return null;
-
   return (
     <div
       aria-hidden="true"
@@ -37,6 +35,7 @@ export function IosTapticRoot() {
         id="doomchess-native-taptic-switch"
         // @ts-expect-error iOS Safari native switch attribute
         switch=""
+        disabled={!enabled}
         tabIndex={-1}
       />
       <label
@@ -47,4 +46,3 @@ export function IosTapticRoot() {
     </div>
   );
 }
-

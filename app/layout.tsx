@@ -24,7 +24,7 @@ export const metadata: Metadata = {
   title: "Doomchess | Tactical Chess Puzzles & Endless Training",
   description: "Turn doomscrolling into tactical chess mastery. Solve bite-sized chess puzzles, track your ELO, and master opening repertoires.",
   metadataBase: new URL("https://doomchess.online"),
-  manifest: "/manifest.json",
+  manifest: "/manifest.json?v=2",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
@@ -32,12 +32,13 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: '/favicon-v2.ico?v=2' },
+      { url: '/icon-v2.png?v=2', type: 'image/png' },
     ],
-    shortcut: ["/icon.svg"],
     apple: [
-      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: '/apple-touch-icon-v2.png?v=2' },
     ],
+    shortcut: ['/favicon-v2.ico?v=2'],
   },
   openGraph: {
     title: "Doomchess | Tactical Chess Puzzles & Endless Training",
@@ -46,7 +47,7 @@ export const metadata: Metadata = {
     siteName: "Doomchess",
     images: [
       {
-        url: "/icon.svg",
+        url: "/icon-v2.png?v=2",
         width: 800,
         height: 800,
         alt: "Doomchess Logo",
@@ -59,7 +60,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Doomchess | Tactical Chess Puzzles",
     description: "Turn doomscrolling into tactical chess mastery.",
-    images: ["/icon.svg"],
+    images: ["/icon-v2.png?v=2"],
   },
   other: {
     "google-adsense-account": "ca-pub-8026676969982075",

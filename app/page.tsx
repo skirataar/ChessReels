@@ -1024,7 +1024,7 @@ export default function RootPage() {
           {/* Header Wordmark */}
           <div className="text-center shrink-0 pt-2">
             <img
-              src="/icons/icon.svg"
+              src="/icons/icon-v2.svg?v=2"
               alt="DoomChess"
               className="mx-auto mb-2 h-8 w-8 rounded-lg object-contain"
             />
