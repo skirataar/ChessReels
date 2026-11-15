@@ -536,6 +536,7 @@ export function PlayView({
   const [puzzleStatus, setPuzzleStatus] = useState<PuzzleStatus>("loading");
   const [streak, setStreak] = useState<number>(0);
   const [activeTab, setActiveTab] = useState<"reels" | "rank" | "profile">("reels");
+  const [profileInitialOpenSettings, setProfileInitialOpenSettings] = useState<boolean>(false);
 
   // Account, Friends & Placement Calibration States
   const [userAccount, setUserAccount] = useState<UserAccount | null>(() =>
@@ -758,7 +759,9 @@ export function PlayView({
       setAuthModalGoogle(false);
       setIsAuthModalOpen(true);
     };
-    const handleOpenProfile = () => {
+    const handleOpenProfile = (e?: Event) => {
+      const detail = (e as CustomEvent<{ openSettings?: boolean }>)?.detail;
+      setProfileInitialOpenSettings(Boolean(detail?.openSettings));
       setActiveTab("profile");
     };
     const handleTestStatus = (e: Event) => {
@@ -2760,7 +2763,7 @@ export function PlayView({
       {isHydrated && !userAccount && activeTab === "reels" && (
         <aside
           role="status"
-          aria-label={isGuestCalibrating ? `Placement Test • Puzzle ${currentCalibrationStep} of 6` : "Guest Mode"}
+          aria-label={isGuestCalibrating ? `Placement Test | Puzzle ${currentCalibrationStep} of 6` : "Guest Mode"}
           data-testid="guest-mode-hud"
           data-placement-hud="true"
           className="fixed bottom-[calc(env(safe-area-inset-bottom)+1.25rem)] left-1/2 -translate-x-1/2 z-30 w-[calc(100%-1.5rem)] max-w-[440px] animate-in fade-in slide-in-from-bottom-2 duration-200 pointer-events-auto"
@@ -2773,15 +2776,17 @@ export function PlayView({
                 {isGuestCalibrating ? (
                   <>
                     <span>PLACEMENT TEST</span>
-                    <span className="text-[#c29b78] font-mono font-semibold ml-1">
-                      • PUZZLE {currentCalibrationStep} OF 6
+                    <span className="inline-block w-1 h-1 rounded-full bg-[#c29b78] mx-1 align-middle" />
+                    <span className="text-[#c29b78] font-mono font-semibold">
+                      PUZZLE {currentCalibrationStep} OF 6
                     </span>
                   </>
                 ) : (
                   <>
                     <span>GUEST MODE</span>
-                    <span className="text-zinc-400 font-normal ml-1 hidden xs:inline">
-                      • Rating Calibrated
+                    <span className="inline-block w-1 h-1 rounded-full bg-zinc-500 mx-1 align-middle hidden xs:inline" />
+                    <span className="text-zinc-400 font-normal hidden xs:inline">
+                      Rating Calibrated
                     </span>
                   </>
                 )}
@@ -2835,7 +2840,7 @@ export function PlayView({
       {isHydrated && isUserCalibrating && activeTab === "reels" && (
         <aside
           role="status"
-          aria-label={`Placement Test • Puzzle ${currentCalibrationStep} of 6`}
+          aria-label={`Placement Test | Puzzle ${currentCalibrationStep} of 6`}
           data-testid="user-placement-test-hud"
           className="fixed bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] md:bottom-24 left-1/2 -translate-x-1/2 z-30 w-[calc(100%-1.5rem)] max-w-[440px] animate-in fade-in slide-in-from-bottom-2 duration-200 pointer-events-auto"
         >
@@ -2844,8 +2849,9 @@ export function PlayView({
               <Trophy className="w-3 h-3 stroke-current text-[#c29b78] shrink-0" aria-hidden="true" />
               <span className="text-[10px] font-bold text-zinc-100 uppercase tracking-wider whitespace-nowrap">
                 <span>PLACEMENT TEST</span>
-                <span className="text-[#c29b78] font-mono font-semibold ml-1">
-                  • PUZZLE {currentCalibrationStep} OF 6
+                <span className="inline-block w-1 h-1 rounded-full bg-[#c29b78] mx-1 align-middle" />
+                <span className="text-[#c29b78] font-mono font-semibold">
+                  PUZZLE {currentCalibrationStep} OF 6
                 </span>
               </span>
             </div>
@@ -2887,7 +2893,10 @@ export function PlayView({
 
       <ProfileModal
         isOpen={activeTab === "profile"}
-        onClose={() => setActiveTab("reels")}
+        onClose={() => {
+          setActiveTab("reels");
+          setProfileInitialOpenSettings(false);
+        }}
         currentElo={currentElo}
         streak={dailyStreak}
         dailyStreak={dailyStreak}
@@ -2907,6 +2916,7 @@ export function PlayView({
           setPaywallReason("quota");
           setIsQuotaModalOpen(true);
         }}
+        initialOpenSettings={profileInitialOpenSettings}
       />
 
       <AuthModal
