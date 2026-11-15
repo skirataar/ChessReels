@@ -17,7 +17,7 @@ import {
 } from "@/lib/placementEngine";
 
 // --- Types ---
-type FlowStep = "gate" | "step-elo" | "step-goal" | "step-board" | "auth" | "pro-upsell";
+type FlowStep = "gate" | "step-elo" | "step-goal" | "step-board" | "auth" | "pro-upsell" | "loading";
 
 interface EloOption {
   id: string;
@@ -484,8 +484,50 @@ function SmotheredMateVignette() {
 export default function RootPage() {
   const router = useRouter();
 
-  // State machine navigation
-  const [step, setStep] = useState<FlowStep>("gate");
+  // State machine navigation: initialize to "loading" if session or account exists to eliminate landing flash
+  const [step, setStep] = useState<FlowStep>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const searchParams = new URLSearchParams(window.location.search);
+        const hasExplicitFlow =
+          searchParams.has("step") ||
+          searchParams.has("mode") ||
+          searchParams.has("google_onboarding") ||
+          searchParams.has("oauth_error") ||
+          searchParams.has("error");
+
+        if (hasExplicitFlow) {
+          const s = searchParams.get("step");
+          if (s === "step-elo" || s === "auth") return s as FlowStep;
+          return "gate";
+        }
+
+        const cookieStr = document.cookie || "";
+        const hasSessionCookie =
+          cookieStr.includes("chess_reel_session=") ||
+          cookieStr.includes("better-auth.session_token=") ||
+          cookieStr.includes("__Secure-better-auth.session_token=") ||
+          cookieStr.includes("next-auth.session-token=") ||
+          cookieStr.includes("doomchess_token=") ||
+          cookieStr.includes("chess_reel_oauth_user=");
+
+        const rawAccount = window.localStorage.getItem("chess_reel_account");
+        if (rawAccount) {
+          try {
+            const parsed = JSON.parse(rawAccount);
+            if (!isGuestAccount(parsed) && parsed?.id) {
+              return "loading";
+            }
+          } catch {}
+        }
+
+        if (hasSessionCookie || searchParams.get("source") === "pwa" || searchParams.has("pwa")) {
+          return "loading";
+        }
+      } catch {}
+    }
+    return "gate";
+  });
   const [direction, setDirection] = useState<number>(1);
 
   // User calibration choices
@@ -636,6 +678,18 @@ export default function RootPage() {
             return;
           }
         } catch {}
+      }
+
+      // Check cookie session as well
+      const cookieStr = document.cookie || "";
+      const hasSessionCookie =
+        cookieStr.includes("chess_reel_session=") ||
+        cookieStr.includes("better-auth.session_token=") ||
+        cookieStr.includes("doomchess_token=");
+
+      if (hasSessionCookie || searchParams.get("source") === "pwa" || searchParams.has("pwa")) {
+        router.replace("/play");
+        return;
       }
 
       if (!stepParam && !modeParam && !googleOnboarding) {
@@ -1010,6 +1064,22 @@ export default function RootPage() {
           >
             Continue with Free Account
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  // If in loading state (preventing landing flash while redirecting to /play)
+  if (step === "loading") {
+    return (
+      <div className="min-h-screen w-full select-none bg-[#0a0908] text-[#f5f2eb] flex flex-col items-center justify-center font-sans">
+        <div className="flex flex-col items-center gap-3">
+          <img
+            src="/icons/icon-v2.svg?v=2"
+            alt="DoomChess"
+            className="h-10 w-10 rounded-xl object-contain animate-pulse"
+          />
+          <div className="w-5 h-5 rounded-full border-2 border-[#c29b78]/20 border-t-[#c29b78] animate-spin" />
         </div>
       </div>
     );
