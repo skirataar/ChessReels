@@ -457,17 +457,14 @@ export function QuotaPaywallModal({
     }
 
     try {
-      const endpoint =
-        activePricing.gateway === "razorpay"
-          ? "/api/billing/create-checkout"
-          : "/api/checkout/dodo";
+      const endpoint = "/api/checkout/razorpay";
 
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           plan: selectedPlan,
-          gateway: activePricing.gateway,
+          currency: activePricing.currency,
           userId: userId || undefined,
         }),
       });
@@ -723,7 +720,6 @@ export function QuotaPaywallModal({
     .toString()
     .padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
 
-  const isIndia = activePricing.gateway === "razorpay";
   const ctaLabel =
     status === "success"
       ? "Pro Activated"
@@ -1012,12 +1008,8 @@ export function QuotaPaywallModal({
 
           <div className="flex items-center justify-center gap-1.5 text-[9px] text-zinc-600 pt-0.5">
             <Lock className="w-2.5 h-2.5" />
-            <span>
-              {isIndia
-                ? "Secured by Razorpay / Cancel anytime"
-                : "Secured by Dodo Payments | Apple Pay, Google Pay & Global Cards"}
-            </span>
-            {isLoadingPricing && <span className="text-zinc-700">/ detecting region...</span>}
+            <span>Secured by Razorpay | Cancel anytime</span>
+            {isLoadingPricing && <span className="text-zinc-700">| detecting region...</span>}
           </div>
         </div>
       </div>

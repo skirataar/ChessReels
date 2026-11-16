@@ -63,23 +63,46 @@ export function normalizeCurrency(raw?: string | null): string | null {
   return /^[A-Z]{3}$/.test(clean) ? clean : null;
 }
 
+export const STANDARD_PRICING_SUBUNITS: Record<
+  "INR" | "USD" | "GBP" | "EUR",
+  Record<SubscriptionPlan, number>
+> = {
+  INR: {
+    monthly: 39900,
+    yearly: 399000,
+  },
+  USD: {
+    monthly: 499,
+    yearly: 4788,
+  },
+  GBP: {
+    monthly: 399,
+    yearly: 3828,
+  },
+  EUR: {
+    monthly: 499,
+    yearly: 4788,
+  },
+};
+
 /**
  * Server-authoritative price for a Pro plan. The browser never decides how much
- * to charge; it only picks a plan, and the amount is derived here.
+ * to charge; it only picks a plan, and the amount is derived here in the
+ * currency's smallest subunit (paise, cents, or pence).
  */
 export async function getPlanAmountPaise(
   plan: SubscriptionPlan,
   currency: string
 ): Promise<number | null> {
-  if (currency !== "INR") return null;
-
-  const tierConfig = await getTierConfig();
-  const monthlyAmount = tierConfig.proMonthlyPrice;
-  const yearlyAmount = Math.round(
-    monthlyAmount * 12 * (1 - tierConfig.annualDiscountPercent / 100)
-  );
-  const amount = plan === "yearly" ? yearlyAmount : monthlyAmount;
-  return Math.round(amount * 100);
+  const norm = normalizeCurrency(currency);
+  if (norm && norm in STANDARD_PRICING_SUBUNITS) {
+    return (
+      STANDARD_PRICING_SUBUNITS[
+        norm as keyof typeof STANDARD_PRICING_SUBUNITS
+      ][plan] ?? null
+    );
+  }
+  return null;
 }
 
 export function buildReceipt(userId: string): string {

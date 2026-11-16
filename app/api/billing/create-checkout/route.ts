@@ -1,26 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma, { withDbRetry, sanitizeDbError } from "@/lib/prisma";
 import {
-  createDodoCheckout,
-  isDodoPaymentsConfigured,
   isRazorpayConfigured,
   normalizePlan,
 } from "@/lib/billing";
 import {
   createRazorpayOrderForPlan,
+  getPlanAmountPaise,
   isRazorpayOrdersConfigured,
+  normalizeCurrency,
   RazorpayRequestError,
 } from "@/lib/razorpay";
+import { getPricingForCountry, normalizeCountryCode } from "@/lib/pricing";
 
 interface CheckoutBody {
   plan?: string;
   gateway?: string;
-}
-
-function appOrigin(request: NextRequest): string {
-  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim();
-  if (configured) return configured.replace(/\/+$/, "");
-  return request.nextUrl.origin;
+  currency?: string;
+  userId?: string;
 }
 
 async function createRazorpaySubscription(input: {
@@ -76,22 +73,20 @@ export async function POST(request: NextRequest) {
   try {
     const body = (await request.json().catch(() => ({}))) as CheckoutBody;
     const plan = normalizePlan(body.plan);
-    const gateway =
-      body.gateway === "razorpay"
-        ? "razorpay"
-        : body.gateway === "global" || body.gateway === "dodo"
-        ? "global"
-        : null;
 
-    if (!plan || !gateway) {
+    if (!plan) {
       return NextResponse.json(
-        { error: "A valid plan (monthly|yearly) and gateway (razorpay|global) are required." },
+        { error: "A valid plan (monthly|yearly) is required." },
         { status: 400 }
       );
     }
 
-    const userId = request.cookies.get("chess_reel_session")?.value;
-    if (!userId) {
+    const sessionUserId = request.cookies.get("chess_reel_session")?.value;
+    const targetUserId =
+      sessionUserId ||
+      (typeof body.userId === "string" ? body.userId.trim() : null);
+
+    if (!targetUserId) {
       return NextResponse.json(
         { error: "Authentication required to start checkout." },
         { status: 401 }
@@ -100,7 +95,7 @@ export async function POST(request: NextRequest) {
 
     const user = await withDbRetry(() =>
       prisma.user.findUnique({
-        where: { id: userId },
+        where: { id: targetUserId },
         select: { id: true, email: true, username: true, displayName: true },
       })
     );
@@ -109,78 +104,77 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "User account not found." }, { status: 404 });
     }
 
-    if (gateway === "razorpay") {
-      // Recurring subscriptions are preferred when plan ids are configured.
-      if (isRazorpayConfigured()) {
-        const result = await createRazorpaySubscription({ plan, userId: user.id });
-        return NextResponse.json({
-          checkoutMode: "subscription",
-          ...result,
-          gateway,
-          plan,
-        });
-      }
-
-      // Standard Checkout fallback: only the key pair is configured, so create
-      // a one-time order and verify its signature on the client.
-      if (isRazorpayOrdersConfigured()) {
-        const order = await createRazorpayOrderForPlan({
-          plan,
-          userId: user.id,
-        });
-        return NextResponse.json({
-          checkoutMode: "order",
-          ...order,
-          order_id: order.orderId,
-          keyId: order.keyId,
-          gateway,
-          plan,
-        });
-      }
-
-      if (process.env.NODE_ENV !== "production") {
-        return NextResponse.json({
-          mockMode: true,
-          gateway,
-          plan,
-          reason: "razorpay_credentials_missing",
-        });
-      }
-      return NextResponse.json(
-        { error: "Razorpay is not configured on this deployment." },
-        { status: 503 }
-      );
+    // Determine currency: explicit parameter or edge geolocation headers
+    let currency: string;
+    if (body.currency) {
+      const parsed = normalizeCurrency(body.currency);
+      currency = parsed || "INR";
+    } else {
+      const countryHeader =
+        request.headers.get("x-vercel-ip-country") ||
+        request.headers.get("cf-ipcountry") ||
+        request.headers.get("x-country-code");
+      const resolvedCountry = normalizeCountryCode(countryHeader) || "US";
+      const pricing = getPricingForCountry(resolvedCountry);
+      currency = pricing.currency;
     }
 
-    if (!isDodoPaymentsConfigured()) {
-      if (process.env.NODE_ENV !== "production") {
-        return NextResponse.json({
-          mockMode: true,
-          gateway: "dodo",
-          plan,
-          reason: "dodo_credentials_missing",
-        });
-      }
-      return NextResponse.json(
-        { error: "International checkout (Dodo Payments) is not configured on this deployment." },
-        { status: 503 }
-      );
+    // Recurring subscriptions are preferred when plan ids are configured AND currency is INR.
+    if (currency === "INR" && isRazorpayConfigured()) {
+      const result = await createRazorpaySubscription({ plan, userId: user.id });
+      return NextResponse.json({
+        checkoutMode: "subscription",
+        ...result,
+        gateway: "razorpay",
+        currency,
+        plan,
+      });
     }
 
-    const origin = appOrigin(request);
-    const countryHeader =
-      request.headers.get("x-vercel-ip-country") ||
-      request.headers.get("cf-ipcountry") ||
-      "US";
+    // Standard Checkout order creation: supported across INR, USD, GBP, EUR.
+    if (isRazorpayOrdersConfigured()) {
+      const amount = await getPlanAmountPaise(plan, currency);
+      if (amount === null) {
+        return NextResponse.json(
+          {
+            error: `Razorpay Standard Checkout does not support ${currency} for this plan.`,
+          },
+          { status: 400 }
+        );
+      }
 
-    const result = await createDodoCheckout({
-      plan,
-      user,
-      origin,
-      country: countryHeader,
-    });
+      const order = await createRazorpayOrderForPlan({
+        plan,
+        userId: user.id,
+        currency,
+      });
 
-    return NextResponse.json({ ...result, gateway: "dodo", plan });
+      return NextResponse.json({
+        checkoutMode: "order",
+        ...order,
+        order_id: order.orderId,
+        keyId: order.keyId,
+        key_id: order.keyId,
+        gateway: "razorpay",
+        currency: order.currency,
+        plan,
+      });
+    }
+
+    if (process.env.NODE_ENV !== "production") {
+      return NextResponse.json({
+        mockMode: true,
+        gateway: "razorpay",
+        plan,
+        currency,
+        reason: "razorpay_credentials_missing",
+      });
+    }
+
+    return NextResponse.json(
+      { error: "Razorpay is not configured on this deployment." },
+      { status: 503 }
+    );
   } catch (error: unknown) {
     console.error("[/api/billing/create-checkout] Error:", error);
 

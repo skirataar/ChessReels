@@ -10,8 +10,8 @@ export const DEFAULT_TIER_CONFIG: TierConfig = {
   freePuzzleLimit: 15,
   freeWindowHours: 4,
   adFrequencyPuzzles: 2,
-  proMonthlyPrice: 200, // 200rs/month
-  annualDiscountPercent: 5, // 5% save on annual plans
+  proMonthlyPrice: 399, // 399rs/month
+  annualDiscountPercent: 16.666667, // ~17% save on annual plans (₹3,990/year)
 };
 
 export type SubscriptionStatus = "none" | "active" | "cancelled" | "past_due";

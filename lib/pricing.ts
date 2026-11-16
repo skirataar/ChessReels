@@ -5,18 +5,18 @@
  * server routes and client components.
  */
 
-export type PricingGateway = "razorpay" | "global";
+export type PricingGateway = "razorpay";
 
 export type PricingCurrency = "INR" | "GBP" | "EUR" | "USD";
 
 export interface GeoPrice {
   /** Numeric amount in the local currency (major units). */
   amount: number;
-  /** Pre-formatted price, e.g. "₹2,280" or "$4.99". */
+  /** Pre-formatted price, e.g. "₹3,990" or "$4.99". */
   display: string;
   /** Short qualifier shown under the price. */
   subtext: string;
-  /** Monthly equivalent for yearly plans, e.g. "₹190". */
+  /** Monthly equivalent for yearly plans, e.g. "₹332". */
   monthlyEquivalent?: string;
 }
 
@@ -37,22 +37,22 @@ export const INDIA_PRICING: GeoPricing = {
   currency: "INR",
   symbol: "₹",
   monthly: {
-    amount: 200,
-    display: "₹200",
+    amount: 399,
+    display: "₹399",
     subtext: "per month",
   },
   yearly: {
-    amount: 2280,
-    display: "₹2,280",
-    monthlyEquivalent: "₹190",
-    subtext: "₹190/mo billed annually",
+    amount: 3990,
+    display: "₹3,990",
+    monthlyEquivalent: "₹332",
+    subtext: "₹332/mo billed annually",
   },
-  methods: "UPI Autopay / GPay / PhonePe / Cards",
+  methods: "UPI / Cards / NetBanking / Wallets",
 };
 
 export const UK_PRICING: GeoPricing = {
   country: "GB",
-  gateway: "global",
+  gateway: "razorpay",
   currency: "GBP",
   symbol: "£",
   monthly: {
@@ -66,12 +66,12 @@ export const UK_PRICING: GeoPricing = {
     monthlyEquivalent: "£3.19",
     subtext: "£3.19/mo billed annually",
   },
-  methods: "Apple Pay / Google Pay / Cards",
+  methods: "Cards / International / NetBanking",
 };
 
 export const EURO_PRICING: GeoPricing = {
   country: "EU",
-  gateway: "global",
+  gateway: "razorpay",
   currency: "EUR",
   symbol: "€",
   monthly: {
@@ -85,12 +85,12 @@ export const EURO_PRICING: GeoPricing = {
     monthlyEquivalent: "€3.99",
     subtext: "€3.99/mo billed annually",
   },
-  methods: "Apple Pay / Google Pay / Cards",
+  methods: "Cards / International / NetBanking",
 };
 
 export const GLOBAL_PRICING: GeoPricing = {
   country: "US",
-  gateway: "global",
+  gateway: "razorpay",
   currency: "USD",
   symbol: "$",
   monthly: {
@@ -104,7 +104,7 @@ export const GLOBAL_PRICING: GeoPricing = {
     monthlyEquivalent: "$3.99",
     subtext: "$3.99/mo billed annually",
   },
-  methods: "Apple Pay / Google Pay / Cards",
+  methods: "Cards / International / NetBanking",
 };
 
 export const EUROZONE_COUNTRIES = [
