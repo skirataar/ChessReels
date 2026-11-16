@@ -447,7 +447,12 @@ export function QuotaPaywallModal({
     setErrorMessage("");
 
     try {
-      const response = await fetch("/api/billing/create-checkout", {
+      const endpoint =
+        activePricing.gateway === "razorpay"
+          ? "/api/billing/create-checkout"
+          : "/api/checkout/dodo";
+
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -999,7 +1004,7 @@ export function QuotaPaywallModal({
             <span>
               {isIndia
                 ? "Secured by Razorpay / Cancel anytime"
-                : "Secured by Lemon Squeezy / Cancel anytime"}
+                : "Secured by Dodo Payments | Apple Pay, Google Pay & Global Cards"}
             </span>
             {isLoadingPricing && <span className="text-zinc-700">/ detecting region...</span>}
           </div>

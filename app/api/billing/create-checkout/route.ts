@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma, { withDbRetry, sanitizeDbError } from "@/lib/prisma";
 import {
-  isLemonSqueezyConfigured,
+  createDodoCheckout,
+  isDodoPaymentsConfigured,
   isRazorpayConfigured,
   normalizePlan,
 } from "@/lib/billing";
@@ -10,7 +11,6 @@ import {
   isRazorpayOrdersConfigured,
   RazorpayRequestError,
 } from "@/lib/razorpay";
-
 
 interface CheckoutBody {
   plan?: string;
@@ -72,77 +72,16 @@ async function createRazorpaySubscription(input: {
   return { subscriptionId: data.id, keyId };
 }
 
-async function createLemonSqueezyCheckout(input: {
-  plan: "monthly" | "yearly";
-  userId: string;
-  origin: string;
-}): Promise<{ checkoutUrl: string }> {
-  const apiKey = process.env.LEMONSQUEEZY_API_KEY as string;
-  const storeId = process.env.LEMONSQUEEZY_STORE_ID as string;
-  const variantId =
-    input.plan === "yearly"
-      ? (process.env.LEMONSQUEEZY_VARIANT_YEARLY_ID as string)
-      : (process.env.LEMONSQUEEZY_VARIANT_MONTHLY_ID as string);
-
-  const response = await fetch("https://api.lemonsqueezy.com/v1/checkouts", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      Accept: "application/vnd.api+json",
-      "Content-Type": "application/vnd.api+json",
-    },
-    body: JSON.stringify({
-      data: {
-        type: "checkouts",
-        attributes: {
-          checkout_data: {
-            custom: {
-              user_id: input.userId,
-              userId: input.userId,
-              plan: input.plan,
-            },
-          },
-          product_options: {
-            redirect_url: `${input.origin}/?checkout=success`,
-            enabled_variants: [Number(variantId)],
-          },
-        },
-        relationships: {
-          store: {
-            data: { type: "stores", id: storeId },
-          },
-          variant: {
-            data: { type: "variants", id: variantId },
-          },
-        },
-      },
-    }),
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
-    const detail = await response.text().catch(() => "");
-    throw new Error(
-      `Lemon Squeezy checkout creation failed (${response.status}): ${detail.slice(0, 300)}`
-    );
-  }
-
-  const data = (await response.json()) as {
-    data?: { attributes?: { url?: string } };
-  };
-  const url = data?.data?.attributes?.url;
-  if (!url) {
-    throw new Error("Lemon Squeezy did not return a checkout URL.");
-  }
-
-  return { checkoutUrl: url };
-}
-
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json().catch(() => ({}))) as CheckoutBody;
     const plan = normalizePlan(body.plan);
-    const gateway = body.gateway === "razorpay" ? "razorpay" : body.gateway === "global" ? "global" : null;
+    const gateway =
+      body.gateway === "razorpay"
+        ? "razorpay"
+        : body.gateway === "global" || body.gateway === "dodo"
+        ? "global"
+        : null;
 
     if (!plan || !gateway) {
       return NextResponse.json(
@@ -162,7 +101,7 @@ export async function POST(request: NextRequest) {
     const user = await withDbRetry(() =>
       prisma.user.findUnique({
         where: { id: userId },
-        select: { id: true, email: true, username: true },
+        select: { id: true, email: true, username: true, displayName: true },
       })
     );
 
@@ -213,28 +152,35 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!isLemonSqueezyConfigured()) {
+    if (!isDodoPaymentsConfigured()) {
       if (process.env.NODE_ENV !== "production") {
         return NextResponse.json({
           mockMode: true,
-          gateway,
+          gateway: "dodo",
           plan,
-          reason: "lemonsqueezy_credentials_missing",
+          reason: "dodo_credentials_missing",
         });
       }
       return NextResponse.json(
-        { error: "Global checkout is not configured on this deployment." },
+        { error: "International checkout (Dodo Payments) is not configured on this deployment." },
         { status: 503 }
       );
     }
 
-    const result = await createLemonSqueezyCheckout({
+    const origin = appOrigin(request);
+    const countryHeader =
+      request.headers.get("x-vercel-ip-country") ||
+      request.headers.get("cf-ipcountry") ||
+      "US";
+
+    const result = await createDodoCheckout({
       plan,
-      userId: user.id,
-      origin: appOrigin(request),
+      user,
+      origin,
+      country: countryHeader,
     });
 
-    return NextResponse.json({ ...result, gateway, plan });
+    return NextResponse.json({ ...result, gateway: "dodo", plan });
   } catch (error: unknown) {
     console.error("[/api/billing/create-checkout] Error:", error);
 

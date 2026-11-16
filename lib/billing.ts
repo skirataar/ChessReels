@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import prisma, { withDbRetry } from "./prisma";
 import { isActiveProAccount, SubscriptionFields } from "./tierTypes";
 
-export type BillingProvider = "razorpay" | "global";
+export type BillingProvider = "razorpay" | "global" | "dodo";
 export type SubscriptionPlan = "monthly" | "yearly";
 
 export const PLAN_PERIOD_MS: Record<SubscriptionPlan, number> = {
@@ -191,17 +191,6 @@ export function verifyRazorpaySignature(
   return verifyHmacSha256Hex(rawBody, signature, process.env.RAZORPAY_WEBHOOK_SECRET);
 }
 
-export function verifyLemonSqueezySignature(
-  rawBody: string,
-  signature: string | null | undefined
-): boolean {
-  return verifyHmacSha256Hex(
-    rawBody,
-    signature,
-    process.env.LEMONSQUEEZY_WEBHOOK_SECRET
-  );
-}
-
 export function isRazorpayConfigured(): boolean {
   return Boolean(
     process.env.RAZORPAY_KEY_ID &&
@@ -211,13 +200,237 @@ export function isRazorpayConfigured(): boolean {
   );
 }
 
-export function isLemonSqueezyConfigured(): boolean {
-  return Boolean(
-    process.env.LEMONSQUEEZY_API_KEY &&
-      process.env.LEMONSQUEEZY_STORE_ID &&
-      process.env.LEMONSQUEEZY_VARIANT_MONTHLY_ID &&
-      process.env.LEMONSQUEEZY_VARIANT_YEARLY_ID
+export function getDodoBaseUrl(): string {
+  return process.env.DODO_PAYMENTS_ENVIRONMENT === "test_mode"
+    ? "https://test.dodopayments.com"
+    : "https://live.dodopayments.com";
+}
+
+export function getDodoProductId(plan: SubscriptionPlan): string | null {
+  if (plan === "yearly") {
+    return (
+      process.env.DODO_PAYMENTS_PRO_YEARLY_PRODUCT_ID ||
+      process.env.DODO_PAYMENTS_PRO_PRODUCT_ID ||
+      null
+    );
+  }
+  return (
+    process.env.DODO_PAYMENTS_PRO_MONTHLY_PRODUCT_ID ||
+    process.env.DODO_PAYMENTS_PRO_PRODUCT_ID ||
+    null
   );
+}
+
+export function isDodoPaymentsConfigured(): boolean {
+  return Boolean(
+    process.env.DODO_PAYMENTS_API_KEY &&
+      (process.env.DODO_PAYMENTS_PRO_PRODUCT_ID ||
+        process.env.DODO_PAYMENTS_PRO_MONTHLY_PRODUCT_ID ||
+        process.env.DODO_PAYMENTS_PRO_YEARLY_PRODUCT_ID)
+  );
+}
+
+export async function createDodoCheckout(input: {
+  plan: SubscriptionPlan;
+  user: {
+    id: string;
+    email?: string | null;
+    username?: string | null;
+    displayName?: string | null;
+  };
+  origin: string;
+  returnUrl?: string;
+  country?: string | null;
+}): Promise<{ checkoutUrl: string }> {
+  const apiKey = process.env.DODO_PAYMENTS_API_KEY;
+  if (!apiKey) {
+    throw new Error("Dodo Payments API key is not configured.");
+  }
+
+  const productId = getDodoProductId(input.plan);
+  if (!productId) {
+    throw new Error(
+      `Dodo Payments product id for ${input.plan} plan is not configured.`
+    );
+  }
+
+  const baseUrl = getDodoBaseUrl();
+  const customerName =
+    input.user.displayName || input.user.username || "Chess Rebel";
+  const customerEmail =
+    input.user.email || `player_${input.user.id.slice(0, 8)}@doomchess.local`;
+  const returnUrl = input.returnUrl || `${input.origin}/?checkout=success`;
+  const country = input.country || "US";
+
+  // First, try standard checkout sessions endpoint (modern Dodo Payments API)
+  try {
+    const checkoutRes = await fetch(`${baseUrl}/checkouts`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        product_cart: [{ product_id: productId, quantity: 1 }],
+        customer: {
+          email: customerEmail,
+          name: customerName,
+        },
+        billing_address: {
+          country,
+        },
+        return_url: returnUrl,
+        metadata: {
+          userId: input.user.id,
+          email: customerEmail,
+          plan: input.plan,
+        },
+      }),
+      cache: "no-store",
+    });
+
+    if (checkoutRes.ok) {
+      const data = (await checkoutRes.json().catch(() => ({}))) as {
+        checkout_url?: string;
+        payment_link?: string;
+        url?: string;
+      };
+      const url = data.checkout_url || data.payment_link || data.url;
+      if (url) {
+        return { checkoutUrl: url };
+      }
+    }
+  } catch (err) {
+    console.warn("[createDodoCheckout] /checkouts endpoint attempt:", err);
+  }
+
+  // Fallback to /subscriptions endpoint
+  const subRes = await fetch(`${baseUrl}/subscriptions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      billing: {
+        country,
+      },
+      customer: {
+        email: customerEmail,
+        name: customerName,
+      },
+      payment_link: true,
+      product_id: productId,
+      quantity: 1,
+      return_url: returnUrl,
+      metadata: {
+        userId: input.user.id,
+        email: customerEmail,
+        plan: input.plan,
+      },
+    }),
+    cache: "no-store",
+  });
+
+  if (!subRes.ok) {
+    const detail = await subRes.text().catch(() => "");
+    throw new Error(
+      `Dodo Payments checkout creation failed (${subRes.status}): ${detail.slice(0, 300)}`
+    );
+  }
+
+  const data = (await subRes.json().catch(() => ({}))) as {
+    payment_link?: string;
+    url?: string;
+    checkout_url?: string;
+  };
+  const url = data.payment_link || data.checkout_url || data.url;
+  if (!url) {
+    throw new Error("Dodo Payments did not return a checkout URL.");
+  }
+
+  return { checkoutUrl: url };
+}
+
+export function verifyDodoSignature(
+  rawBody: string,
+  headers: {
+    webhookId?: string | null;
+    webhookTimestamp?: string | null;
+    webhookSignature?: string | null;
+  },
+  secret?: string | null
+): boolean {
+  const webhookSecret = secret || process.env.DODO_PAYMENTS_WEBHOOK_SECRET;
+  if (!rawBody || !webhookSecret) return false;
+
+  const { webhookId, webhookTimestamp, webhookSignature } = headers;
+
+  // 1. Standard Webhook verification (Svix / Standard Webhooks)
+  if (webhookId && webhookTimestamp && webhookSignature) {
+    const toSign = `${webhookId}.${webhookTimestamp}.${rawBody}`;
+
+    const rawSecret = webhookSecret.startsWith("whsec_")
+      ? Buffer.from(webhookSecret.slice(6), "base64")
+      : Buffer.from(webhookSecret, "utf8");
+
+    const expectedBase64 = createHmac("sha256", rawSecret)
+      .update(toSign, "utf8")
+      .digest("base64");
+    const expectedHex = createHmac("sha256", rawSecret)
+      .update(toSign, "utf8")
+      .digest("hex");
+
+    const utf8Secret = Buffer.from(webhookSecret, "utf8");
+    const expectedBase64Raw = createHmac("sha256", utf8Secret)
+      .update(toSign, "utf8")
+      .digest("base64");
+    const expectedHexRaw = createHmac("sha256", utf8Secret)
+      .update(toSign, "utf8")
+      .digest("hex");
+
+    const signatures: string[] = [];
+    for (const part of webhookSignature.split(/\s+/)) {
+      for (const item of part.split(",")) {
+        const cleaned = item.trim().replace(/^v\d+[=,]/, "").trim();
+        if (cleaned && cleaned !== "v1" && cleaned !== "v0") {
+          signatures.push(cleaned);
+        }
+      }
+    }
+
+    for (const sig of signatures) {
+      if (
+        sig === expectedBase64 ||
+        sig === expectedHex ||
+        sig === expectedBase64Raw ||
+        sig === expectedHexRaw
+      ) {
+        return true;
+      }
+    }
+  }
+
+  // 2. Direct HMAC fallback
+  const directSig = webhookSignature || headers.webhookSignature;
+  if (directSig) {
+    const directExpected = createHmac("sha256", webhookSecret)
+      .update(rawBody, "utf8")
+      .digest("hex");
+    const directExpectedBase64 = createHmac("sha256", webhookSecret)
+      .update(rawBody, "utf8")
+      .digest("base64");
+    const cleanSig = directSig.trim().replace(/^v\d+[=,]/, "").trim().toLowerCase();
+    if (
+      cleanSig === directExpected.toLowerCase() ||
+      directSig.trim() === directExpectedBase64 ||
+      cleanSig === directExpectedBase64
+    ) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 export function parsePeriodEnd(raw: unknown): Date | null {

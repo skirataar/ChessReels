@@ -3,6 +3,7 @@ import prisma, { withDbRetry, sanitizeDbError } from "@/lib/prisma";
 import {
   activateSubscription,
   computePeriodEnd,
+  getDodoBaseUrl,
   normalizePlan,
   parsePeriodEnd,
   type BillingProvider,
@@ -28,19 +29,6 @@ interface RestoreCandidate {
   source: "subscription" | "payment";
 }
 
-interface LemonSubscriptionAttributes {
-  status?: string;
-  variant_id?: number | string | null;
-  renews_at?: string | null;
-  ends_at?: string | null;
-  user_email?: string | null;
-}
-
-interface LemonSubscription {
-  id?: string;
-  attributes?: LemonSubscriptionAttributes;
-}
-
 const PAID_SUBSCRIPTION_STATUSES = new Set([
   "active",
   "authenticated",
@@ -49,7 +37,25 @@ const PAID_SUBSCRIPTION_STATUSES = new Set([
   "on_trial",
 ]);
 
-const ACTIVE_LEMON_STATUSES = new Set(["active", "on_trial", "paid"]);
+const ACTIVE_DODO_STATUSES = new Set([
+  "active",
+  "on_trial",
+  "trialing",
+  "paid",
+]);
+
+function planFromDodoProduct(
+  productId: string | null | undefined
+): SubscriptionPlan | null {
+  if (!productId) return null;
+  if (productId === process.env.DODO_PAYMENTS_PRO_YEARLY_PRODUCT_ID) {
+    return "yearly";
+  }
+  if (productId === process.env.DODO_PAYMENTS_PRO_MONTHLY_PRODUCT_ID) {
+    return "monthly";
+  }
+  return null;
+}
 
 const USER_STATS_SELECT = {
   id: true,
@@ -105,20 +111,7 @@ function userIdFromNotes(
   return typeof raw === "string" && raw.trim() ? raw.trim() : null;
 }
 
-function planFromLemonVariant(
-  variantId: number | string | null | undefined
-): SubscriptionPlan | null {
-  if (variantId === undefined || variantId === null) return null;
-  const id = String(variantId);
 
-  if (id === String(process.env.LEMONSQUEEZY_VARIANT_MONTHLY_ID)) {
-    return "monthly";
-  }
-  if (id === String(process.env.LEMONSQUEEZY_VARIANT_YEARLY_ID)) {
-    return "yearly";
-  }
-  return null;
-}
 
 async function inferPlanFromAmount(
   amount: unknown,
@@ -300,114 +293,167 @@ async function findRazorpayCandidates(input: {
   return candidates;
 }
 
-async function fetchLemonSubscriptionById(
+async function fetchDodoSubscriptionById(
   subscriptionId: string
-): Promise<LemonSubscription | null> {
-  const apiKey = process.env.LEMONSQUEEZY_API_KEY;
+): Promise<Record<string, unknown> | null> {
+  const apiKey = process.env.DODO_PAYMENTS_API_KEY;
   if (!apiKey) return null;
 
+  const baseUrl = getDodoBaseUrl();
   const response = await fetch(
-    `https://api.lemonsqueezy.com/v1/subscriptions/${encodeURIComponent(
-      subscriptionId
-    )}`,
+    `${baseUrl}/subscriptions/${encodeURIComponent(subscriptionId)}`,
     {
       headers: {
         Authorization: `Bearer ${apiKey}`,
-        Accept: "application/vnd.api+json",
+        "Content-Type": "application/json",
       },
       cache: "no-store",
     }
   );
 
   if (!response.ok) return null;
-  const payload = (await response.json().catch(() => null)) as {
-    data?: LemonSubscription;
-  } | null;
-  return payload?.data || null;
+  const payload = (await response.json().catch(() => null)) as Record<
+    string,
+    unknown
+  > | null;
+  return payload || null;
 }
 
-async function findLemonCandidates(input: {
+async function findDodoCandidates(input: {
   userId: string;
   email: string | null;
   providerSubscriptionId: string | null;
 }): Promise<RestoreCandidate[]> {
-  const apiKey = process.env.LEMONSQUEEZY_API_KEY;
+  const apiKey = process.env.DODO_PAYMENTS_API_KEY;
   if (!apiKey) return [];
 
   const candidates: RestoreCandidate[] = [];
 
   if (input.providerSubscriptionId) {
     try {
-      const subscription = await fetchLemonSubscriptionById(
+      const subscription = await fetchDodoSubscriptionById(
         input.providerSubscriptionId
       );
-      const status = readString(
-        subscription?.attributes?.status
-      ).toLowerCase();
-      if (
-        subscription?.id &&
-        ACTIVE_LEMON_STATUSES.has(status) &&
-        (!input.email ||
-          !subscription.attributes?.user_email ||
-          subscription.attributes.user_email.toLowerCase() ===
-            input.email.toLowerCase())
-      ) {
-        candidates.push({
-          provider: "global",
-          providerSubscriptionId: subscription.id,
-          plan: planFromLemonVariant(subscription.attributes?.variant_id),
-          currentPeriodEnd: parsePeriodEnd(
-            subscription.attributes?.renews_at ||
-              subscription.attributes?.ends_at
-          ),
-          source: "subscription",
-        });
-      }
-    } catch {
-      // Ignore and fall through to the email-filtered list.
-    }
-  }
+      if (subscription) {
+        const status = readString(subscription.status).toLowerCase();
+        const customer =
+          subscription.customer && typeof subscription.customer === "object"
+            ? (subscription.customer as Record<string, unknown>)
+            : {};
+        const customerEmail =
+          readString(customer.email) || readString(subscription.email);
+        const metadata =
+          subscription.metadata && typeof subscription.metadata === "object"
+            ? (subscription.metadata as Record<string, unknown>)
+            : {};
+        const metaUserId =
+          readString(metadata.userId) || readString(metadata.user_id);
 
-  if (input.email) {
-    try {
-      const response = await fetch(
-        `https://api.lemonsqueezy.com/v1/subscriptions?filter[user_email]=${encodeURIComponent(
-          input.email
-        )}`,
-        {
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            Accept: "application/vnd.api+json",
-          },
-          cache: "no-store",
-        }
-      );
-
-      if (response.ok) {
-        const payload = (await response.json().catch(() => null)) as {
-          data?: LemonSubscription[];
-        } | null;
-
-        for (const subscription of payload?.data || []) {
-          const status = readString(
-            subscription.attributes?.status
-          ).toLowerCase();
-          if (!subscription.id || !ACTIVE_LEMON_STATUSES.has(status)) continue;
+        if (
+          ACTIVE_DODO_STATUSES.has(status) &&
+          (!metaUserId || metaUserId === input.userId) &&
+          (!input.email ||
+            !customerEmail ||
+            customerEmail.toLowerCase() === input.email.toLowerCase())
+        ) {
+          const rawPlan =
+            normalizePlan(readString(metadata.plan)) ||
+            planFromDodoProduct(readString(subscription.product_id));
+          const periodEnd = parsePeriodEnd(
+            subscription.next_billing_date ||
+              subscription.expires_at ||
+              subscription.current_period_end ||
+              subscription.renews_at ||
+              subscription.ends_at
+          );
 
           candidates.push({
-            provider: "global",
-            providerSubscriptionId: subscription.id,
-            plan: planFromLemonVariant(subscription.attributes?.variant_id),
-            currentPeriodEnd: parsePeriodEnd(
-              subscription.attributes?.renews_at ||
-                subscription.attributes?.ends_at
+            provider: "dodo",
+            providerSubscriptionId: String(
+              subscription.subscription_id ||
+                subscription.id ||
+                input.providerSubscriptionId
             ),
+            plan: rawPlan,
+            currentPeriodEnd: periodEnd,
             source: "subscription",
           });
         }
       }
     } catch {
-      // Ignore provider lookup failures and report "not found" to the client.
+      // Ignore and fall through to list check
+    }
+  }
+
+  if (input.email) {
+    try {
+      const baseUrl = getDodoBaseUrl();
+      const response = await fetch(`${baseUrl}/subscriptions`, {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+      });
+
+      if (response.ok) {
+        const payload = (await response.json().catch(() => null)) as {
+          items?: Array<Record<string, unknown>>;
+          data?: Array<Record<string, unknown>>;
+        } | null;
+
+        const items = payload?.items || payload?.data || [];
+        for (const subscription of items) {
+          const status = readString(subscription.status).toLowerCase();
+          if (!ACTIVE_DODO_STATUSES.has(status)) continue;
+
+          const customer =
+            subscription.customer && typeof subscription.customer === "object"
+              ? (subscription.customer as Record<string, unknown>)
+              : {};
+          const customerEmail =
+            readString(customer.email) || readString(subscription.email);
+          const metadata =
+            subscription.metadata && typeof subscription.metadata === "object"
+              ? (subscription.metadata as Record<string, unknown>)
+              : {};
+          const metaUserId =
+            readString(metadata.userId) || readString(metadata.user_id);
+
+          const matchesUser = metaUserId === input.userId;
+          const matchesEmail =
+            Boolean(
+              customerEmail &&
+                input.email &&
+                customerEmail.toLowerCase() === input.email.toLowerCase()
+            );
+
+          if (matchesUser || matchesEmail) {
+            const rawPlan =
+              normalizePlan(readString(metadata.plan)) ||
+              planFromDodoProduct(readString(subscription.product_id));
+            const periodEnd = parsePeriodEnd(
+              subscription.next_billing_date ||
+                subscription.expires_at ||
+                subscription.current_period_end ||
+                subscription.renews_at ||
+                subscription.ends_at
+            );
+
+            candidates.push({
+              provider: "dodo",
+              providerSubscriptionId: String(
+                subscription.subscription_id || subscription.id
+              ),
+              plan: rawPlan,
+              currentPeriodEnd: periodEnd,
+              source: "subscription",
+            });
+          }
+        }
+      }
+    } catch {
+      // Ignore provider lookup failures
     }
   }
 
@@ -460,13 +506,13 @@ export async function POST(request: NextRequest) {
     };
     const requestedPlan = normalizePlan(body.plan);
 
-    const [razorpayCandidates, lemonCandidates] = await Promise.all([
+    const [razorpayCandidates, dodoCandidates] = await Promise.all([
       findRazorpayCandidates({
         userId: user.id,
         email: user.email,
         providerSubscriptionId: user.providerSubscriptionId,
       }),
-      findLemonCandidates({
+      findDodoCandidates({
         userId: user.id,
         email: user.email,
         providerSubscriptionId: user.providerSubscriptionId,
@@ -475,7 +521,7 @@ export async function POST(request: NextRequest) {
 
     const candidate = pickBestCandidate([
       ...razorpayCandidates,
-      ...lemonCandidates,
+      ...dodoCandidates,
     ]);
 
     if (!candidate) {
