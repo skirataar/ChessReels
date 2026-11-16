@@ -45,6 +45,7 @@ next-env.d.ts
 .playwright-mcp/
 test-results/
 playwright-report/
+dodo-agent-plugin/
 
 /lib/generated/prisma
 

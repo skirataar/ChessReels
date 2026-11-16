@@ -230,6 +230,27 @@ export function isDodoPaymentsConfigured(): boolean {
   );
 }
 
+function formatDodoError(status: number, detail: string): string {
+  try {
+    const parsed = JSON.parse(detail);
+    if (
+      parsed.code === "MERCHANT_NOT_LIVE" ||
+      parsed.message?.includes("Live payments not enabled")
+    ) {
+      return "Live payments are not yet enabled on your Dodo Payments account. Please complete verification in your Dodo dashboard (or switch to test mode with a test API key).";
+    }
+    if (parsed.error === "Unauthorized" || parsed.code === "UNAUTHORIZED") {
+      return parsed.message || "Invalid Dodo Payments API key. Please check your credentials.";
+    }
+    if (parsed.message) {
+      return `Dodo Payments: ${parsed.message}`;
+    }
+  } catch {
+    // Ignore JSON parsing error and fallback
+  }
+  return `Dodo Payments checkout creation failed (${status}): ${detail.slice(0, 300)}`;
+}
+
 export async function createDodoCheckout(input: {
   plan: SubscriptionPlan;
   user: {
@@ -299,8 +320,29 @@ export async function createDodoCheckout(input: {
       if (url) {
         return { checkoutUrl: url };
       }
+    } else {
+      const errText = await checkoutRes.text().catch(() => "");
+      console.warn(`[createDodoCheckout] /checkouts returned ${checkoutRes.status}:`, errText);
+      try {
+        const parsed = JSON.parse(errText);
+        if (
+          parsed.code === "MERCHANT_NOT_LIVE" ||
+          parsed.message?.includes("Live payments not enabled") ||
+          parsed.error === "Unauthorized" ||
+          parsed.code === "UNAUTHORIZED"
+        ) {
+          throw new Error(formatDodoError(checkoutRes.status, errText));
+        }
+      } catch (parseErr) {
+        if (parseErr instanceof Error && parseErr.message.includes("Dodo Payments")) {
+          throw parseErr;
+        }
+      }
     }
   } catch (err) {
+    if (err instanceof Error && err.message.includes("Dodo Payments")) {
+      throw err;
+    }
     console.warn("[createDodoCheckout] /checkouts endpoint attempt:", err);
   }
 
@@ -334,9 +376,7 @@ export async function createDodoCheckout(input: {
 
   if (!subRes.ok) {
     const detail = await subRes.text().catch(() => "");
-    throw new Error(
-      `Dodo Payments checkout creation failed (${subRes.status}): ${detail.slice(0, 300)}`
-    );
+    throw new Error(formatDodoError(subRes.status, detail));
   }
 
   const data = (await subRes.json().catch(() => ({}))) as {

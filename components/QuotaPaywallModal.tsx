@@ -233,6 +233,7 @@ export function QuotaPaywallModal({
   isOpen,
   onClose,
   onUpgradeComplete,
+  userId,
   resetsInMs,
   limit = 15,
   windowHours = 4,
@@ -446,6 +447,15 @@ export function QuotaPaywallModal({
     setStatus("loading");
     setErrorMessage("");
 
+    if (!userId && typeof window !== "undefined") {
+      const hasCookie = document.cookie.includes("chess_reel_session=");
+      if (!hasCookie) {
+        setStatus("error");
+        setErrorMessage("Please sign in or create an account to start your Pro subscription.");
+        return;
+      }
+    }
+
     try {
       const endpoint =
         activePricing.gateway === "razorpay"
@@ -458,6 +468,7 @@ export function QuotaPaywallModal({
         body: JSON.stringify({
           plan: selectedPlan,
           gateway: activePricing.gateway,
+          userId: userId || undefined,
         }),
       });
 

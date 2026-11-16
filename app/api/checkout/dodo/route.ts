@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
 
     if (!userId) {
       return NextResponse.json(
-        { error: "Authentication required to start checkout." },
+        { error: "Please sign in or create an account to start your Pro subscription." },
         { status: 401 }
       );
     }
