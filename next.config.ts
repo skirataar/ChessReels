@@ -4,6 +4,9 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
   devIndicators: false,
+  experimental: {
+    agentUpgrade: "security",
+  },
   allowedDevOrigins: [
     "*.trycloudflare.com",
     "butter-end-same-ballot.trycloudflare.com",
