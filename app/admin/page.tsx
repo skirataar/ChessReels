@@ -673,7 +673,7 @@ export default function AdminPage() {
               <div className="flex items-center gap-2 text-[11px] text-zinc-400 font-medium">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                 <span>Live System</span>
-                <span>•</span>
+                <span className="text-zinc-600">|</span>
                 <span>DB: {metrics?.dbLatencyMs ?? 0}ms</span>
               </div>
             </div>
@@ -869,7 +869,7 @@ export default function AdminPage() {
                     {(metrics?.totalPuzzles || 6157341).toLocaleString()}
                   </div>
                   <p className="text-xs text-zinc-400 mt-2 font-medium">
-                    Master Games • Lichess Open Base
+                    Master Games | Lichess Open Base
                   </p>
                 </div>
                 <div className="flex items-center gap-1.5 text-[11px] text-zinc-400 font-semibold mt-3">
@@ -1015,7 +1015,7 @@ export default function AdminPage() {
                             <span className="font-mono text-zinc-300">
                               #{solve.puzzleId}
                             </span>
-                            <span className="text-zinc-500">•</span>
+                            <span className="text-zinc-500">|</span>
                             <span className="text-zinc-400 font-semibold truncate">
                               @{solve.user?.username || solve.user?.displayName || "player"}
                             </span>
@@ -1171,7 +1171,7 @@ export default function AdminPage() {
                                     <span>@{user.username || user.id.slice(0, 8)}</span>
                                     {user.email && (
                                       <>
-                                        <span>•</span>
+                                        <span className="text-zinc-600">|</span>
                                         <span className="text-zinc-400 truncate">{user.email}</span>
                                       </>
                                     )}
@@ -1235,7 +1235,7 @@ export default function AdminPage() {
                                   <Flame className="w-3.5 h-3.5 fill-amber-400/20" />
                                   <span>{user.streak || 0}d streak</span>
                                 </span>
-                                <span className="text-zinc-600">•</span>
+                                <span className="text-zinc-600">|</span>
                                 <span
                                   className="text-[11px] text-zinc-400 font-mono"
                                   title={`Best daily streak record: ${user.bestStreak || user.streak || 0} days`}
@@ -1527,7 +1527,7 @@ export default function AdminPage() {
 
                 <div className="text-[11px] text-zinc-400 space-y-0.5 pt-2 border-t border-zinc-800/60">
                   <div>Monthly: <strong className="text-zinc-200">₹{tierConfig.proMonthlyPrice}/mo</strong></div>
-                  <div>Annual: <strong className="text-emerald-400">₹{Math.round(tierConfig.proMonthlyPrice * 12 * (1 - tierConfig.annualDiscountPercent / 100))}/yr</strong> (₹{Math.round(tierConfig.proMonthlyPrice * (1 - tierConfig.annualDiscountPercent / 100))}/mo • Save {tierConfig.annualDiscountPercent}%)</div>
+                  <div>Annual: <strong className="text-emerald-400">₹{Math.round(tierConfig.proMonthlyPrice * 12 * (1 - tierConfig.annualDiscountPercent / 100))}/yr</strong> (₹{Math.round(tierConfig.proMonthlyPrice * (1 - tierConfig.annualDiscountPercent / 100))}/mo | Save {tierConfig.annualDiscountPercent}%)</div>
                 </div>
               </div>
 
@@ -1542,7 +1542,7 @@ export default function AdminPage() {
                       Effective Tier Enforcement
                     </div>
                     <div className="text-[11px] text-zinc-400 mt-0.5">
-                      Free Users: <span className="text-amber-300 font-semibold">{tierConfig.freePuzzleLimit} puzzles / {tierConfig.freeWindowHours}h</span> (Ads every {tierConfig.adFrequencyPuzzles} puzzles) • Pro Users: <span className="text-emerald-400 font-semibold">Unlimited & 0 Ads (₹{tierConfig.proMonthlyPrice}/mo, Save {tierConfig.annualDiscountPercent}% Annual)</span>
+                      Free Users: <span className="text-amber-300 font-semibold">{tierConfig.freePuzzleLimit} puzzles / {tierConfig.freeWindowHours}h</span> (Ads every {tierConfig.adFrequencyPuzzles} puzzles) | Pro Users: <span className="text-emerald-400 font-semibold">Unlimited & 0 Ads (₹{tierConfig.proMonthlyPrice}/mo, Save {tierConfig.annualDiscountPercent}% Annual)</span>
                     </div>
                   </div>
                 </div>

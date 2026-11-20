@@ -91,12 +91,12 @@ export default function PrivacyPolicyPage() {
               </p>
               <div className="pt-1">
                 <a
-                  href="https://www.google.com/settings/ads"
+                  href="https://adssettings.google.com"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#c29b78]/15 hover:bg-[#c29b78]/25 border border-[#c29b78]/30 text-[#c29b78] font-semibold text-xs transition-colors"
                 >
-                  <span>Google Ads Settings (google.com/settings/ads)</span>
+                  <span>Google Ad Settings (https://adssettings.google.com)</span>
                   <ExternalLink className="w-3.5 h-3.5" />
                 </a>
               </div>

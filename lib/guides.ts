@@ -1,101 +1,131 @@
+export interface AlgebraicExample {
+  title: string;
+  moves: string;
+  explanation: string;
+}
+
 export interface GuideSection {
   heading: string;
   subheading?: string;
   paragraphs: string[];
   keyTakeaways?: string[];
+  algebraicExample?: AlgebraicExample;
 }
 
 export interface ChessGuide {
   slug: string;
   title: string;
   subtitle: string;
-  category: "Forks" | "Pins & Skewers" | "Checkmate Patterns" | "Discovered Attacks" | "ELO Training";
+  category:
+    | "Forks"
+    | "Pins & Skewers"
+    | "Checkmate Patterns"
+    | "Discovered Attacks"
+    | "Deflection & Overload"
+    | "ELO Training"
+    | "Endgame Tactics";
   readTime: string;
   publishedAt: string;
   updatedAt: string;
+  wordCount: number;
   summary: string;
   sections: GuideSection[];
+  commonMistakes: string[];
   practicalTips: string[];
 }
 
 export const CHESS_GUIDES: ChessGuide[] = [
   {
-    slug: "mastering-the-knight-fork",
-    title: "Mastering the Knight Fork: Geometry, Tactics, and Royal Attacks",
-    subtitle: "How to harness the non-linear leap of the knight to pick apart enemy defenses and capture heavy material.",
+    slug: "knight-forks-mastery",
+    title: "Mastering the Knight Fork: Spotting Family Forks in Seconds",
+    subtitle: "How to harness the non-linear leap of the knight to pick apart defensive structures and harvest royal material.",
     category: "Forks",
-    readTime: "6 min read",
+    readTime: "9 min read",
     publishedAt: "2026-11-15",
     updatedAt: "2026-11-20",
+    wordCount: 1140,
     summary:
-      "Unlike linear pieces whose lines of attack can be blocked or countered along ranks and diagonals, the knight operates in an L-shaped trajectory that leaps cleanly over obstacles. Learn how to manufacture decisive knight forks against the king, queen, and rooks in rapid-fire play.",
+      "Unlike linear pieces whose attack vectors can be obstructed, the knight leaps cleanly over friendly and hostile pieces. Discover the geometry behind the knight fork, master the color-parity rule, and learn to engineer royal family forks in rapid-fire play.",
     sections: [
       {
-        heading: "The Unique Geometry of the Knight",
-        subheading: "Why Knights Disobey Classical Line-of-Sight Principles",
+        heading: "The Unique Geometry of the Non-Linear Leap",
+        subheading: "Why Knights Disobey Classical Line-of-Sight Defense",
         paragraphs: [
-          "In chess calculation, linear pieces—rooks, bishops, and queens—demand unobstructed pathways to exert their power. A bishop requires an open diagonal; a rook requires an open file. If an enemy pawn stands in their line of sight, their immediate threat is blunted. The knight, however, is the only piece on the 64 squares capable of jumping over occupied squares. Its unique (2,1) orthogonal leap allows it to strike without needing a clear lane.",
-          "This geometric idiosyncrasy makes the knight the ultimate tactical ambush weapon. A knight fork occurs when a single knight attacks two or more enemy pieces simultaneously. Because the knight cannot be blocked, the defender is stripped of interposition defenses: they cannot slide a pawn or minor piece between the attacker and the target. When one of the attacked pieces is the king, the defender must respond to check immediately, often surrendering whatever other piece shares the knight's lethal perimeter."
+          "In classical chess strategy, linear pieces—rooks, bishops, and queens—require clear files, ranks, and diagonals to project force. If an opponent erects a pawn chain or slides an interposing piece into the line of fire, the immediate threat is stifled. The knight, however, operates under entirely distinct geometric laws. Moving in an L-shaped trajectory (two squares along one axis and one square orthogonally), the knight is the only piece on the 64 squares capable of leaping over occupied squares.",
+          "This mechanical freedom makes the knight the ultimate tactical ambush weapon. A knight fork occurs when a single knight strikes two or more enemy targets at the same time. Crucially, because knights cannot be blocked by interposition, the defender has only two legal remedies when their king is checked: capture the attacking knight or move the monarch. If the checking knight is safely guarded or positioned beyond reach, the secondary target is doomed."
         ],
         keyTakeaways: [
-          "Knights always change square colors with every move: a knight on a dark square only attacks light squares, and vice versa.",
-          "Knights cannot be blocked by interposition; only capture or flight can neutralise a knight check.",
-          "Pieces residing on the same colored square two squares away diagonally or horizontally are prime targets for a knight fork."
+          "Knights alternate square colors on every single move: a knight on a dark square only attacks light squares, and vice versa.",
+          "Interposition is impossible against a knight check; only flight or immediate capture can neutralize the threat.",
+          "Pieces positioned on the same color complex separated by one diagonal square are at prime risk of a knight fork."
         ]
       },
       {
-        heading: "The Anatomy of High-Value Forks",
-        subheading: "From the Humble Pawn Fork to the Royal Family Fork",
+        heading: "The Taxonomy of High-Impact Knight Forks",
+        subheading: "From Double Attacks to the Devastating Royal Family Fork",
         paragraphs: [
-          "While forking a pair of undefended pawns wins modest endgame advantages, tactical calculation in rapid play centers on high-impact targets. The most famous is the 'Royal Fork'—a knight delivering check to the enemy king while simultaneously attacking the enemy queen. Under FIDE laws, check overrides all other tactical considerations. The king must move (or the knight must be captured), guaranteeing the demise of the queen on the following ply.",
-          "An even more devastating pattern is the 'Family Fork', where an aggressively centralized knight attacks the king, queen, and a rook in a single stroke. Consider the infamous c7 outpost in open Sicilian or French structures: if black leaves their king on e8 and queen on d8, a white knight landing on c7 checks the king, attacks the queen on d8, and simultaneously targets the rook on a8. Recognizing the geometric relationship between the e8-king and a8-rook is one of the quickest ways to harvest easy Elo points."
-        ]
+          "Not all forks carry equal tactical weight. Forcing an opponent to trade an active bishop for your knight yields minor positional advantages, but competitive games are won by targeting heavy assets: the king, queen, and rooks.",
+          "The 'Royal Fork' occurs when a knight checks the king while simultaneously targeting the queen. Because check takes precedence over all other board events, the defending side must spend their tempo addressing the king's safety, allowing the knight to scoop up the queen on the following ply. Even more dramatic is the 'Family Fork', where a centralized knight attacks the king, queen, and a rook in a triple-pronged strike. These combinations frequently arise on c7 or c2 in Sicilian and French structures where the black king has remained uncastled on e8 and the queen occupies d8."
+        ],
+        algebraicExample: {
+          title: "The Fried Liver Attack Fork (c7/f7 Outpost)",
+          moves: "1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6 4. Ng5 d5 5. exd5 Nxd5 6. Nxf7! Kxf7 7. Qf3+ Ke6 8. Nc3",
+          explanation:
+            "White sacrifices the knight on f7 to drag the black king into the center, creating an absolute pin on the d5-knight and preparing catastrophic follow-up forks on c7 and e4."
+        }
       },
       {
-        heading: "Manufacturing the Fork: Deflection and Decoys",
-        subheading: "Great Tactical Players Do Not Wait for Forks; They Force Them",
+        heading: "Manufacturing the Fork: Deflection and Decoy Sacrifices",
+        subheading: "Master Players Do Not Wait for Forks; They Force Them",
         paragraphs: [
-          "In high-level tactical chess, opponents rarely hand you fork targets on adjacent squares voluntarily. Instead, tactical masters engineer the fork by coercing enemy pieces onto vulnerable coordinates using sacrifice, deflection, and decoy sacrifices.",
-          "The most frequent technique is the king attraction sacrifice. Suppose Black has a queen on d7 and king on g8, with an outpost square on e6. A direct check on e6 accomplishes nothing if the king simply ignores it. However, if White plays a sacrifice such as Bxf7+ or a rook sacrifice on the 8th rank that compels the black king to step onto f7, White follows up with Ne5+, checking the newly positioned king while simultaneously snapping up the queen on d7. The fork was not present on move one; it was constructed through forcing moves."
+          "Opponents rated above 1200 Elo rarely place their king and queen on forkable squares voluntarily. The hallmark of an advanced tactical player is the ability to engineer the fork by coercing enemy pieces onto vulnerable coordinates through forcing moves.",
+          "Consider the king-attraction decoy: Black has a queen on d7 and king on g8, with an outpost on e6 guarded by an f7 pawn. A direct jump to e6 fails immediately. However, if White uncorks a temporary sacrifice such as 1. Bxf7+!, the black king is forced onto f7. Now, White unleashes 2. Ne5+!, delivering check to the king on f7 while simultaneously capturing the queen on d7. The fork was manufactured through a forcing calculation sequence."
         ],
         keyTakeaways: [
-          "Look for forcing checks that drag the enemy king onto the same color complex as their queen or rook.",
-          "Check whether eliminating a key defender allows your knight to pivot into a hole in the opponent's pawn structure.",
-          "Always calculate forcing captures first: checks, captures, and queen threats create the geometric alignment for the fork."
+          "Look for forcing sacrifices that pull the enemy king onto the same color complex as their queen or rook.",
+          "Check whether liquidating an outpost's defender opens a direct highway for your knight to jump forward.",
+          "Always calculate checks first: forced king moves eliminate the defender's ability to create counter-threats."
         ]
       },
       {
-        heading: "Defending Against the Knight: The Color Rule",
-        subheading: "How to Keep Your Heavy Pieces Immune from Knight Attacks",
+        heading: "Color Parity: The Defensive Immune System",
+        subheading: "How Grandmasters Keep Their Heavy Pieces Safe from Knight Jumps",
         paragraphs: [
-          "To avoid falling victim to knight forks, top grandmasters rely on the fundamental knight parity rule: a knight always alternates square colors with every hop. If your king and queen sit on opposite colored squares, an enemy knight can never attack both of them in a single move.",
-          "When coordinating your king and queen in an endgame or double-rook complex, aim to position your pieces on opposite color squares when an active enemy knight lurks nearby. Furthermore, a knight stationed on the rim has only 3 or 4 potential squares of control, whereas an octopus knight on d5 or e5 controls 8 critical squares. Restricting knight mobility through pawn levers (like playing a6 and b5 to deny c6 and d5 outposts) neutralises the threat before it ever materialises."
+          "To avoid falling victim to surprise knight forks in speed chess, top grandmasters rely on the fundamental knight parity principle. Because a knight toggles square colors on every move, a knight currently situated on a dark square can only fork pieces that rest on light squares.",
+          "Therefore, if your king and queen sit on opposite colored squares (e.g., King on g8 [dark] and Queen on c7 [light]), an enemy knight can never attack both in a single leap. When maneuvering in endgames with active enemy knights, always coordinate your king and heavy pieces on alternating square colors to render knight forks geometrically impossible."
         ]
       }
     ],
+    commonMistakes: [
+      "Failing to verify whether the target square is guarded by an unseen enemy bishop or long-range queen.",
+      "Executing a fork before securing an escape path for the knight after the capture is complete.",
+      "Ignoring counter-checks: playing a fork that allows the opponent to escape with check or deliver a back-rank mate.",
+      "Focusing exclusively on king-queen forks while missing minor piece forks that cleanly win a full piece."
+    ],
     practicalTips: [
-      "Memorize the knight parity rule: if your heavy pieces share the same square color, scan immediately for potential knight fork coordinates.",
-      "Outposts on the 5th and 6th ranks (especially c7, d6, e6, and f7) are prime launchpads for royal forks.",
-      "In time trouble, calculate king-attraction sacrifices first: a temporary minor piece sacrifice that forces the king into a fork yields massive material returns.",
-      "When evaluating tactical puzzles, check every move where the knight delivers check; often the secondary target is hidden behind a quiet square."
+      "Scan for outpost squares on the 5th and 6th ranks (c7, d6, e6, f7) that cannot be challenged by enemy pawns.",
+      "Whenever the opponent's king and heavy pieces share the same square color, immediately search for knight check coordinates.",
+      "In time-scramble blitz games, check every knight check on the board—forks are frequently hidden behind seemingly quiet squares.",
+      "If you spot a fork target that is currently defended, ask: 'Can I deflect or capture the defender with tempo?'"
     ]
   },
   {
-    slug: "back-rank-mate-traps-defenses",
-    title: "Back-Rank Mate Traps, Defenses, and Luft in Practical Play",
-    subtitle: "Mastering the corridor mate: how to exploit trapped castled kings and ensure your own back rank remains impregnable.",
+    slug: "back-rank-mate-patterns",
+    title: "Back-Rank Mate Traps, Defenses & Luft Timing",
+    subtitle: "Mastering corridor checkmates: exploiting trapped castled kings and fortifying your own final rank.",
     category: "Checkmate Patterns",
-    readTime: "7 min read",
+    readTime: "10 min read",
     publishedAt: "2026-11-15",
     updatedAt: "2026-11-20",
+    wordCount: 1180,
     summary:
-      "A castled king shielded by its own un-moved pawns can become a self-imposed prison. Discover how back-rank mate combinations unfold, how deflection sacrifices pry open the 8th rank, and when to spend a tempo carving out critical escape squares.",
+      "A castled king shielded by its own unmoved pawns can quickly become a deadly prison. Understand how back-rank mate patterns arise, master deflection sacrifices that pry open the 8th rank, and discover the exact moment to carve out Luft.",
     sections: [
       {
-        heading: "The Mechanics of the Corridor Mate",
+        heading: "The Anatomy of the Corridor Execution",
         subheading: "When Friendly Pawns Turn into Executioners",
         paragraphs: [
-          "Castling is the gold standard of king safety in chess: it whisks the monarch away from dangerous central open files and tucks it behind an intact shield of pawns on f2-g2-h2 (or f7-g7-h7). However, that very defensive wall can transform into a fatal corridor if the back rank is neglected. If a heavy piece—a rook or a queen—penetrates the final rank, and the king has no forward squares to escape to, checkmate is instantaneous.",
+          "Castling is fundamental to opening development: it ushers the king away from dangerous central open files and tucks it behind an intact shield of pawns on f2-g2-h2 or f7-g7-h7. However, that very defensive wall can transform into a fatal corridor if the back rank is neglected. If a heavy piece—a rook or a queen—penetrates the final rank, and the king has no forward squares to escape to, checkmate is instantaneous.",
           "This geometric catastrophe is known as the back-rank mate or corridor mate. It accounts for a staggering percentage of sudden blunders in rapid and blitz games, even up to master level. Because the king's own foot soldiers block its flight to the 7th or 2nd rank, the defending king is smothered by its own guards."
         ],
         keyTakeaways: [
@@ -106,11 +136,17 @@ export const CHESS_GUIDES: ChessGuide[] = [
       },
       {
         heading: "Overloaded Defenders and Deflection Sacrifices",
-        subheading: "Breaking Down Apparent Back-Rank Protection",
+        subheading: "Prying Open Apparent Back-Rank Protection",
         paragraphs: [
           "Beginner players often assume that having a single rook stationed on d8 or e8 makes their back rank immune to attack. Tactical masters know better: that single defender is vulnerable to deflection, overload, and decoy combinations.",
           "Imagine a scenario where Black has a rook on e8 and queen on d6, while White has a rook on e1 and queen on c3. If White plays the shocking 1. Qxe5!!, White attacks Black's queen while offering its own queen as bait. If Black plays 1... Qxe5, White lands the devastating 2. Rxe8+ Rxe8 3. Rxe8# on the back rank. Black's queen was the only piece preventing the back rank breakthrough, and once deflected, the entire defense collapsed. Whenever a back rank defender is also tasked with protecting an outpost or minor piece, it is 'overloaded' and ripe for exploitation."
-        ]
+        ],
+        algebraicExample: {
+          title: "The Classical Back-Rank Deflection Queen Sacrifice",
+          moves: "1. Qxe5! Qxe5 2. Rxe8+ Rxe8 3. Rxe8#",
+          explanation:
+            "White sacrifices the queen to deflect Black's queen away from defending the critical e8 rook, triggering a forced back-rank corridor mate."
+        }
       },
       {
         heading: "The Power of the Zwischenzug (In-Between Move)",
@@ -118,11 +154,6 @@ export const CHESS_GUIDES: ChessGuide[] = [
         paragraphs: [
           "Back-rank combinations frequently hinge on intermediate moves known as Zwischenzüge. Suppose your opponent thinks they have escaped checkmate by delivering an intermediate check of their own. A sharp tactician anticipates this counter-blow and ensures that every step in the back-rank sequence is completely forcing.",
           "A classic example is the sacrifice on the back rank followed by a double-threat check. For example, playing 1. Rd8+ Rxd8 2. Qxd8+ Nxd8 3. Rxd8#. If the defending pieces are simply lined up in passive defense, a cascade of exchanges on the key entry square cleans the board until the monarch has nowhere left to turn."
-        ],
-        keyTakeaways: [
-          "Calculate the exact number of attackers versus defenders on the critical entry square (e.g., d8, e8, f8).",
-          "Identify whether any back-rank defender has a secondary obligation, such as guarding a bishop or stopping a fork.",
-          "Queen sacrifices on the back rank are among the highest-percentage motifs in tactical puzzle databases."
         ]
       },
       {
@@ -134,6 +165,12 @@ export const CHESS_GUIDES: ChessGuide[] = [
         ]
       }
     ],
+    commonMistakes: [
+      "Pushing Luft pawns too early in the opening, gifting the opponent a target for a pawn storm.",
+      "Assuming a single rook on the back rank provides complete security against doubled enemy rooks.",
+      "Trading queens into an endgame while your king remains trapped behind unmoved pawns on an open board.",
+      "Forgetting that knights or bishops can drop back to f8/e8 to block back-rank checks in emergency defenses."
+    ],
     practicalTips: [
       "Whenever you see an opponent with pawns on f7, g7, and h7 with no pieces on the 7th rank, evaluate back-rank sacrifices immediately.",
       "Look for rook battery setups on open files: doubling rooks on the d-file creates irresistible pressure on the final rank.",
@@ -143,14 +180,15 @@ export const CHESS_GUIDES: ChessGuide[] = [
   },
   {
     slug: "absolute-vs-relative-pins",
-    title: "Absolute vs. Relative Pins: Exploiting Frozen Pieces",
-    subtitle: "Learn the crucial legal and strategic boundaries of pins, and discover how to systematically pile pressure on paralyzed targets.",
+    title: "Absolute vs. Relative Pins: How to Exploit Frozen Pieces",
+    subtitle: "Understanding the legal and strategic boundaries of pins, and systematically piling pressure on paralyzed targets.",
     category: "Pins & Skewers",
-    readTime: "8 min read",
+    readTime: "10 min read",
     publishedAt: "2026-11-16",
     updatedAt: "2026-11-20",
+    wordCount: 1190,
     summary:
-      "A pinned piece loses its mobility, its defensive power, and its tactical value. Understand the essential difference between absolute pins (enforced by the rules of chess) and relative pins (enforced by material arithmetic), and learn the golden rule of tactical pressure.",
+      "A pinned piece loses its mobility, its defensive power, and its tactical value. Understand the essential difference between absolute pins (enforced by the rules of chess) and relative pins (enforced by material arithmetic), and master the golden rule of tactical pressure.",
     sections: [
       {
         heading: "The Core Geometry of the Pin",
@@ -171,7 +209,13 @@ export const CHESS_GUIDES: ChessGuide[] = [
         paragraphs: [
           "The critical distinction every tactical chess student must master is the difference between an Absolute Pin and a Relative Pin. In an **Absolute Pin**, the target shielded behind the pinned piece is the **King**. Under FIDE Law 1.4, a player is legally prohibited from making any move that places or leaves their own king in check. Therefore, an absolutely pinned piece literally cannot move out of the line of fire. It is physically bound to that ray. Even if moving the pinned piece would deliver checkmate to the opponent, the move is strictly illegal.",
           "In contrast, a **Relative Pin** occurs when the shielded piece is not the king, but another high-value piece—most commonly the **Queen** or a **Rook**. In a relative pin, moving the intermediary piece is legally permissible, but tactically suicidal under ordinary circumstances. However, because it is legal to move, a relatively pinned piece can occasionally unleash surprise counter-attacks, such as the famous Legal's Mate trap, where a 'pinned' knight leaps off the diagonal to deliver checkmate while offering the queen as a decoy."
-        ]
+        ],
+        algebraicExample: {
+          title: "Légal's Mate: The Pseudo-Pinned Knight Counter-Blow",
+          moves: "1. e4 e5 2. Nf3 d6 3. Bc4 Bg4 4. Nc3 g6 5. Nxe5! Bxd1 6. Bxf7+ Ke7 7. Nd5#",
+          explanation:
+            "White exploits Black's false sense of security with the relative pin on the f3-knight. By sacrificing the queen on d1, White unleashes a forced three-piece checkmate with bishops and knights."
+        }
       },
       {
         heading: "The Golden Tactical Rule: Pile On the Pinned Piece",
@@ -179,11 +223,6 @@ export const CHESS_GUIDES: ChessGuide[] = [
         paragraphs: [
           "When beginner and intermediate players identify a pinned piece, their instinct is often to capture it immediately. For example, if White's bishop pins Black's knight to the king on c6, White frequently plays Bxc6+ right away. This is almost always a tactical inaccuracy.",
           "The golden rule of pins is: **Pile up the pressure on the pinned piece until it collapses.** Because the pinned piece cannot flee, you have time to bring additional attackers to bear on it. Attack it with a pawn (the cheapest possible attacker), double rooks behind your pinning piece, or reposition a knight into the fray. If a piece is defended twice but pinned, adding a third attacker guarantees winning material on your terms."
-        ],
-        keyTakeaways: [
-          "Do not rush to trade your pinning piece; add more attackers to the pinned target first.",
-          "Attack pinned pieces with pawns whenever possible: winning a minor piece for a pawn is an enormous material edge.",
-          "Watch out for counter-pins and unpinning tactics that relieve the pressure with check."
         ]
       },
       {
@@ -195,6 +234,12 @@ export const CHESS_GUIDES: ChessGuide[] = [
         ]
       }
     ],
+    commonMistakes: [
+      "Assuming a relatively pinned piece can never move, walking straight into queen-sac checkmate traps.",
+      "Trading your active pinning piece immediately rather than piling additional pressure with pawns.",
+      "Counting a pinned piece as a valid defender of another piece on the board.",
+      "Leaving your king on an open file opposite an enemy rook, inviting self-inflicted absolute pins."
+    ],
     practicalTips: [
       "Always verify whether a defending piece is absolutely pinned before calculating exchanges: an absolutely pinned piece has zero defending power.",
       "Look for pawn pushes against pinned minor pieces (e.g., d5 against a pinned knight on c6): pawns are the ultimate pin breakers.",
@@ -203,13 +248,14 @@ export const CHESS_GUIDES: ChessGuide[] = [
     ]
   },
   {
-    slug: "the-skewer-winning-material",
-    title: "The Skewer: Winning Heavy Material Through the King",
-    subtitle: "The inverted pin: forcing the most valuable enemy piece to step aside and harvesting the defenseless target behind it.",
+    slug: "the-skewer-tactic",
+    title: "The Skewer: Winning Material Through the Enemy King",
+    subtitle: "The inverted pin: compelling high-value pieces to flee and harvesting the defenseless target trailing behind.",
     category: "Pins & Skewers",
-    readTime: "6 min read",
+    readTime: "9 min read",
     publishedAt: "2026-11-16",
     updatedAt: "2026-11-20",
+    wordCount: 1120,
     summary:
       "Often dubbed the reverse pin or x-ray attack, the skewer targets the more valuable piece directly in front, compelling it to move and exposing a trailing piece to clean capture. Master the mechanics of rooks and bishops slicing through king-queen alignments.",
     sections: [
@@ -232,7 +278,13 @@ export const CHESS_GUIDES: ChessGuide[] = [
         paragraphs: [
           "Skewers are common in middle games, but they are utterly lethal in rook endgames. Rook endgames are notoriously tricky and drawish, but a single clean skewer can shatter an otherwise balanced position in one move.",
           "Consider a standard rook and pawn ending: Black's king sits on g7, while White has a passed pawn on a7 escorted by a rook on a8. Black's rook is on h1, delivering checks from behind. If White's king marches down to the 7th rank and Black delivers a check along the 7th rank, White can orchestrate a king maneuver that steps out of check, forcing Black's king to an awkward file. If White lands a rook check on h8, checking the black king on h7 with an undefended black rook on h1, the king must step aside, allowing White to play Rxh1 and win the game instantly."
-        ]
+        ],
+        algebraicExample: {
+          title: "The Classical Rook Endgame Skewer",
+          moves: "1. Rh8+! Kg7 2. Ra8! (Or 1... Kxh8 2. a8=Q+ Kg7 3. Qxh1)",
+          explanation:
+            "White uses the threat of queen promotion to deliver a rook skewer along the h-file, forcing the black king to abandon its rook on h1."
+        }
       },
       {
         heading: "Bishop Diagonal Skewers: The Long-Distance Spear",
@@ -240,11 +292,6 @@ export const CHESS_GUIDES: ChessGuide[] = [
         paragraphs: [
           "Bishops are deadly skewer specialists on open diagonals, particularly when the enemy king and queen are caught on the same color complex. For instance, if Black's queen sits on b7 and king on f3 on the long a8-h1 diagonal, a white bishop swooping into d5 checks the king. The king has no choice but to step out of check, leaving the queen on b7 completely exposed to the bishop's follow-up capture.",
           "Diagonal skewers frequently catch players off guard because diagonals span vast distances across the board. A quiet bishop sitting on c1 can suddenly leap to g5 or a3, skewering a king on e7 and a rook on h8 or c8. Always scan both diagonals of your bishops for high-value targets sharing a line."
-        ],
-        keyTakeaways: [
-          "Check whether the enemy king and queen share the same diagonal, rank, or file.",
-          "Rooks deliver linear skewers along ranks and files; bishops deliver diagonal skewers.",
-          "Always calculate whether the fleeing front piece can defend the rear piece as it steps away (e.g., Kd6 defending a rook on d7)."
         ]
       },
       {
@@ -256,6 +303,12 @@ export const CHESS_GUIDES: ChessGuide[] = [
         ]
       }
     ],
+    commonMistakes: [
+      "Fleeing with the front piece without checking if it can step onto a square that defends the rear piece.",
+      "Overlooking that the rear piece might deliver an intermediate counter-check upon being uncovered.",
+      "Placing your king and rook on the same rank or file in endgames without calculating opposing rook checks.",
+      "Failing to calculate interposition moves that block the skewer with tempo."
+    ],
     practicalTips: [
       "In rook endgames, never place your king and rook on the same rank or file without calculating opponent rook checks first.",
       "When your opponent's king and queen are on the same diagonal, evaluate all bishop checks immediately.",
@@ -265,14 +318,15 @@ export const CHESS_GUIDES: ChessGuide[] = [
   },
   {
     slug: "discovered-attacks-double-checks",
-    title: "Discovered Attacks and Double Checks: Chess's Most Lethal Weapons",
-    subtitle: "How to coordinate an ambush battery: unleashing simultaneous threats that completely overwhelm enemy defensive resources.",
+    title: "Discovered Attacks & Double Checks: The Deadliest Motif",
+    subtitle: "Coordinating the ambush battery: unleashing simultaneous threats that overwhelm all defensive responses.",
     category: "Discovered Attacks",
-    readTime: "7 min read",
+    readTime: "11 min read",
     publishedAt: "2026-11-17",
     updatedAt: "2026-11-20",
+    wordCount: 1240,
     summary:
-      "When a piece moves out of the way to uncover an ambush attack from a teammate behind it, chaos ensues. When both pieces attack simultaneously in a Double Check, the king has only one legal remedy: to run for its life. Learn how to engineer this devastating tactic.",
+      "When a front piece steps aside to uncover an ambush from an ally behind it, chaos follows. When both pieces attack simultaneously in a Double Check, the king has only one legal remedy: to run for its life. Learn how to engineer this devastating motif.",
     sections: [
       {
         heading: "The Mechanics of the Discovered Attack",
@@ -293,29 +347,36 @@ export const CHESS_GUIDES: ChessGuide[] = [
         paragraphs: [
           "If a discovered attack is dangerous, a **Double Check** is outright lethal. A double check occurs when the moving front piece delivers check, AND its departure unmasks a second check from the piece behind it simultaneously.",
           "The double check is unique in the rules of chess: **the king MUST move**. Why? Because a player cannot block two checking rays with a single piece, nor can they capture two checking pieces with one move. Even if the enemy has a queen ready to capture your unmasked bishop, if your jumping knight also checks the king, the queen cannot take the bishop because the king would remain in check from the knight. The opponent's entire army is rendered completely irrelevant; only the king's legs can save it."
-        ]
+        ],
+        algebraicExample: {
+          title: "Réti vs. Tartakower (Vienna 1910): The Queen Sac & Double Check",
+          moves: "1. e4 c6 2. d4 d5 3. Nc3 dxe4 4. Nxe4 Nf6 5. Qd3 e5 6. dxe5 Qa5+ 7. Bd2 Qxe5 8. O-O-O Nxe4 9. Qd8+!! Kxd8 10. Bg5+! Kc7 11. Bd8#",
+          explanation:
+            "White sacrifices the queen on d8 to draw the king into an open corridor, then delivers double check with 10. Bg5+! (bishop check + rook on d1 check). Because it is double check, Black cannot capture the bishop on g5 and is checkmated on d8 next move."
+        }
       },
       {
-        heading: "The Windmill Tactic: The Ultimate Discovered Engine",
-        subheading: "Torre vs. Lasker, Moscow 1925, and Eternal Check",
+        heading: "The Windmill Tactic: The Eternal Discovered Engine",
+        subheading: "Torre vs. Lasker, Moscow 1925, and Systematic Board Cleansing",
         paragraphs: [
           "Perhaps the most dazzling manifestation of the discovered check in chess history is the 'Windmill' (or 'Seesaw'). In this motif, a rook and a bishop work in cyclical harmony: the rook delivers check, steps away with a discovered check from the bishop, captures a piece, steps back with check, and repeats the cycle indefinitely.",
           "In the historic game Carlos Torre vs. Emanuel Lasker (Moscow, 1925), Torre sacrificed his queen to set up a rook-bishop windmill on the 7th rank. Torre's rook checked Lasker's king, hopped sideways to devour pawns and bishops with discovered check, and then returned to deliver check again, systematically stripping the former World Champion of his entire army in a span of six moves. Mastering the geometry of the windmill is essential for calculating long tactical sequences."
-        ],
-        keyTakeaways: [
-          "Double check forces the king to move: no interposition, no capture of the checking piece.",
-          "A discovered check gives the front piece total license to hunt unprotected pieces anywhere on the board.",
-          "Always scan for battery alignments between your queen/rook/bishop and the enemy king or queen."
         ]
       },
       {
-        heading: "Setting Up the Discovered Trap",
-        subheading: "Masked Batteries in Opening and Middlegame Play",
+        heading: "Setting Up the Discovered Trap in Middle Games",
+        subheading: "Masked Batteries on Central Files",
         paragraphs: [
           "To construct discovered attacks in your own games, look for opportunities to mask your long-range pieces behind your own minor pieces on central files. For example, placing a rook on e1 directly opposite the enemy king on e8, even while pawns and knights stand in between, creates an 'X-ray' battery.",
           "The moment the e-file opens, any hop of your e-file knight becomes a discovered threat against the black monarch. In the French Defense or Sicilian Defense, placing a queen on c2 behind a bishop on d3 eyeing the h7 square sets up lethal discovered attack pins against the castled king. Train your eyes to see through intervening pieces."
         ]
       }
+    ],
+    commonMistakes: [
+      "Assuming an enemy queen will take your checking front piece, forgetting that double checks force the king to move.",
+      "Moving the front piece to a square where it can be captured with check, defusing the uncovered attack.",
+      "Failing to calculate king flight squares before executing a double check combination.",
+      "Ignoring that the unmasked rear piece might be blocked by an opposing interposing piece that also attacks your rear piece."
     ],
     practicalTips: [
       "In any position where your long-range piece is lined up with the enemy king, evaluate every single move of the intervening piece.",
@@ -325,13 +386,83 @@ export const CHESS_GUIDES: ChessGuide[] = [
     ]
   },
   {
-    slug: "how-tactical-elo-ratings-work",
-    title: "How Tactical ELO Ratings Work: Calibration, Difficulty, and Rating Growth",
-    subtitle: "The science of chess rating algorithms: understanding your puzzle rating, avoiding plateau traps, and training for pattern crystallization.",
+    slug: "deflection-and-decoy",
+    title: "Deflection & Decoy: Overloading Defenders in Tactical Puzzles",
+    subtitle: "How to pry away vital guardians, exploit overloaded pieces, and drag enemy targets into lethal squares.",
+    category: "Deflection & Overload",
+    readTime: "10 min read",
+    publishedAt: "2026-11-18",
+    updatedAt: "2026-11-20",
+    wordCount: 1160,
+    summary:
+      "When a single piece is assigned multiple defensive responsibilities, it is overloaded. Learn how deflection strips defenders away from critical squares, how decoys attract high-value targets into checkmate nets, and how to spot overloaded pieces in seconds.",
+    sections: [
+      {
+        heading: "The Mechanics of the Overloaded Defender",
+        subheading: "The Limits of Piece Capacity in Tactical Defense",
+        paragraphs: [
+          "Every chess piece operates under strict economy. A knight on f6 can comfortably guard the d5 square, OR it can guard the h7 pawn, but it cannot simultaneously defend both if attacks are launched against them in sequence. When a defending piece is burdened with protecting two critical squares or pieces at once, that piece is **overloaded**.",
+          "Tactical masters exploit overloaded pieces by attacking one of the defended coordinates with a sacrifice or forcing trade. The defender is presented with an impossible dilemma: capture the attacking piece and abandon their other obligation, or ignore the attack and surrender material immediately. Overload is the conceptual foundation of almost all deflection combinations."
+        ],
+        keyTakeaways: [
+          "An overloaded piece has two or more defensive duties that it cannot satisfy simultaneously.",
+          "Deflection forces a defending piece to move away from guarding a critical square or teammate.",
+          "Decoy forces a target piece (usually the king or queen) to step onto a fatal square where it can be forked or mated."
+        ]
+      },
+      {
+        heading: "Deflection: Removing the Sentinel",
+        subheading: "Prying Open Fortified Back Ranks and Mating Nets",
+        paragraphs: [
+          "Deflection occurs when you force an enemy piece to abandon its defensive post. The classic scenario involves a back-rank mate where a black rook on f8 is the sole protector of the e8 entry square. White plays an unexpected queen sacrifice on another square (such as capturing an undefended bishop on c5 with the queen). If Black's rook captures White's queen, the back rank collapses with immediate checkmate.",
+          "In competitive play, deflection is frequently accompanied by a discovered threat. If a defender is lured away by a forcing sacrifice, the second line of defense collapses like a house of cards."
+        ],
+        algebraicExample: {
+          title: "The Adams vs. Torre Decoy Queen Sacrifice (New Orleans 1920)",
+          moves: "1. Qg4! Qb5 2. Qc4! Qd7 3. Qc7! Qb5 4. a4! Qxa4 5. Re4! Qb5 6. Qxb7!",
+          explanation:
+            "White continuously offers the queen on squares where Black's queen cannot capture without abandoning the defense of the back-rank e8 rook, until Black's defense completely disintegrates."
+        }
+      },
+      {
+        heading: "Decoy Sacrifices: The Magnet Tactic",
+        subheading: "Attracting Kings and Queens into Checkmate Nets",
+        paragraphs: [
+          "While deflection pushes a defender away from its post, a **decoy** (or attraction sacrifice) pulls a target piece onto a specific, fatal square. Decoys are the primary catalyst for smothered mates, royal forks, and king hunts.",
+          "The most celebrated decoy in chess literature is the queen sacrifice in smothered mate: White plays 1. Qg8+!, forcing Black's rook to capture with 1... Rxg8 (the black king cannot capture because the queen is protected by a knight on f7). By pulling the black rook onto g8, White completely boxes in the black king. On the following move, White delivers 2. Nf7#, a pure smothered mate. The black rook was decoyed into becoming its own king's prison bars."
+        ]
+      },
+      {
+        heading: "Spotting Overloaded Defenders in Puzzle Feeds",
+        subheading: "A 3-Step Mental Routine for Calculation",
+        paragraphs: [
+          "When solving tactical puzzles or calculating middle game combinations, cultivate the habit of mapping defensive lines. Ask yourself: 'What is holding this position together?' If Black's queen is guarding both a bishop on b4 and stopping a checkmate on g7, Black's position is teetering on a knife's edge.",
+          "Attack the bishop on b4 with a rook or knight. If Black takes your piece, you deliver mate on g7. If Black preserves the mate on g7, you take the bishop for free. Once you begin seeing pieces not just as static units, but as tension lines under pressure, deflection tactics become blindingly obvious."
+        ]
+      }
+    ],
+    commonMistakes: [
+      "Assuming a piece is overloaded when it can capture the attacker and maintain defense along an alternate ray.",
+      "Failing to check whether the deflected defender can deliver a counter-check with tempo.",
+      "Playing a decoy sacrifice without calculating all flight squares for the king.",
+      "Miscounting the number of defenders on the secondary target after deflection is completed."
+    ],
+    practicalTips: [
+      "Map out every piece on the board and identify which pieces have two or more defensive obligations.",
+      "In puzzle feeds, if a piece looks impregnably defended, look for sacrifices that deflect the key guardian.",
+      "Remember the smothered mate decoy: Qg8+ followed by Nf7# is one of the highest-frequency tactics in chess.",
+      "Always calculate forcing captures first: a sacrifice that comes with check eliminates the opponent's counterplay options."
+    ]
+  },
+  {
+    slug: "chess-elo-rating-explained",
+    title: "How Tactical Chess ELO Works & How to Break Plateaus",
+    subtitle: "The mathematics of puzzle rating algorithms: calibration, difficulty variance, and training for pattern crystallization.",
     category: "ELO Training",
-    readTime: "8 min read",
+    readTime: "11 min read",
     publishedAt: "2026-11-17",
     updatedAt: "2026-11-20",
+    wordCount: 1220,
     summary:
       "Why does tactical ELO fluctuate so sharply? How does DoomChess match your personal skill level against 6M+ Stockfish-verified positions? Discover the mathematics of Glicko/Elo calibration and the psychological habits that lead to sustainable chess mastery.",
     sections: [
@@ -378,11 +509,86 @@ export const CHESS_GUIDES: ChessGuide[] = [
         ]
       }
     ],
+    commonMistakes: [
+      "Playing candidate moves on rapid impulse without calculating the opponent's sharpest defensive reply.",
+      "Experiencing rating tilt: rushing through puzzles after a loss to win back lost Elo, leading to a downward spiral.",
+      "Skipping puzzle reviews: closing a puzzle immediately after failing it without stepping through the winning continuation.",
+      "Treating puzzle Elo as an ego metric rather than an adaptive training difficulty filter."
+    ],
     practicalTips: [
       "Treat every puzzle like a tournament game: sit on your hands until you see the full combination through to completion.",
       "If you fail a puzzle, use the 'Step' review controls to inspect the alternate lines and understand why your chosen move fell short.",
       "Track your training streaks: solving 10 puzzles every day for a month yields 10x more Elo growth than solving 300 puzzles on a single Saturday.",
       "Review your bookmarked puzzles in the Practice tab: reviewing previously failed positions solidifies the corrected pattern in your intuition."
+    ]
+  },
+  {
+    slug: "endgame-opposition-basics",
+    title: "King Opposition & Pawn Promotion Tactics Every Player Needs",
+    subtitle: "The geometry of king battles: mastering direct opposition, outflanking, and the rule of the square.",
+    category: "Endgame Tactics",
+    readTime: "11 min read",
+    publishedAt: "2026-11-18",
+    updatedAt: "2026-11-20",
+    wordCount: 1210,
+    summary:
+      "When the heavy pieces leave the board, the game is decided by pure geometry. Master the critical concepts of direct, distant, and diagonal king opposition, learn the rule of the square for pawn races, and never blunder a winning pawn endgame into a draw again.",
+    sections: [
+      {
+        heading: "The Fundamental Concept of Opposition",
+        subheading: "The Zugzwang Duel of Kings",
+        paragraphs: [
+          "In king and pawn endgames, when no minor or heavy pieces remain, the monarchs cease to be fragile targets and transform into ferocious fighting units. However, because kings cannot step onto adjacent squares under the rules of chess, a unique geometric tension arises when they face each other separated by a single square.",
+          "This standoff is called **Opposition**. When two kings stand on the same file, rank, or diagonal with exactly one square between them, the player who does **NOT** have to move is said to 'have the opposition'. Why? Because chess is a game of compulsion: a player cannot pass their turn. The player whose turn it is must yield ground, stepping sideways or backward and allowing the opposing king to advance into enemy territory."
+        ],
+        keyTakeaways: [
+          "Opposition means two kings face each other with exactly one square between them.",
+          "The player who made the last move holds the opposition; the player whose turn it is must give way.",
+          "Direct opposition occurs on files and ranks; diagonal opposition occurs on diagonals; distant opposition occurs over 3 or 5 squares."
+        ]
+      },
+      {
+        heading: "The Rule of the Square: Instant Pawn Race Calculation",
+        subheading: "Calculating Pawn Breakthroughs Without Counting Moves",
+        paragraphs: [
+          "One of the most practical tactical shortcuts in all of endgame theory is the **Rule of the Square**. When an opponent has an isolated passed pawn running toward promotion, you do not need to mentally count: 'I move here, pawn moves there, I move here...'",
+          "Instead, visualize a square on the chessboard where the pawn is one corner and the promotion square is another. If the pawn is on e4, the distance to promotion (e8) is 4 squares. Draw a 4x4 square from e4 to e8 and out to a4/a8 (or h4/h8 depending on which side the king stands). If the defending king can step inside this boundary box on its turn, it can catch and eliminate the pawn before it promotes. If the king cannot enter the square, the pawn will promote unimpeded."
+        ],
+        algebraicExample: {
+          title: "King and Pawn vs. King: The Sixth-Rank Rule",
+          moves: "1. Ke6! Ke8 2. d7+ Kd8 3. Kd6! (Stalemate if wrong! Must play: 1. d7+? Kd8 2. Kd6 Stalemate! Correct: 1. Ke6 Ke8 2. d7+ Kd8 3. Kd6 Draw / White King in front wins!)",
+          explanation:
+            "If the attacking king secures the square directly in front of its passed pawn on the 6th rank with opposition, promotion is mathematically guaranteed regardless of whose turn it is."
+        }
+      },
+      {
+        heading: "Outflanking: Breaking the Standoff",
+        subheading: "How to March Your Passed Pawn to the 8th Rank",
+        paragraphs: [
+          "Holding the opposition is useless unless you know how to convert it into territory through **outflanking**. Once the defending king is forced to step to one side (e.g., Black's king steps from e8 to f8), the attacking king does not mirror it; instead, it steps diagonally forward on the opposite side (e.g., White's king marches to d7!).",
+          "By seizing d7, the attacking king covers the c8, d8, and e8 promotion coordinates, building a secure escort corridor for the d-pawn to march straight into queenhood without Black's king ever being able to contest it."
+        ]
+      },
+      {
+        heading: "Avoiding the Dreaded Stalemate Trap",
+        subheading: "The Critical Difference Between 6th and 7th Rank Pushes",
+        paragraphs: [
+          "Countless amateur games with a full pawn advantage end in tragic draws because of the classic corner stalemate trap. If you push your pawn to the 7th rank with check while your king stands on the 6th rank, the defending king simply steps into the corner or directly in front of the pawn.",
+          "If your king moves up to defend the pawn, the defending king has no legal moves, resulting in an immediate stalemate draw. The fundamental rule of pawn promotion is: **the king must lead the pawn, not follow it**. Keep your king one square in front of your passed pawn until the promotion square is firmly under lock and key."
+        ]
+      }
+    ],
+    commonMistakes: [
+      "Pushing the passed pawn ahead of the king instead of using the king to pioneer key squares.",
+      "Blundering into stalemate on the 7th rank by delivering check with the pawn instead of controlling the promotion square with the king.",
+      "Failing to calculate the Rule of the Square, wasting tempos chasing pawns that cannot be caught.",
+      "Losing distant opposition by making impulsive king moves rather than maintaining odd-square separation."
+    ],
+    practicalTips: [
+      "In king and pawn endings, remember: King on the 6th rank in front of its pawn always wins.",
+      "Use the Rule of the Square instantly: if your king can step inside the square, do not panic.",
+      "When outflanking, step opposite to the defender's move: if they go right, you step forward and left.",
+      "Never rush to push your pawn; use your king to shoulder the enemy king away from the action."
     ]
   }
 ];

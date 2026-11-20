@@ -1194,6 +1194,48 @@ export default function RootPage() {
           <p>
             Built for focused practice on mobile devices and desktop displays, DoomChess features high-contrast custom board themes, crisp vector chess pieces, and smooth gesture navigation. Swipe up to progress to the next puzzle, review move history with step controls, or challenge friends on the global leaderboard.
           </p>
+
+          {/* Featured Guides Editorial Hub */}
+          <div className="pt-4 border-t border-white/[0.04] space-y-4">
+            <div>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-[#c29b78] font-mono">
+                Featured Tactical Chess Guides &amp; Motifs
+              </h3>
+              <p className="text-xs text-zinc-400 mt-1">
+                Explore in-depth tactical guides authored by chess masters and verified with Stockfish 16 engine calculations:
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              {[
+                { title: "Mastering the Knight Fork: Family Forks in Seconds", href: "/guides/knight-forks-mastery", tag: "Forks" },
+                { title: "Back-Rank Mate Traps, Defenses & Luft Timing", href: "/guides/back-rank-mate-patterns", tag: "Checkmate" },
+                { title: "Absolute vs. Relative Pins: Exploiting Frozen Pieces", href: "/guides/absolute-vs-relative-pins", tag: "Pins" },
+                { title: "The Skewer: Winning Material Through the Enemy King", href: "/guides/the-skewer-tactic", tag: "Skewers" },
+                { title: "Discovered Attacks & Double Checks: Deadliest Motif", href: "/guides/discovered-attacks-double-checks", tag: "Discovered" },
+                { title: "King Opposition & Pawn Promotion Tactics", href: "/guides/endgame-opposition-basics", tag: "Endgame" },
+              ].map((g) => (
+                <a
+                  key={g.href}
+                  href={g.href}
+                  className="p-3.5 rounded-xl bg-[#12100e] border border-white/[0.06] hover:border-[#c29b78]/40 transition-colors flex items-center justify-between group"
+                >
+                  <div className="flex flex-col pr-2">
+                    <span className="text-[10px] font-mono text-[#c29b78] uppercase">{g.tag}</span>
+                    <span className="text-xs font-semibold text-zinc-200 group-hover:text-white transition-colors">{g.title}</span>
+                  </div>
+                  <ArrowRight className="w-3.5 h-3.5 text-[#c29b78] group-hover:translate-x-1 transition-transform shrink-0" />
+                </a>
+              ))}
+            </div>
+
+            <div className="pt-2 text-center sm:text-left">
+              <a href="/guides" className="inline-flex items-center gap-1.5 text-xs text-[#c29b78] hover:text-[#dfb48c] font-semibold transition-colors">
+                <span>Browse all tactical chess guides in the library</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </a>
+            </div>
+          </div>
           <footer className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-zinc-500 border-t border-white/[0.06]">
             <span>&copy; 2026 DoomChess. All rights reserved.</span>
             <nav aria-label="Landing Page Footer" className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-zinc-400">

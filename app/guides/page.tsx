@@ -42,10 +42,20 @@ const CATEGORY_COLORS: Record<string, { bg: string; text: string; border: string
     text: "text-indigo-400",
     border: "border-indigo-500/20",
   },
+  "Deflection & Overload": {
+    bg: "bg-purple-500/10",
+    text: "text-purple-400",
+    border: "border-purple-500/20",
+  },
   "ELO Training": {
     bg: "bg-sky-500/10",
     text: "text-sky-400",
     border: "border-sky-500/20",
+  },
+  "Endgame Tactics": {
+    bg: "bg-cyan-500/10",
+    text: "text-cyan-400",
+    border: "border-cyan-500/20",
   },
 };
 
