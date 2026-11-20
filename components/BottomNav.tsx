@@ -109,10 +109,15 @@ export function BottomNav() {
     };
   }, []);
 
-  // Hide dock on admin console, unauthenticated visitors, and landing page
+  // Hide dock on admin console, reading/trust pages, unauthenticated visitors, and landing page
   if (
     !hasMounted ||
     pathname?.startsWith("/admin") ||
+    pathname?.startsWith("/guides") ||
+    pathname?.startsWith("/about") ||
+    pathname?.startsWith("/privacy") ||
+    pathname?.startsWith("/terms") ||
+    pathname?.startsWith("/contact") ||
     !isAuthenticated ||
     pathname === "/" ||
     isLandingShowing

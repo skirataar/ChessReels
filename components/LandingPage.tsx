@@ -142,9 +142,33 @@ export function LandingPage({
 
 
       {/* Footer */}
-      <footer className="w-full max-w-md mx-auto text-center mt-6 z-20">
-        <p className="text-[11px] text-zinc-400 font-medium">
-          6,157,341 Puzzles • Layerbase Postgres • Better Auth
+      <footer className="w-full max-w-md mx-auto text-center mt-6 z-20 space-y-2">
+        <nav
+          aria-label="Landing Footer Navigation"
+          className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] text-zinc-400 font-medium"
+        >
+          <a href="/guides" className="hover:text-[#c29b78] transition-colors">
+            Tactical Guides
+          </a>
+          <span className="text-zinc-700">/</span>
+          <a href="/about" className="hover:text-[#c29b78] transition-colors">
+            About
+          </a>
+          <span className="text-zinc-700">/</span>
+          <a href="/privacy-policy" className="hover:text-[#c29b78] transition-colors">
+            Privacy Policy
+          </a>
+          <span className="text-zinc-700">/</span>
+          <a href="/terms" className="hover:text-[#c29b78] transition-colors">
+            Terms
+          </a>
+          <span className="text-zinc-700">/</span>
+          <a href="/contact" className="hover:text-[#c29b78] transition-colors">
+            Contact
+          </a>
+        </nav>
+        <p className="text-[10px] text-zinc-600 font-mono">
+          6.15M+ Tactics | Stockfish 16 | Continuous Battery
         </p>
       </footer>
     </div>

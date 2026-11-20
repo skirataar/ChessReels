@@ -1194,19 +1194,28 @@ export default function RootPage() {
           <p>
             Built for focused practice on mobile devices and desktop displays, DoomChess features high-contrast custom board themes, crisp vector chess pieces, and smooth gesture navigation. Swipe up to progress to the next puzzle, review move history with step controls, or challenge friends on the global leaderboard.
           </p>
-          <footer className="pt-4 flex flex-wrap items-center justify-between gap-3 text-[11px] text-zinc-500 border-t border-white/[0.04]">
-            <span>2026 DoomChess. All rights reserved.</span>
-            <div className="flex items-center gap-3">
-              <a href="/privacy" className="hover:text-[#c29b78] transition-colors underline underline-offset-2">
+          <footer className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-zinc-500 border-t border-white/[0.06]">
+            <span>&copy; 2026 DoomChess. All rights reserved.</span>
+            <nav aria-label="Landing Page Footer" className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-zinc-400">
+              <a href="/guides" className="hover:text-[#c29b78] transition-colors underline underline-offset-2">
+                Tactical Guides
+              </a>
+              <a href="/about" className="hover:text-[#c29b78] transition-colors underline underline-offset-2">
+                About
+              </a>
+              <a href="/privacy-policy" className="hover:text-[#c29b78] transition-colors underline underline-offset-2">
                 Privacy Policy
               </a>
               <a href="/terms" className="hover:text-[#c29b78] transition-colors underline underline-offset-2">
-                Terms of Service
+                Terms
               </a>
-              <a href="/play" className="hover:text-[#c29b78] transition-colors underline underline-offset-2">
+              <a href="/contact" className="hover:text-[#c29b78] transition-colors underline underline-offset-2">
+                Contact
+              </a>
+              <a href="/play" className="hover:text-[#c29b78] transition-colors underline underline-offset-2 text-[#c29b78]">
                 Play Online
               </a>
-            </div>
+            </nav>
           </footer>
         </motion.section>
       </div>
