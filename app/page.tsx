@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ArrowRight, Check, LogIn, Sparkles, ChevronDown, Eye, EyeOff, User, ShieldCheck, Lock } from "lucide-react";
@@ -502,15 +503,6 @@ export default function RootPage() {
           return "gate";
         }
 
-        const cookieStr = document.cookie || "";
-        const hasSessionCookie =
-          cookieStr.includes("chess_reel_session=") ||
-          cookieStr.includes("better-auth.session_token=") ||
-          cookieStr.includes("__Secure-better-auth.session_token=") ||
-          cookieStr.includes("next-auth.session-token=") ||
-          cookieStr.includes("doomchess_token=") ||
-          cookieStr.includes("chess_reel_oauth_user=");
-
         const rawAccount = window.localStorage.getItem("chess_reel_account");
         if (rawAccount) {
           try {
@@ -519,10 +511,6 @@ export default function RootPage() {
               return "loading";
             }
           } catch {}
-        }
-
-        if (hasSessionCookie || searchParams.get("source") === "pwa" || searchParams.has("pwa")) {
-          return "loading";
         }
       } catch {}
     }
@@ -678,18 +666,6 @@ export default function RootPage() {
             return;
           }
         } catch {}
-      }
-
-      // Check cookie session as well
-      const cookieStr = document.cookie || "";
-      const hasSessionCookie =
-        cookieStr.includes("chess_reel_session=") ||
-        cookieStr.includes("better-auth.session_token=") ||
-        cookieStr.includes("doomchess_token=");
-
-      if (hasSessionCookie || searchParams.get("source") === "pwa" || searchParams.has("pwa")) {
-        router.replace("/play");
-        return;
       }
 
       if (!stepParam && !modeParam && !googleOnboarding) {
@@ -1116,26 +1092,18 @@ export default function RootPage() {
 
           {/* Bottom Pinned CTAs & Smooth Scroll Down Indicator */}
           <div className="w-full space-y-3 pb-2 shrink-0 flex flex-col items-center relative z-20">
-            <button
+            <Link
+              href="/play"
               onClick={() => {
                 try {
                   trackEvent("get_started_clicked");
                 } catch {}
-                if (typeof window !== "undefined") {
-                  router.push("/play");
-                  setTimeout(() => {
-                    if (window.location.pathname !== "/play") {
-                      window.location.href = "/play";
-                    }
-                  }, 250);
-                }
               }}
-              type="button"
               className="w-full h-12 rounded-full bg-[#c29b78] hover:bg-[#d4b08f] text-[#0a0908] font-semibold text-sm tracking-wide transition-all duration-150 active:scale-[0.98] shadow-lg shadow-[#c29b78]/20 flex items-center justify-center gap-2 cursor-pointer relative z-20"
             >
               <span>Get Started</span>
               <ArrowRight className="w-4 h-4 stroke-[2]" />
-            </button>
+            </Link>
 
             <button
               onClick={() => {
@@ -1166,42 +1134,38 @@ export default function RootPage() {
           </div>
         </section>
 
-        {/* --- 2. BELOW-THE-FOLD SECTION (Scroll-Triggered Fade-In) --- */}
-        <motion.section
+        {/* --- 2. BELOW-THE-FOLD EDITORIAL & GUIDES SECTION --- */}
+        <section
           id="about-section"
           aria-label="About DoomChess"
-          initial={{ opacity: 0, y: 32 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, amount: 0.15 }}
-          transition={{ duration: 0.7, ease: "easeOut" }}
-          className="w-full max-w-4xl mx-auto px-6 py-24 text-xs text-zinc-400 space-y-6 leading-relaxed border-t border-white/[0.08]"
+          className="w-full max-w-4xl mx-auto px-6 py-20 text-xs text-neutral-300 space-y-6 leading-relaxed border-t border-white/[0.08]"
         >
-          <h2 className="text-sm font-bold uppercase tracking-wider text-[#c29b78]">
+          <h2 className="text-sm font-bold uppercase tracking-wider text-[#c29b78] font-mono">
             About DoomChess — Tactical Chess Puzzles &amp; Elo Mastery
           </h2>
-          <p>
+          <p className="text-neutral-300 leading-relaxed">
             DoomChess is a web-based chess training platform engineered to convert passive screen time into sharp tactical pattern recognition. Rather than aimless scrolling, DoomChess presents short-form vertical chess puzzles tailored dynamically to your skill level. Every puzzle presents a real game position where a decisive combination, defensive save, or winning tactical maneuver must be identified and executed.
           </p>
-          <h3 className="text-xs font-semibold text-zinc-200">Adaptive Elo Rating &amp; Calibration</h3>
-          <p>
+          <h3 className="text-xs font-semibold text-neutral-200">Adaptive Elo Rating &amp; Calibration</h3>
+          <p className="text-neutral-300 leading-relaxed">
             Your tactical strength is measured through an adaptive rating algorithm. When you begin, an onboarding calibration sequence benchmarks your baseline Elo. As you solve or fail puzzles, your rating recalculates in real time based on puzzle difficulty, completion accuracy, and hint usage. Daily streaks track your training consistency, with Streak Freezes available to preserve your momentum during busy days.
           </p>
-          <h3 className="text-xs font-semibold text-zinc-200">Tactical Themes &amp; Pattern Recognition</h3>
-          <p>
+          <h3 className="text-xs font-semibold text-neutral-200">Tactical Themes &amp; Pattern Recognition</h3>
+          <p className="text-neutral-300 leading-relaxed">
             Master essential chess motifs through repetitive, curated exposure. DoomChess curates hundreds of thousands of authentic positions featuring forks, pins, skewers, discovered attacks, deflection, overloaded defenders, back-rank weaknesses, and smothered mates. Immediate visual board feedback reinforces correct moves and highlights tactical missteps, building instinctive board vision.
           </p>
-          <h3 className="text-xs font-semibold text-zinc-200">Distraction-Free Dark Luxury Interface</h3>
-          <p>
+          <h3 className="text-xs font-semibold text-neutral-200">Distraction-Free Dark Luxury Interface</h3>
+          <p className="text-neutral-300 leading-relaxed">
             Built for focused practice on mobile devices and desktop displays, DoomChess features high-contrast custom board themes, crisp vector chess pieces, and smooth gesture navigation. Swipe up to progress to the next puzzle, review move history with step controls, or challenge friends on the global leaderboard.
           </p>
 
           {/* Featured Guides Editorial Hub */}
-          <div className="pt-4 border-t border-white/[0.04] space-y-4">
+          <div className="pt-4 border-t border-white/[0.06] space-y-4">
             <div>
               <h3 className="text-xs font-bold uppercase tracking-wider text-[#c29b78] font-mono">
                 Featured Tactical Chess Guides &amp; Motifs
               </h3>
-              <p className="text-xs text-zinc-400 mt-1">
+              <p className="text-xs text-neutral-400 mt-1">
                 Explore in-depth tactical guides authored by chess masters and verified with Stockfish 16 engine calculations:
               </p>
             </div>
@@ -1215,51 +1179,51 @@ export default function RootPage() {
                 { title: "Discovered Attacks & Double Checks: Deadliest Motif", href: "/guides/discovered-attacks-double-checks", tag: "Discovered" },
                 { title: "King Opposition & Pawn Promotion Tactics", href: "/guides/endgame-opposition-basics", tag: "Endgame" },
               ].map((g) => (
-                <a
+                <Link
                   key={g.href}
                   href={g.href}
-                  className="p-3.5 rounded-xl bg-[#12100e] border border-white/[0.06] hover:border-[#c29b78]/40 transition-colors flex items-center justify-between group"
+                  className="p-3.5 rounded-xl bg-[#12100e] border border-white/10 hover:border-[#c29b78]/40 hover:bg-[#161412] transition-colors flex items-center justify-between group"
                 >
                   <div className="flex flex-col pr-2">
                     <span className="text-[10px] font-mono text-[#c29b78] uppercase">{g.tag}</span>
-                    <span className="text-xs font-semibold text-zinc-200 group-hover:text-white transition-colors">{g.title}</span>
+                    <span className="text-xs font-semibold text-neutral-200 group-hover:text-white transition-colors">{g.title}</span>
                   </div>
                   <ArrowRight className="w-3.5 h-3.5 text-[#c29b78] group-hover:translate-x-1 transition-transform shrink-0" />
-                </a>
+                </Link>
               ))}
             </div>
 
             <div className="pt-2 text-center sm:text-left">
-              <a href="/guides" className="inline-flex items-center gap-1.5 text-xs text-[#c29b78] hover:text-[#dfb48c] font-semibold transition-colors">
+              <Link href="/guides" className="inline-flex items-center gap-1.5 text-xs text-[#c29b78] hover:text-[#dfb48c] font-semibold transition-colors">
                 <span>Browse all tactical chess guides in the library</span>
                 <ArrowRight className="w-3.5 h-3.5" />
-              </a>
+              </Link>
             </div>
           </div>
-          <footer className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-zinc-500 border-t border-white/[0.06]">
+          <footer className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-neutral-500 border-t border-white/[0.06]">
             <span>&copy; 2026 DoomChess. All rights reserved.</span>
-            <nav aria-label="Landing Page Footer" className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-zinc-400">
-              <a href="/guides" className="hover:text-[#c29b78] transition-colors underline underline-offset-2">
+            <nav aria-label="Landing Page Footer" className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-neutral-400">
+              <Link href="/guides" className="hover:text-[#c29b78] transition-colors underline underline-offset-2">
                 Tactical Guides
-              </a>
-              <a href="/about" className="hover:text-[#c29b78] transition-colors underline underline-offset-2">
+              </Link>
+              <Link href="/about" className="hover:text-[#c29b78] transition-colors underline underline-offset-2">
                 About
-              </a>
-              <a href="/privacy-policy" className="hover:text-[#c29b78] transition-colors underline underline-offset-2">
+              </Link>
+              <Link href="/privacy-policy" className="hover:text-[#c29b78] transition-colors underline underline-offset-2">
                 Privacy Policy
-              </a>
-              <a href="/terms" className="hover:text-[#c29b78] transition-colors underline underline-offset-2">
+              </Link>
+              <Link href="/terms" className="hover:text-[#c29b78] transition-colors underline underline-offset-2">
                 Terms
-              </a>
-              <a href="/contact" className="hover:text-[#c29b78] transition-colors underline underline-offset-2">
+              </Link>
+              <Link href="/contact" className="hover:text-[#c29b78] transition-colors underline underline-offset-2">
                 Contact
-              </a>
-              <a href="/play" className="hover:text-[#c29b78] transition-colors underline underline-offset-2 text-[#c29b78]">
+              </Link>
+              <Link href="/play" className="hover:text-[#c29b78] transition-colors underline underline-offset-2 text-[#c29b78]">
                 Play Online
-              </a>
+              </Link>
             </nav>
           </footer>
-        </motion.section>
+        </section>
       </div>
     );
   }

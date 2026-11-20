@@ -105,7 +105,7 @@ export default function ContactPage() {
               <CreditCard className="w-4 h-4 shrink-0" />
               <span>Billing &amp; Pro Accounts</span>
             </div>
-            <p className="text-xs text-zinc-300 leading-relaxed">
+            <p className="text-xs text-neutral-300 leading-relaxed">
               Inquiries regarding Razorpay checkout, subscription upgrades, cancellations, or invoice receipts. Please include the email address linked to your DoomChess account.
             </p>
           </div>
@@ -116,7 +116,7 @@ export default function ContactPage() {
               <Bug className="w-4 h-4 shrink-0" />
               <span>Puzzle &amp; Engine Issues</span>
             </div>
-            <p className="text-xs text-zinc-300 leading-relaxed">
+            <p className="text-xs text-neutral-300 leading-relaxed">
               If you discover an alternate winning line, an incorrect Stockfish evaluation, or a display bug, share the Puzzle ID or FEN string so our engine team can review it.
             </p>
           </div>
@@ -127,7 +127,7 @@ export default function ContactPage() {
               <ShieldAlert className="w-4 h-4 shrink-0" />
               <span>Security &amp; Data Deletion</span>
             </div>
-            <p className="text-xs text-zinc-300 leading-relaxed">
+            <p className="text-xs text-neutral-300 leading-relaxed">
               Requests for account deletion, two-factor authentication recovery, or GDPR/CCPA data export requests. We verify account ownership prior to processing deletion requests.
             </p>
           </div>

@@ -118,17 +118,17 @@ export default async function GuideDetailPage(props: PageProps) {
             {guide.title}
           </h1>
 
-          <p className="text-sm sm:text-base text-zinc-400 font-medium leading-relaxed">
+          <p className="text-sm sm:text-base text-neutral-300 font-medium leading-relaxed">
             {guide.subtitle}
           </p>
 
-          <div className="p-4 rounded-xl bg-[#12100e] border border-white/[0.08] text-xs text-zinc-300 leading-relaxed italic">
+          <div className="p-4 rounded-xl bg-[#12100e] border border-white/10 text-xs text-neutral-300 leading-relaxed italic">
             &ldquo;{guide.summary}&rdquo;
           </div>
         </header>
 
         {/* Article Body Sections */}
-        <div className="space-y-10 text-xs sm:text-sm text-zinc-300 leading-relaxed font-normal">
+        <div className="space-y-10 text-xs sm:text-sm text-neutral-300 leading-relaxed font-normal">
           {guide.sections.map((section, index) => (
             <section key={index} className="space-y-4">
               <div className="space-y-1">
@@ -143,7 +143,7 @@ export default async function GuideDetailPage(props: PageProps) {
               </div>
 
               {section.paragraphs.map((para, pIdx) => (
-                <p key={pIdx} className="leading-relaxed text-zinc-300">
+                <p key={pIdx} className="leading-relaxed text-neutral-300">
                   {para}
                 </p>
               ))}

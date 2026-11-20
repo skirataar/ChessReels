@@ -224,18 +224,18 @@ export function getPuzzleTagline(puzzle: PuzzleData | null | undefined, turn?: "
   }
 
   const themes = (puzzle.themes || "").toLowerCase();
-  if (themes.includes("matein1")) return formatTitle("Mate in 1 • Knockout blow");
-  if (themes.includes("matein2")) return formatTitle("Mate in 2 • Forced checkmate");
-  if (themes.includes("matein3") || themes.includes("matein4")) return formatTitle("Checkmate Net • Trap the king");
-  if (themes.includes("fork")) return formatTitle("Double Attack • Royal fork");
-  if (themes.includes("pin")) return formatTitle("Lethal Pin • Paralyze defender");
-  if (themes.includes("skewer")) return formatTitle("Brutal Skewer • Pierce defense");
-  if (themes.includes("hangingpiece")) return formatTitle("Tactical Alert • Loose piece");
-  if (themes.includes("discoveredattack")) return formatTitle("Discovered Check • Hidden strike");
-  if (themes.includes("backrankmate")) return formatTitle("Back Rank • Trap on 8th rank");
-  if (themes.includes("endgame")) return formatTitle("Endgame • Convert technical win");
-  if (themes.includes("crushing")) return formatTitle("Crushing Blow • Decisive advantage");
-  if (puzzle.openingTags) return `${formatTitle(puzzle.openingTags)} • Spot tactic`;
+  if (themes.includes("matein1")) return formatTitle("Mate in 1 - Knockout blow");
+  if (themes.includes("matein2")) return formatTitle("Mate in 2 - Forced checkmate");
+  if (themes.includes("matein3") || themes.includes("matein4")) return formatTitle("Checkmate Net - Trap the king");
+  if (themes.includes("fork")) return formatTitle("Double Attack - Royal fork");
+  if (themes.includes("pin")) return formatTitle("Lethal Pin - Paralyze defender");
+  if (themes.includes("skewer")) return formatTitle("Brutal Skewer - Pierce defense");
+  if (themes.includes("hangingpiece")) return formatTitle("Tactical Alert - Loose piece");
+  if (themes.includes("discoveredattack")) return formatTitle("Discovered Check - Hidden strike");
+  if (themes.includes("backrankmate")) return formatTitle("Back Rank - Trap on 8th rank");
+  if (themes.includes("endgame")) return formatTitle("Endgame - Convert technical win");
+  if (themes.includes("crushing")) return formatTitle("Crushing Blow - Decisive advantage");
+  if (puzzle.openingTags) return `${formatTitle(puzzle.openingTags)} - Spot tactic`;
 
   return "Find the winning move";
 }
@@ -3161,7 +3161,7 @@ export function PuzzleCard({
                   ? "Need help? Click for a hint!"
                   : "Show tactical move arrow"
               }
-              className={`p-2 -m-2 transition-all relative ${
+              className={`min-w-[40px] min-h-[40px] p-2 -m-2 flex items-center justify-center transition-all relative ${
                 isCalibration && hintsUsedThisPuzzle >= MAX_PLACEMENT_HINTS_PER_PUZZLE
                   ? "opacity-40 cursor-not-allowed text-stone-600"
                   : isHintGlowing
@@ -3172,25 +3172,27 @@ export function PuzzleCard({
               }`}
             >
               {isHintGlowing && !(isCalibration && hintsUsedThisPuzzle >= MAX_PLACEMENT_HINTS_PER_PUZZLE) && (
-                <span className="absolute -inset-1 rounded-full bg-[#c29b78]/30 animate-ping pointer-events-none" />
+                <span className="absolute inset-1.5 rounded-full bg-[#c29b78]/30 animate-ping pointer-events-none" />
               )}
-              <Lightbulb
-                strokeWidth={1.75}
-                className={`w-[22px] h-[22px] transition-colors ${
-                  isCalibration && hintsUsedThisPuzzle >= MAX_PLACEMENT_HINTS_PER_PUZZLE
-                    ? "text-stone-600 opacity-60"
-                    : isHintGlowing
-                    ? "fill-[#c29b78] text-[#c29b78]"
-                    : hintUsed
-                    ? "text-stone-600"
-                    : "fill-[#c29b78]/20"
-                }`}
-              />
-              {isCalibration && (
-                <span className="absolute -top-1 -right-1 text-[8px] font-mono font-bold bg-[#151413] text-[#c29b78] border border-[#c29b78]/40 px-1 py-0.2 rounded-full pointer-events-none shadow-sm">
-                  {hintsUsedThisPuzzle >= 1 ? "1/1" : "0/1"}
-                </span>
-              )}
+              <div className="relative flex items-center justify-center">
+                <Lightbulb
+                  strokeWidth={1.75}
+                  className={`w-[22px] h-[22px] transition-colors ${
+                    isCalibration && hintsUsedThisPuzzle >= MAX_PLACEMENT_HINTS_PER_PUZZLE
+                      ? "text-stone-600 opacity-60"
+                      : isHintGlowing
+                      ? "fill-[#c29b78] text-[#c29b78]"
+                      : hintUsed
+                      ? "text-stone-600"
+                      : "fill-[#c29b78]/20"
+                  }`}
+                />
+                {isCalibration && (
+                  <span className="absolute -top-1.5 -right-2 text-[8px] leading-none font-mono font-bold bg-[#151413] text-[#c29b78] border border-[#c29b78]/50 px-1 py-[1.5px] rounded-full pointer-events-none shadow-sm z-10 whitespace-nowrap">
+                    {hintsUsedThisPuzzle >= 1 ? "1/1" : "0/1"}
+                  </span>
+                )}
+              </div>
             </HapticButton>
 
             {/* Previous Move Button (<) */}
@@ -3256,7 +3258,7 @@ export function PuzzleCard({
                   {playerTurnMessage}
                 </span>
                 <span className="text-xs text-zinc-400 whitespace-nowrap shrink-0 tabular-nums">
-                  • {currentStep}/{totalPlayerMoves}
+                  <span className="text-zinc-600 mx-1">/</span>{currentStep} of {totalPlayerMoves}
                 </span>
               </>
             )}
@@ -3275,7 +3277,7 @@ export function PuzzleCard({
                 data-testid="hint-used-tag"
                 className="text-[10px] font-medium text-[#c29b78] bg-[#c29b78]/10 border border-[#c29b78]/25 px-1.5 py-0.5 rounded whitespace-nowrap shrink-0"
               >
-                Hint • ½ Elo
+                Hint: 0.5x Elo
               </span>
             )}
 

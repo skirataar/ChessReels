@@ -56,7 +56,7 @@ export default function TermsPage() {
         </div>
 
         {/* Content Sections */}
-        <div className="space-y-6 text-xs sm:text-sm leading-relaxed text-zinc-300">
+        <div className="space-y-6 text-xs sm:text-sm leading-relaxed text-neutral-300">
           <section className="bg-[#12100e] border border-white/[0.08] rounded-2xl p-6 space-y-3 shadow-xl">
             <h2 className="text-sm font-bold text-[#c29b78] uppercase font-mono tracking-wider">
               1. Agreement to Terms

@@ -71,7 +71,7 @@ export default function AboutPage() {
         </header>
 
         {/* Core Pillars */}
-        <div className="space-y-6 text-xs sm:text-sm text-zinc-300 leading-relaxed mb-12">
+        <div className="space-y-6 text-xs sm:text-sm text-neutral-300 leading-relaxed mb-12">
           {/* Mission */}
           <section className="p-6 rounded-2xl bg-[#12100e] border border-white/[0.08] space-y-3 shadow-xl">
             <div className="flex items-center gap-2 text-[#c29b78] font-bold text-sm sm:text-base">

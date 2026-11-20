@@ -90,7 +90,7 @@ export default function GuidesPage() {
           <h1 className="text-2xl sm:text-4xl font-black tracking-tight text-[#f5f2eb] mb-3">
             Tactical Chess Guides &amp; Pattern Mastery
           </h1>
-          <p className="text-sm text-zinc-400 max-w-2xl leading-relaxed">
+          <p className="text-sm text-neutral-300 max-w-2xl leading-relaxed">
             Short-form pattern recognition is the engine of tactical intuition. Explore structured breakdowns of core chess combinations, legal nuances, and calculation techniques verified against grandmaster principles.
           </p>
         </header>
@@ -107,7 +107,7 @@ export default function GuidesPage() {
             return (
               <article
                 key={guide.slug}
-                className="group relative flex flex-col justify-between p-6 rounded-2xl bg-[#12100e] border border-white/[0.08] hover:border-[#c29b78]/50 transition-all duration-200 hover:shadow-xl hover:shadow-black/40"
+                className="group relative flex flex-col justify-between p-6 rounded-2xl bg-[#12100e] border border-white/10 hover:border-[#c29b78]/40 hover:bg-[#151311] transition-all duration-200 hover:shadow-xl hover:shadow-black/40"
               >
                 <div>
                   <div className="flex items-center justify-between gap-2 mb-3">
@@ -116,7 +116,7 @@ export default function GuidesPage() {
                     >
                       {guide.category}
                     </span>
-                    <div className="flex items-center gap-3 text-[11px] text-zinc-500 font-mono">
+                    <div className="flex items-center gap-3 text-[11px] text-neutral-500 font-mono">
                       <span className="flex items-center gap-1">
                         <Clock className="w-3 h-3" />
                         {guide.readTime}
@@ -130,13 +130,13 @@ export default function GuidesPage() {
                     </Link>
                   </h2>
 
-                  <p className="text-xs text-zinc-400 leading-relaxed line-clamp-3 mb-4">
+                  <p className="text-xs text-neutral-300 leading-relaxed line-clamp-3 mb-4">
                     {guide.summary}
                   </p>
                 </div>
 
-                <div className="pt-4 border-t border-white/[0.04] flex items-center justify-between mt-auto">
-                  <div className="flex items-center gap-1.5 text-[11px] text-zinc-500 font-mono">
+                <div className="pt-4 border-t border-white/[0.06] flex items-center justify-between mt-auto">
+                  <div className="flex items-center gap-1.5 text-[11px] text-neutral-500 font-mono">
                     <Calendar className="w-3 h-3" />
                     <span>{guide.publishedAt}</span>
                   </div>
